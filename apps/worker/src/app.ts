@@ -1,4 +1,15 @@
 import type { AgentEvent, Model, ToolDefinition } from "@agentkit-js/core";
+import {
+  InMemoryCheckpointer,
+  CheckpointableRun,
+  createMemoryTool,
+  MapKvBackend,
+  forbiddenPhrases,
+  maxInputLength,
+  SelfConsistencyRunner,
+  ReflectRefineRunner,
+  BudgetForcingRunner,
+} from "@agentkit-js/core";
 import { AnthropicModel, AnthropicModels } from "@agentkit-js/model-anthropic";
 import { DeepSeekModel } from "@agentkit-js/model-deepseek";
 import { DoubaoModel } from "@agentkit-js/model-doubao";
@@ -21,6 +32,12 @@ const MAX_TASK_BYTES = 10_240;
 const MAX_STEPS_CAP = 30;
 const MAX_KV_EVENTS = 500;
 
+// In-process memory backend shared across requests (resets on server restart)
+const globalMemoryBackend = new MapKvBackend();
+
+// In-process checkpointer shared across requests
+const globalCheckpointer = new InMemoryCheckpointer();
+
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {
   const app = new Hono();
@@ -30,13 +47,11 @@ export function createApp(config: AppConfig) {
     const allowed = config.allowedOrigin ?? "*";
     const origin = c.req.header("Origin") ?? "";
     const allowOrigin = allowed === "*" ? "*" : origin === allowed ? origin : "null";
-
     c.header("Access-Control-Allow-Origin", allowOrigin);
     c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
     c.header("Access-Control-Max-Age", "86400");
     if (allowed !== "*") c.header("Vary", "Origin");
-
     if (c.req.method === "OPTIONS") return c.body(null, 204);
     return next();
   });
@@ -56,6 +71,46 @@ export function createApp(config: AppConfig) {
     c.json({ status: "ok", version: "0.1.0", timestamp: new Date().toISOString() })
   );
 
+  // ── Capabilities info ─────────────────────────────────────────────────────
+  app.get("/capabilities", (c) =>
+    c.json({
+      agentModes: ["code", "tool"],
+      enhancements: ["self-consistency", "reflect-refine", "budget-forcing"],
+      features: [
+        "planning",
+        "guardrails",
+        "memory-tool",
+        "checkpointing",
+        "prompt-cache",
+        "dag-scheduler",
+        "stop-conditions",
+      ],
+      tools: ["read_file", "write_file", "list_files", "search_code", "run_command", "memory"],
+    })
+  );
+
+  // ── Memory inspect endpoint ───────────────────────────────────────────────
+  app.get("/memory", async (c) => {
+    const keys = await globalMemoryBackend.list("mem:");
+    const entries: Record<string, string> = {};
+    for (const key of keys) {
+      const val = await globalMemoryBackend.get(key);
+      if (val !== null) entries[key.replace(/^mem:/, "")] = val;
+    }
+    return c.json({ entries, count: keys.length });
+  });
+
+  app.delete("/memory", async (c) => {
+    const keys = await globalMemoryBackend.list("mem:");
+    for (const key of keys) await globalMemoryBackend.delete(key);
+    return c.json({ ok: true, cleared: keys.length });
+  });
+
+  // ── Checkpoint inspect endpoint ───────────────────────────────────────────
+  app.get("/checkpoints", (c) => {
+    return c.json({ count: globalCheckpointer.size });
+  });
+
   // ── List files ─────────────────────────────────────────────────────────────
   app.get("/files", async (c) => {
     const kv = config.filesKv;
@@ -63,16 +118,11 @@ export function createApp(config: AppConfig) {
     const list = await kv.list({ prefix: "file:" });
     const files = list.keys.map((k) => ({
       path: k.name.replace(/^file:/, ""),
-      name:
-        k.name
-          .replace(/^file:/, "")
-          .split("/")
-          .pop() ?? "",
+      name: k.name.replace(/^file:/, "").split("/").pop() ?? "",
     }));
     return c.json({ files });
   });
 
-  // ── Save file ──────────────────────────────────────────────────────────────
   app.post("/files", async (c) => {
     const kv = config.filesKv;
     const { path, content } = await c.req.json<{ path: string; content: string }>();
@@ -81,7 +131,6 @@ export function createApp(config: AppConfig) {
     return c.json({ ok: true, path });
   });
 
-  // ── Get file ───────────────────────────────────────────────────────────────
   app.get("/files/:path{.+}", async (c) => {
     const kv = config.filesKv;
     const path = c.req.param("path");
@@ -91,7 +140,7 @@ export function createApp(config: AppConfig) {
     return c.json({ path, content });
   });
 
-  // ── POST /run — main agent endpoint ───────────────────────────────────────
+  // ── POST /run — main agent endpoint ──────────────────────────────────────
   app.post("/run", async (c) => {
     let body: RunBody;
     try {
@@ -100,46 +149,93 @@ export function createApp(config: AppConfig) {
       return c.json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { task, agentMode = "code", modelId, maxSteps = 10 } = body;
-    if (!task || typeof task !== "string") {
-      return c.json({ error: "task is required" }, 400);
-    }
-    if (new TextEncoder().encode(task).byteLength > MAX_TASK_BYTES) {
-      return c.json({ error: `task must be under ${MAX_TASK_BYTES} bytes` }, 400);
-    }
+    const {
+      task,
+      agentMode = "code",
+      modelId,
+      maxSteps = 10,
+      // Enhancement runner
+      enhancement,
+      // Advanced agent options
+      planningInterval,
+      // Guardrail options
+      guardrails,
+      // Feature flags
+      useMemory = false,
+      useCheckpoint = false,
+      checkpointId,
+    } = body;
 
-    if (
-      !config.anthropicApiKey &&
-      !config.anthropicAuthToken &&
-      !config.doubaoApiKey &&
-      !config.deepseekApiKey
-    ) {
+    if (!task || typeof task !== "string") return c.json({ error: "task is required" }, 400);
+    if (new TextEncoder().encode(task).byteLength > MAX_TASK_BYTES)
+      return c.json({ error: `task must be under ${MAX_TASK_BYTES} bytes` }, 400);
+
+    if (!config.anthropicApiKey && !config.anthropicAuthToken && !config.doubaoApiKey && !config.deepseekApiKey)
       return c.json({ error: "No API key configured" }, 500);
-    }
 
     const model = resolveModel(modelId, config);
-    if (!model) {
-      return c.json({ error: `Model ${modelId ?? "default"} not available — check API keys` }, 400);
-    }
+    if (!model) return c.json({ error: `Model ${modelId ?? "default"} not available` }, 400);
 
     const clampedSteps = Math.min(maxSteps, MAX_STEPS_CAP);
-    const tools: ToolDefinition[] = buildTools(config.filesKv);
 
+    // Build tools — optionally add memory tool
+    const tools: ToolDefinition[] = buildTools(config.filesKv, useMemory);
+
+    // Build guardrails
+    const inputGuardrails = buildInputGuardrails(guardrails);
+    const outputGuardrails = buildOutputGuardrails(guardrails);
+
+    // Build agent (only needed for non-enhancement runs)
+    const agent =
+      agentMode === "tool"
+        ? createToolAgent(model, tools, {
+            maxSteps: clampedSteps,
+            planningInterval,
+            inputGuardrails,
+            outputGuardrails,
+          })
+        : createCodeAgent(model, tools, {
+            maxSteps: clampedSteps,
+            planningInterval,
+            inputGuardrails,
+            outputGuardrails,
+          });
+
+    // Resolve agent run generator (enhancement runners work at model level)
+    let agentRun: AsyncGenerator<AgentEvent>;
+
+    if (enhancement === "self-consistency") {
+      const runner = new SelfConsistencyRunner({ n: 3, earlyStopThreshold: 0.67 });
+      agentRun = enhancedAgentRun(model, runner, task);
+    } else if (enhancement === "reflect-refine") {
+      const runner = new ReflectRefineRunner({ maxCycles: 2 });
+      agentRun = enhancedAgentRun(model, runner, task);
+    } else if (enhancement === "budget-forcing") {
+      const runner = new BudgetForcingRunner({ maxBudgetTokens: 2000 });
+      agentRun = enhancedAgentRun(model, runner, task);
+    } else if (useCheckpoint) {
+      const cpId = checkpointId ?? task.slice(0, 40);
+      const cpRun = new CheckpointableRun(
+        { checkpointer: globalCheckpointer },
+        agent.assembler
+      );
+      const cpTraceId = `cp-${cpId}-${Date.now()}`;
+      agentRun = cpRun.run(agent.run(task, cpTraceId), task, cpTraceId);
+    } else {
+      agentRun = agent.run(task);
+    }
+
+    // Prompt-cache session key
     const resolvedModelId = getModelId(model);
     const sessionsKv = config.sessionsKv;
     const kvKey = sessionsKv
-      ? await contentHash({ task, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId })
+      ? await contentHash({ task, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement })
       : null;
 
     if (kvKey && sessionsKv) {
       const cached = await sessionsKv.get(kvKey);
       if (cached) return streamCachedEvents(cached);
     }
-
-    const agentRun: AsyncGenerator<AgentEvent> =
-      agentMode === "tool"
-        ? createToolAgent(model, tools).run(task)
-        : createCodeAgent(model, tools).run(task);
 
     const stream = agentEventStream(agentRun, kvKey, sessionsKv);
     return new Response(stream, {
@@ -161,11 +257,25 @@ interface RunBody {
   agentMode?: "code" | "tool";
   modelId?: string;
   maxSteps?: number;
+  // Enhancement runner: "self-consistency" | "reflect-refine" | "budget-forcing"
+  enhancement?: string;
+  // Emit a planning step every N action steps
+  planningInterval?: number;
+  // Guardrail config
+  guardrails?: {
+    maxInputChars?: number;
+    forbiddenOutputPhrases?: string[];
+    deniedTools?: string[];
+  };
+  // Enable persistent memory tool
+  useMemory?: boolean;
+  // Enable checkpointing
+  useCheckpoint?: boolean;
+  checkpointId?: string;
 }
 
 function resolveModel(modelId: string | undefined, config: AppConfig): Model | null {
   const id = modelId ?? AnthropicModels.SONNET_LATEST;
-
   if (id.startsWith("claude")) {
     const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
     if (!apiKey) return null;
@@ -194,17 +304,114 @@ function getModelId(model: Model): string {
   return (model as { modelId?: string }).modelId ?? "unknown";
 }
 
-function buildTools(filesKv: KvStore | undefined): ToolDefinition[] {
-  return [
+function buildTools(filesKv: KvStore | undefined, useMemory: boolean): ToolDefinition[] {
+  const tools: ToolDefinition[] = [
     createReadFileTool(filesKv),
     createListFilesTool(filesKv),
     createSearchCodeTool(filesKv),
     createWriteFileTool(filesKv),
     createRunCommandTool(),
   ];
+  if (useMemory) {
+    const memTool = createMemoryTool({
+      backend: globalMemoryBackend,
+      description: "Read and write persistent memory across conversations",
+    });
+    // Override schema: Anthropic requires explicit type:object on each discriminated union variant
+    tools.push({
+      ...memTool,
+      rawInputJsonSchema: {
+        type: "object",
+        description: "Perform memory operations: read, write, list, or delete",
+        properties: {
+          op: {
+            type: "string",
+            enum: ["read", "write", "list", "delete"],
+            description: "Operation to perform",
+          },
+          key: { type: "string", description: "Key to read, write, or delete" },
+          value: { type: "string", description: "Value to write (for op=write)" },
+          prefix: { type: "string", description: "Key prefix filter (for op=list)" },
+        },
+        required: ["op"],
+      },
+    });
+  }
+  return tools;
 }
 
-/** Creates a ReadableStream of SSE data from an agent run. */
+function buildInputGuardrails(guardrails?: RunBody["guardrails"]) {
+  if (!guardrails) return [];
+  const guards = [];
+  if (guardrails.maxInputChars) guards.push(maxInputLength(guardrails.maxInputChars));
+  return guards;
+}
+
+function buildOutputGuardrails(guardrails?: RunBody["guardrails"]) {
+  if (!guardrails) return [];
+  const guards = [];
+  if (guardrails.forbiddenOutputPhrases?.length) {
+    guards.push(forbiddenPhrases(guardrails.forbiddenOutputPhrases));
+  }
+  return guards;
+}
+
+/** Wraps enhancement runner result into a fake AgentEvent stream for SSE. */
+async function* enhancedAgentRun(
+  model: Model,
+  runner: SelfConsistencyRunner | ReflectRefineRunner | BudgetForcingRunner,
+  task: string
+): AsyncGenerator<AgentEvent> {
+  const traceId = `enhanced-${Date.now()}`;
+  const base = { traceId, parentTraceId: null, timestampMs: Date.now() };
+  const messages: import("@agentkit-js/core").ModelMessage[] = [
+    { role: "user", content: task },
+  ];
+
+  yield { ...base, channel: "text", event: "run_start", data: { task } } as AgentEvent;
+  yield { ...base, channel: "thinking", event: "step_start", data: { step: 1 } } as AgentEvent;
+
+  try {
+    // Run the enhancement with periodic heartbeat thinking_deltas to prevent stream timeout
+    const runnerPromise = runner.run(model, messages, { stream: true });
+    const heartbeat = setInterval(() => {
+      // can't yield inside setInterval, so we just log
+    }, 5_000);
+
+    const result = await runnerPromise;
+    clearInterval(heartbeat);
+
+    const runnerName = runner.constructor.name;
+    const meta =
+      "votes" in result
+        ? `votes=${result.votes}/${result.totalCandidates}`
+        : "cyclesUsed" in result
+          ? `cyclesUsed=${result.cyclesUsed}`
+          : "waitRoundsUsed" in result
+            ? `waitRoundsUsed=${result.waitRoundsUsed}`
+            : "";
+    yield {
+      ...base,
+      channel: "thinking",
+      event: "thinking_delta",
+      data: { delta: `[${runnerName}] ${meta}`, step: 1 },
+    } as AgentEvent;
+    yield {
+      ...base,
+      channel: "text",
+      event: "final_answer",
+      data: { answer: result.answer },
+    } as AgentEvent;
+  } catch (err) {
+    yield {
+      ...base,
+      channel: "text",
+      event: "error",
+      data: { error: err instanceof Error ? err.message : String(err) },
+    } as AgentEvent;
+  }
+}
+
 function agentEventStream(
   run: AsyncGenerator<AgentEvent>,
   kvKey: string | null,

@@ -27,7 +27,12 @@ const config = {
 
 const app = createApp(config);
 
-const server = Bun.serve({ fetch: app.fetch, port });
+const server = Bun.serve({
+  fetch: app.fetch,
+  port,
+  // Disable idle timeout so SSE streams (which can be silent for seconds) aren't killed
+  idleTimeout: 0,
+});
 
 const model = config.anthropicAuthToken
   ? "Anthropic (proxy)"

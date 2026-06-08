@@ -19,7 +19,8 @@
     "deploy:web": "bun --filter @bscode/web deploy",
     "test:cli": "node scripts/bscode.mjs",
     "test:code": "node scripts/bscode.mjs --mode code --steps 8",
-    "test:tool": "node scripts/bscode.mjs --mode tool --steps 10"
+    "test:tool": "node scripts/bscode.mjs --mode tool --steps 10",
+    "test:full": "node scripts/test-full.mjs --url http://localhost:8788"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
