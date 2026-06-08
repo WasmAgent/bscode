@@ -1,0 +1,8 @@
+node_modules/
+.next/
+dist/
+.wrangler/
+.dev.vars
+*.env.local
+*.env
+.turbo/
