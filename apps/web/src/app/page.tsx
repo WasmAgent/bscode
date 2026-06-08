@@ -37,7 +37,12 @@ export default function Home() {
     agentMode: "code",
     modelId: "claude-sonnet-4-6",
     maxSteps: 10,
+    codeLanguage: "js",
+    useOtel: true,
+    projectContext: false,
   });
+  const [originalCode, setOriginalCode] = useState<string | undefined>(undefined);
+  const [isDiffMode, setIsDiffMode] = useState(false);
   const [task, setTask] = useState("");
   const [editorCode, setEditorCode] = useState(DEFAULT_CODE);
   const [terminalView, setTerminalView] = useState<"messages" | "events">("messages");
@@ -46,15 +51,19 @@ export default function Home() {
   const { messages, isRunning, rawEvents, tokenStats, finalAnswer, submit, abort, resetAll } =
     useAgent(config);
 
-  // When agent returns a final answer containing code, update the editor
+  // When agent returns a final answer containing code, update the editor and show diff
   useEffect(() => {
     if (!finalAnswer) return;
-    const codeMatch = finalAnswer.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]+?)```/);
+    const codeMatch = finalAnswer.match(
+      /```(?:typescript|javascript|ts|js|python|py)?\n([\s\S]+?)```/
+    );
     if (codeMatch) {
+      setOriginalCode(editorCode);
       setEditorCode(codeMatch[1]);
+      setIsDiffMode(true);
       setActiveTab("editor");
     }
-  }, [finalAnswer]);
+  }, [finalAnswer, editorCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = useCallback(() => {
     if (!task.trim() || isRunning) return;
@@ -200,9 +209,14 @@ export default function Home() {
         <div style={{ flex: 1, overflow: "hidden" }}>
           <Editor
             value={editorCode}
-            onChange={setEditorCode}
-            language="typescript"
-            path="main.ts"
+            onChange={(v) => {
+              setEditorCode(v);
+              setIsDiffMode(false);
+            }}
+            language={config.codeLanguage === "python" ? "python" : "typescript"}
+            path={config.codeLanguage === "python" ? "main.py" : "main.ts"}
+            isDiff={isDiffMode}
+            original={originalCode}
           />
         </div>
       </div>

@@ -206,6 +206,48 @@ export function AgentPanel({
         </div>
       </div>
 
+      {(config.agentMode === "code" || config.agentMode === "ptc") && (
+        <div>
+          <div style={labelStyle}>Language</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {CODE_LANGS.map((lang) => (
+              <button
+                type="button"
+                key={lang.id}
+                style={{
+                  ...modeBtnStyle(
+                    config.codeLanguage === lang.id || (!config.codeLanguage && lang.id === "js")
+                  ),
+                  flex: 1,
+                }}
+                onClick={() => onChange({ ...config, codeLanguage: lang.id })}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+            color: "#8b949e",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={config.projectContext ?? false}
+            onChange={(e) => onChange({ ...config, projectContext: e.target.checked })}
+          />
+          Project context (git+README)
+        </label>
+      </div>
       <hr style={dividerStyle} />
 
       <div style={{ flex: 1 }}>

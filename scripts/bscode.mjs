@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * BSCode CLI — direct test client for the bscode worker.
  *
@@ -17,17 +18,16 @@
  */
 
 import { parseArgs } from "node:util";
-import { createInterface } from "node:readline";
 
 const { values, positionals } = parseArgs({
   args: process.argv.slice(2),
   options: {
-    mode:   { type: "string",  default: "code" },
-    model:  { type: "string",  default: "claude-sonnet-4-6" },
-    steps:  { type: "string",  default: "10" },
-    url:    { type: "string",  default: "http://localhost:8787" },
+    mode: { type: "string", default: "code" },
+    model: { type: "string", default: "claude-sonnet-4-6" },
+    steps: { type: "string", default: "10" },
+    url: { type: "string", default: "http://localhost:8787" },
     events: { type: "boolean", default: false },
-    json:   { type: "boolean", default: false },
+    json: { type: "boolean", default: false },
   },
   allowPositionals: true,
 });
@@ -39,29 +39,31 @@ if (!task) {
 }
 
 const workerUrl = values.url;
-const agentMode  = values.mode;
-const modelId    = values.model;
-const maxSteps   = parseInt(values.steps, 10);
-const showRaw    = values.events || values.json;
-const showJson   = values.json;
+const agentMode = values.mode;
+const modelId = values.model;
+const maxSteps = parseInt(values.steps, 10);
+const showRaw = values.events || values.json;
+const showJson = values.json;
 
 // ANSI colors
 const c = {
-  reset:   "\x1b[0m",
-  bold:    "\x1b[1m",
-  dim:     "\x1b[2m",
-  blue:    "\x1b[34m",
-  cyan:    "\x1b[36m",
-  green:   "\x1b[32m",
-  yellow:  "\x1b[33m",
-  red:     "\x1b[31m",
-  purple:  "\x1b[35m",
-  gray:    "\x1b[90m",
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  blue: "\x1b[34m",
+  cyan: "\x1b[36m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  red: "\x1b[31m",
+  purple: "\x1b[35m",
+  gray: "\x1b[90m",
 };
 
 console.log(`\n${c.bold}${c.blue}BSCode CLI${c.reset}`);
 console.log(`${c.gray}Task   : ${c.reset}${task}`);
-console.log(`${c.gray}Mode   : ${c.reset}${agentMode}  ${c.gray}Model  : ${c.reset}${modelId}  ${c.gray}Steps  : ${c.reset}${maxSteps}`);
+console.log(
+  `${c.gray}Mode   : ${c.reset}${agentMode}  ${c.gray}Model  : ${c.reset}${modelId}  ${c.gray}Steps  : ${c.reset}${maxSteps}`
+);
 console.log(`${c.gray}Worker : ${c.reset}${workerUrl}\n`);
 console.log("─".repeat(60));
 
@@ -72,7 +74,7 @@ try {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ task, agentMode, modelId, maxSteps }),
   });
-} catch (err) {
+} catch (_err) {
   console.error(`\n${c.red}Connection refused: ${workerUrl}${c.reset}`);
   console.error(`${c.dim}Make sure the worker is running: pnpm dev:worker${c.reset}\n`);
   process.exit(1);
@@ -85,7 +87,10 @@ if (!res.ok) {
 }
 
 // Token accounting
-let inputTokens = 0, outputTokens = 0, cacheTokens = 0, calls = 0;
+let inputTokens = 0,
+  outputTokens = 0,
+  cacheTokens = 0,
+  calls = 0;
 let stepCount = 0;
 let finalAnswer = null;
 
@@ -103,7 +108,11 @@ for await (const chunk of res.body) {
     if (raw === "[DONE]") break;
 
     let ev;
-    try { ev = JSON.parse(raw); } catch { continue; }
+    try {
+      ev = JSON.parse(raw);
+    } catch {
+      continue;
+    }
 
     if (showJson) {
       console.log(JSON.stringify(ev, null, 2));
@@ -119,9 +128,9 @@ for await (const chunk of res.body) {
 
     // Accumulate token stats
     if (ev.event === "model_done") {
-      inputTokens  += ev.data?.inputTokens   ?? 0;
-      outputTokens += ev.data?.outputTokens  ?? 0;
-      cacheTokens  += ev.data?.cacheReadTokens ?? 0;
+      inputTokens += ev.data?.inputTokens ?? 0;
+      outputTokens += ev.data?.outputTokens ?? 0;
+      cacheTokens += ev.data?.cacheReadTokens ?? 0;
       calls++;
     }
     if (ev.event === "step_start") stepCount = ev.data?.step ?? stepCount;
@@ -140,10 +149,14 @@ if (calls > 0) {
   const total = inputTokens + cacheTokens;
   const hitRate = total > 0 ? Math.round((cacheTokens / total) * 100) : 0;
   console.log(`\n${c.gray}─── Token Usage ─────────────────────────${c.reset}`);
-  console.log(`  ${c.dim}Model calls${c.reset}   ${calls}          ${c.dim}Steps${c.reset}  ${stepCount}`);
+  console.log(
+    `  ${c.dim}Model calls${c.reset}   ${calls}          ${c.dim}Steps${c.reset}  ${stepCount}`
+  );
   console.log(`  ${c.dim}Input${c.reset}         ${inputTokens.toLocaleString()} tokens`);
   console.log(`  ${c.dim}Output${c.reset}        ${outputTokens.toLocaleString()} tokens`);
-  console.log(`  ${c.dim}Cache read${c.reset}    ${cacheTokens.toLocaleString()} tokens  (hit rate ${hitRate}%)`);
+  console.log(
+    `  ${c.dim}Cache read${c.reset}    ${cacheTokens.toLocaleString()} tokens  (hit rate ${hitRate}%)`
+  );
   const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(5);
   console.log(`  ${c.dim}Est. cost${c.reset}     ~$${cost} USD`);
 }
@@ -159,24 +172,33 @@ function prettyPrintEvent(ev) {
       console.log(`\n${c.gray}── Step ${d.step} ──────────────────────────${c.reset}`);
       break;
     case "thinking_delta":
-      process.stdout.write(`${c.purple}·${c.reset} ${c.dim}${String(d.delta ?? "").slice(0, 100)}${c.reset}\n`);
+      process.stdout.write(
+        `${c.purple}·${c.reset} ${c.dim}${String(d.delta ?? "").slice(0, 100)}${c.reset}\n`
+      );
       break;
     case "planning":
-      console.log(`\n${c.purple}PLAN${c.reset} ${c.dim}${String(d.plan ?? "").slice(0, 200)}${c.reset}`);
+      console.log(
+        `\n${c.purple}PLAN${c.reset} ${c.dim}${String(d.plan ?? "").slice(0, 200)}${c.reset}`
+      );
       break;
     case "tool_call":
-      console.log(`  ${c.yellow}→${c.reset} ${c.bold}${d.toolName}${c.reset}(${JSON.stringify(d.args ?? {}).slice(0, 100)})`);
+      console.log(
+        `  ${c.yellow}→${c.reset} ${c.bold}${d.toolName}${c.reset}(${JSON.stringify(d.args ?? {}).slice(0, 100)})`
+      );
       break;
-    case "tool_result":
+    case "tool_result": {
       const out = JSON.stringify(d.output ?? "").slice(0, 120);
       const errMark = d.error ? `${c.red} [ERROR]${c.reset}` : "";
       console.log(`  ${c.green}←${c.reset} ${d.toolName}${errMark}: ${c.dim}${out}${c.reset}`);
       break;
+    }
     case "model_start":
       process.stdout.write(`  ${c.gray}⚙ ${d.modelId}…${c.reset}`);
       break;
     case "model_done":
-      process.stdout.write(` ${c.gray}done (in:${d.inputTokens ?? 0} out:${d.outputTokens ?? 0} cache:${d.cacheReadTokens ?? 0})${c.reset}\n`);
+      process.stdout.write(
+        ` ${c.gray}done (in:${d.inputTokens ?? 0} out:${d.outputTokens ?? 0} cache:${d.cacheReadTokens ?? 0})${c.reset}\n`
+      );
       break;
     case "final_answer":
       // Printed in summary
@@ -185,22 +207,22 @@ function prettyPrintEvent(ev) {
       console.log(`  ${c.red}✗ ERROR: ${d.error}${c.reset}`);
       break;
     default:
-      // skip status/guardrail etc.
+    // skip status/guardrail etc.
   }
 }
 
 function printRawEvent(ev) {
   const colors = {
-    run_start:     c.blue,
-    step_start:    c.gray,
-    thinking_delta:c.purple,
-    planning:      c.purple,
-    tool_call:     c.yellow,
-    tool_result:   c.green,
-    model_start:   c.gray,
-    model_done:    c.gray,
-    final_answer:  c.green,
-    error:         c.red,
+    run_start: c.blue,
+    step_start: c.gray,
+    thinking_delta: c.purple,
+    planning: c.purple,
+    tool_call: c.yellow,
+    tool_result: c.green,
+    model_start: c.gray,
+    model_done: c.gray,
+    final_answer: c.green,
+    error: c.red,
   };
   const col = colors[ev.event] ?? c.reset;
   const data = JSON.stringify(ev.data ?? {}).slice(0, 120);

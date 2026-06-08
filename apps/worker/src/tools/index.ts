@@ -1,22 +1,26 @@
 import type { ToolDefinition } from "@agentkit-js/core";
-import type { KVNamespace } from "@cloudflare/workers-types";
+import { applyPatch } from "diff";
 import { z } from "zod";
+import type { KvStore } from "./platform.js";
+
+// ── Re-export type so callers can use KvStore directly ────────────────────────
+export type { KvStore };
+
+// ── File tools ────────────────────────────────────────────────────────────────
 
 export function createReadFileTool(
-  kv: KVNamespace | undefined
+  kv: KvStore | undefined
 ): ToolDefinition<{ path: string }, string> {
   return {
     name: "read_file",
-    description:
-      "Read the content of a file from the virtual file system. Returns the file content as a string.",
+    description: "Read the content of a file from the virtual file system.",
     inputSchema: z.object({ path: z.string().describe("File path, e.g. src/index.ts") }),
     outputSchema: z.string(),
     readOnly: true,
     idempotent: true,
     forward: async ({ path }) => {
-      if (!kv)
-        return `# (KV not bound)\n// File: ${path}\n// Add BSCODE_FILES KV namespace in wrangler.toml`;
-      const content = await kv.get(normalizeKey(path), "text");
+      if (!kv) return `# (KV not bound)\n// File: ${path}`;
+      const content = await kv.get(normalizeKey(path));
       if (content === null) return `Error: File not found: ${path}`;
       return content;
     },
@@ -24,7 +28,7 @@ export function createReadFileTool(
 }
 
 export function createListFilesTool(
-  kv: KVNamespace | undefined
+  kv: KvStore | undefined
 ): ToolDefinition<{ prefix?: string }, string> {
   return {
     name: "list_files",
@@ -36,7 +40,7 @@ export function createListFilesTool(
     readOnly: true,
     idempotent: true,
     forward: async ({ prefix }) => {
-      if (!kv) return "file1.ts\nfile2.ts\nREADME.md  # (KV not bound — sample listing)";
+      if (!kv) return "file1.ts\nfile2.ts\nREADME.md  # (KV not bound)";
       const list = await kv.list({ prefix: prefix ? `file:${prefix}` : "file:" });
       if (list.keys.length === 0) return "(no files found)";
       return list.keys.map((k) => k.name.replace(/^file:/, "")).join("\n");
@@ -45,12 +49,12 @@ export function createListFilesTool(
 }
 
 export function createSearchCodeTool(
-  kv: KVNamespace | undefined
+  kv: KvStore | undefined
 ): ToolDefinition<{ query: string; path?: string }, string> {
   return {
     name: "search_code",
     description:
-      "Search for a string or pattern across all files (or within a specific file). Returns matching lines with file paths and line numbers.",
+      "Search for a string across all files (or a specific file). Returns matching lines with file paths and line numbers.",
     inputSchema: z.object({
       query: z.string().describe("Text to search for"),
       path: z.string().optional().describe("Limit search to this file path"),
@@ -63,11 +67,10 @@ export function createSearchCodeTool(
       const list = await kv.list({ prefix: path ? `file:${path}` : "file:" });
       const results: string[] = [];
       for (const key of list.keys.slice(0, 20)) {
-        const content = await kv.get(key.name, "text");
+        const content = await kv.get(key.name);
         if (!content) continue;
         const filePath = key.name.replace(/^file:/, "");
-        const lines = content.split("\n");
-        lines.forEach((line, i) => {
+        content.split("\n").forEach((line, i) => {
           if (line.toLowerCase().includes(query.toLowerCase())) {
             results.push(`${filePath}:${i + 1}: ${line}`);
           }
@@ -79,11 +82,12 @@ export function createSearchCodeTool(
 }
 
 export function createWriteFileTool(
-  kv: KVNamespace | undefined
+  kv: KvStore | undefined
 ): ToolDefinition<{ path: string; content: string }, string> {
   return {
     name: "write_file",
-    description: "Write or overwrite a file in the virtual file system.",
+    description:
+      "Write or overwrite a file in the virtual file system. Prefer patch_file for edits.",
     inputSchema: z.object({
       path: z.string().describe("File path, e.g. src/utils.ts"),
       content: z.string().describe("Full file content to write"),
@@ -99,37 +103,116 @@ export function createWriteFileTool(
   };
 }
 
-export function createRunCommandTool(): ToolDefinition<{ command: string; code?: string }, string> {
+export function createPatchFileTool(
+  kv: KvStore | undefined
+): ToolDefinition<{ path: string; patch: string }, string> {
+  return {
+    name: "patch_file",
+    description:
+      "Apply a unified diff patch to an existing file. More efficient than write_file for edits — sends only changed lines. " +
+      "Patch format: standard unified diff, e.g. '@@ -1,3 +1,4 @@\\n-old line\\n+new line\\n context'",
+    inputSchema: z.object({
+      path: z.string().describe("File path to patch"),
+      patch: z.string().describe("Unified diff patch string"),
+    }),
+    outputSchema: z.string(),
+    readOnly: false,
+    idempotent: false,
+    forward: async ({ path, patch }) => {
+      if (!kv) return `OK (KV not bound — patch to ${path} simulated)`;
+      const original = await kv.get(normalizeKey(path));
+      if (original === null) return `Error: File not found: ${path}`;
+      const patched = applyPatch(original, patch);
+      if (patched === false)
+        return `Error: Patch failed — hunk mismatch or context mismatch for ${path}`;
+      await kv.put(normalizeKey(path), patched as string);
+      const saved = patched as string;
+      return `OK: patched ${path} (${original.length} → ${saved.length} chars)`;
+    },
+  };
+}
+
+export function createDeleteFileTool(
+  kv: KvStore | undefined
+): ToolDefinition<{ path: string }, string> {
+  return {
+    name: "delete_file",
+    description: "Delete a file from the virtual file system.",
+    inputSchema: z.object({
+      path: z.string().describe("File path to delete"),
+    }),
+    outputSchema: z.string(),
+    readOnly: false,
+    idempotent: false,
+    forward: async ({ path }) => {
+      if (!kv) return `OK (KV not bound — delete ${path} simulated)`;
+      const key = normalizeKey(path);
+      const existing = await kv.get(key);
+      if (existing === null) return `Error: File not found: ${path}`;
+      await (kv as { delete?: (k: string) => Promise<void> }).delete?.(key);
+      return `OK: deleted ${path}`;
+    },
+  };
+}
+
+export function createRenameFileTool(
+  kv: KvStore | undefined
+): ToolDefinition<{ from: string; to: string }, string> {
+  return {
+    name: "rename_file",
+    description: "Rename or move a file in the virtual file system.",
+    inputSchema: z.object({
+      from: z.string().describe("Source file path"),
+      to: z.string().describe("Destination file path"),
+    }),
+    outputSchema: z.string(),
+    readOnly: false,
+    idempotent: false,
+    forward: async ({ from, to }) => {
+      if (!kv) return `OK (KV not bound — rename ${from} → ${to} simulated)`;
+      const content = await kv.get(normalizeKey(from));
+      if (content === null) return `Error: File not found: ${from}`;
+      await kv.put(normalizeKey(to), content);
+      await (kv as { delete?: (k: string) => Promise<void> }).delete?.(normalizeKey(from));
+      return `OK: renamed ${from} → ${to}`;
+    },
+  };
+}
+
+export function createRunCommandTool(
+  shellRunner?: (cmd: string) => Promise<string>
+): ToolDefinition<{ command: string; code?: string }, string> {
   return {
     name: "run_command",
-    description:
-      "Simulate running a shell command. For code execution tasks, use the CodeAgent kernel directly instead.",
+    description: shellRunner
+      ? "Execute a shell command. Returns stdout/stderr output."
+      : "Simulate running a shell command (real shell unavailable in edge runtime).",
     inputSchema: z.object({
-      command: z.string().describe("Shell command to simulate, e.g. npm test"),
-      code: z.string().optional().describe("Optional code snippet to evaluate inline"),
+      command: z.string().describe("Shell command, e.g. npm test or git status"),
+      code: z.string().optional().describe("Optional inline JS expression to evaluate"),
     }),
     outputSchema: z.string(),
     readOnly: false,
     idempotent: false,
     forward: async ({ command, code }) => {
-      // Cloudflare Workers cannot exec real shell processes.
-      // Return a simulated response showing the command was received.
+      if (shellRunner) return shellRunner(command);
       const output: string[] = [`$ ${command}`];
       if (code) {
         try {
-          // Safe inline eval for math/JSON expressions only
           const result = Function(`"use strict"; return (${code})`)();
           output.push(String(result));
         } catch (e) {
           output.push(`Error: ${e instanceof Error ? e.message : String(e)}`);
         }
       } else {
-        output.push("(command simulation — real shell not available in edge runtime)");
+        output.push("(simulation — real shell unavailable on edge runtime)");
       }
       return output.join("\n");
     },
   };
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function normalizeKey(path: string): string {
   return `file:${path.replace(/^\/+/, "")}`;

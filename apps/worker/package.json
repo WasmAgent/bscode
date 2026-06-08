@@ -13,11 +13,14 @@
   },
   "dependencies": {
     "@agentkit-js/core": "workspace:*",
+    "@agentkit-js/kernel-pyodide": "workspace:*",
     "@agentkit-js/kernel-quickjs": "workspace:*",
+    "@agentkit-js/kernel-remote": "workspace:*",
     "@agentkit-js/model-anthropic": "workspace:*",
     "@agentkit-js/model-doubao": "workspace:*",
     "@agentkit-js/model-deepseek": "workspace:*",
     "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "diff": "^9.0.0",
     "hono": "^4.6.0",
     "quickjs-emscripten-core": "0.32.0",
     "zod": "^3.23.0"

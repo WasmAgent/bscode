@@ -1,14 +1,25 @@
-import type { AgentEvent, Model, ToolDefinition } from "@agentkit-js/core";
+import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@agentkit-js/core";
 import {
-  InMemoryCheckpointer,
+  BudgetForcingRunner,
   CheckpointableRun,
   createMemoryTool,
-  MapKvBackend,
+  exactMatch,
+  FallbackModel,
+  finalAnswerLength,
   forbiddenPhrases,
+  InMemoryCheckpointer,
+  InMemorySpanExporter,
+  MapKvBackend,
   maxInputLength,
-  SelfConsistencyRunner,
+  OtelBridge,
+  ProgrammaticOrchestrator,
   ReflectRefineRunner,
-  BudgetForcingRunner,
+  runEval,
+  SelfConsistencyRunner,
+  ToolRegistry,
+  toolCallAccuracy,
+  trajectoryValidity,
+  withOtel,
 } from "@agentkit-js/core";
 import { AnthropicModel, AnthropicModels } from "@agentkit-js/model-anthropic";
 import { DeepSeekModel } from "@agentkit-js/model-deepseek";
@@ -17,13 +28,18 @@ import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
 import { createToolAgent } from "./agents/tool-agent.js";
 import type { AppConfig, KvStore } from "./platform.js";
+import { SessionKvStore } from "./platform.js";
 import {
+  createDeleteFileTool,
   createListFilesTool,
+  createPatchFileTool,
   createReadFileTool,
+  createRenameFileTool,
   createRunCommandTool,
   createSearchCodeTool,
   createWriteFileTool,
 } from "./tools/index.js";
+import { createGitTools, createShellRunner } from "./tools/shell.js";
 
 export type { AppConfig } from "./platform.js";
 
@@ -32,49 +48,47 @@ const MAX_TASK_BYTES = 10_240;
 const MAX_STEPS_CAP = 30;
 const MAX_KV_EVENTS = 500;
 
-// In-process memory backend shared across requests (resets on server restart)
+// In-process shared state (resets on server restart)
 const globalMemoryBackend = new MapKvBackend();
-
-// In-process checkpointer shared across requests
 const globalCheckpointer = new InMemoryCheckpointer();
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {
   const app = new Hono();
 
-  // ── CORS middleware ────────────────────────────────────────────────────────
+  // ── CORS ──────────────────────────────────────────────────────────────────
   app.use("*", async (c, next) => {
     const allowed = config.allowedOrigin ?? "*";
     const origin = c.req.header("Origin") ?? "";
     const allowOrigin = allowed === "*" ? "*" : origin === allowed ? origin : "null";
     c.header("Access-Control-Allow-Origin", allowOrigin);
-    c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    c.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Id");
     c.header("Access-Control-Max-Age", "86400");
     if (allowed !== "*") c.header("Vary", "Origin");
     if (c.req.method === "OPTIONS") return c.body(null, 204);
     return next();
   });
 
-  // ── Auth middleware ────────────────────────────────────────────────────────
+  // ── Auth ───────────────────────────────────────────────────────────────────
   app.use("/run", async (c, next) => {
     if (!config.clientToken) return next();
     const auth = c.req.header("Authorization") ?? "";
-    if (!timingSafeEqual(auth, `Bearer ${config.clientToken}`)) {
+    if (!timingSafeEqual(auth, `Bearer ${config.clientToken}`))
       return c.json({ error: "Unauthorized" }, 401);
-    }
     return next();
   });
 
-  // ── Health ─────────────────────────────────────────────────────────────────
+  // ── Health ────────────────────────────────────────────────────────────────
   app.get("/health", (c) =>
-    c.json({ status: "ok", version: "0.1.0", timestamp: new Date().toISOString() })
+    c.json({ status: "ok", version: "0.2.0", timestamp: new Date().toISOString() })
   );
 
-  // ── Capabilities info ─────────────────────────────────────────────────────
+  // ── Capabilities ──────────────────────────────────────────────────────────
   app.get("/capabilities", (c) =>
     c.json({
-      agentModes: ["code", "tool"],
+      agentModes: ["code", "tool", "multi", "ptc"],
+      codeLanguages: ["js", "python", "node"],
       enhancements: ["self-consistency", "reflect-refine", "budget-forcing"],
       features: [
         "planning",
@@ -84,12 +98,36 @@ export function createApp(config: AppConfig) {
         "prompt-cache",
         "dag-scheduler",
         "stop-conditions",
+        "fallback-model",
+        "otel-bridge",
+        "session-isolation",
+        "real-shell",
+        "real-fs",
+        "git-tools",
+        "patch-file",
+        "evals",
+        "ptc",
       ],
-      tools: ["read_file", "write_file", "list_files", "search_code", "run_command", "memory"],
+      tools: [
+        "read_file",
+        "write_file",
+        "patch_file",
+        "delete_file",
+        "rename_file",
+        "list_files",
+        "search_code",
+        "run_command",
+        "memory",
+        ...(config.enableShell
+          ? ["git_status", "git_diff", "git_log", "git_commit", "git_checkout"]
+          : []),
+      ],
+      shell: config.enableShell ?? false,
+      workdir: config.workdir ?? null,
     })
   );
 
-  // ── Memory inspect endpoint ───────────────────────────────────────────────
+  // ── Memory ────────────────────────────────────────────────────────────────
   app.get("/memory", async (c) => {
     const keys = await globalMemoryBackend.list("mem:");
     const entries: Record<string, string> = {};
@@ -106,25 +144,27 @@ export function createApp(config: AppConfig) {
     return c.json({ ok: true, cleared: keys.length });
   });
 
-  // ── Checkpoint inspect endpoint ───────────────────────────────────────────
-  app.get("/checkpoints", (c) => {
-    return c.json({ count: globalCheckpointer.size });
-  });
+  // ── Checkpoints ───────────────────────────────────────────────────────────
+  app.get("/checkpoints", (c) => c.json({ count: globalCheckpointer.size }));
 
-  // ── List files ─────────────────────────────────────────────────────────────
+  // ── Files ─────────────────────────────────────────────────────────────────
   app.get("/files", async (c) => {
-    const kv = config.filesKv;
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     if (!kv) return c.json({ files: [] });
     const list = await kv.list({ prefix: "file:" });
     const files = list.keys.map((k) => ({
       path: k.name.replace(/^file:/, ""),
-      name: k.name.replace(/^file:/, "").split("/").pop() ?? "",
+      name:
+        k.name
+          .replace(/^file:/, "")
+          .split("/")
+          .pop() ?? "",
     }));
     return c.json({ files });
   });
 
   app.post("/files", async (c) => {
-    const kv = config.filesKv;
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const { path, content } = await c.req.json<{ path: string; content: string }>();
     if (!path || content === undefined) return c.json({ error: "path and content required" }, 400);
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
@@ -132,7 +172,7 @@ export function createApp(config: AppConfig) {
   });
 
   app.get("/files/:path{.+}", async (c) => {
-    const kv = config.filesKv;
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const path = c.req.param("path");
     if (!kv) return c.json({ error: "KV not bound" }, 503);
     const content = await kv.get(`file:${path}`);
@@ -140,7 +180,15 @@ export function createApp(config: AppConfig) {
     return c.json({ path, content });
   });
 
-  // ── POST /run — main agent endpoint ──────────────────────────────────────
+  app.delete("/files/:path{.+}", async (c) => {
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
+    const path = c.req.param("path");
+    if (!kv) return c.json({ error: "KV not bound" }, 503);
+    await kv.delete?.(`file:${path}`);
+    return c.json({ ok: true, path });
+  });
+
+  // ── POST /run ─────────────────────────────────────────────────────────────
   app.post("/run", async (c) => {
     let body: RunBody;
     try {
@@ -153,83 +201,125 @@ export function createApp(config: AppConfig) {
       task,
       agentMode = "code",
       modelId,
+      modelIds,
       maxSteps = 10,
-      // Enhancement runner
+      codeLanguage = "js",
       enhancement,
-      // Advanced agent options
       planningInterval,
-      // Guardrail options
       guardrails,
-      // Feature flags
       useMemory = false,
       useCheckpoint = false,
       checkpointId,
+      projectContext = false,
+      useOtel = false,
     } = body;
 
     if (!task || typeof task !== "string") return c.json({ error: "task is required" }, 400);
     if (new TextEncoder().encode(task).byteLength > MAX_TASK_BYTES)
       return c.json({ error: `task must be under ${MAX_TASK_BYTES} bytes` }, 400);
 
-    if (!config.anthropicApiKey && !config.anthropicAuthToken && !config.doubaoApiKey && !config.deepseekApiKey)
+    if (
+      !config.anthropicApiKey &&
+      !config.anthropicAuthToken &&
+      !config.doubaoApiKey &&
+      !config.deepseekApiKey
+    )
       return c.json({ error: "No API key configured" }, 500);
 
-    const model = resolveModel(modelId, config);
-    if (!model) return c.json({ error: `Model ${modelId ?? "default"} not available` }, 400);
+    const model = resolveModel(modelId, modelIds, config);
+    if (!model) return c.json({ error: `Model not available — check API keys` }, 400);
 
     const clampedSteps = Math.min(maxSteps, MAX_STEPS_CAP);
+    const sessionId = c.req.header("X-Session-Id");
+    const filesKv = resolveFilesKv(sessionId, config);
 
-    // Build tools — optionally add memory tool
-    const tools: ToolDefinition[] = buildTools(config.filesKv, useMemory);
+    // Optionally prepend project context
+    let finalTask = task;
+    if (projectContext && config.enableShell) {
+      const shell = createShellRunner(config);
+      if (shell) {
+        const [status, readme, pkg] = await Promise.all([
+          shell("git status --short 2>/dev/null || echo '(not a git repo)'"),
+          filesKv?.get("file:README.md") ?? Promise.resolve(null),
+          filesKv?.get("file:package.json") ?? Promise.resolve(null),
+        ]);
+        const ctx = [
+          "## Project Context",
+          `Git status:\n${status}`,
+          readme ? `README:\n${readme.slice(0, 1000)}` : null,
+          pkg ? `package.json:\n${pkg.slice(0, 500)}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        finalTask = `${ctx}\n\n---\n\n${task}`;
+      }
+    }
 
-    // Build guardrails
+    const tools = buildTools(filesKv, useMemory, config);
     const inputGuardrails = buildInputGuardrails(guardrails);
     const outputGuardrails = buildOutputGuardrails(guardrails);
 
-    // Build agent (only needed for non-enhancement runs)
-    const agent =
-      agentMode === "tool"
-        ? createToolAgent(model, tools, {
-            maxSteps: clampedSteps,
-            planningInterval,
-            inputGuardrails,
-            outputGuardrails,
-          })
-        : createCodeAgent(model, tools, {
-            maxSteps: clampedSteps,
-            planningInterval,
-            inputGuardrails,
-            outputGuardrails,
-          });
+    const agentExtras = {
+      maxSteps: clampedSteps,
+      planningInterval,
+      inputGuardrails,
+      outputGuardrails,
+    };
 
-    // Resolve agent run generator (enhancement runners work at model level)
     let agentRun: AsyncGenerator<AgentEvent>;
 
     if (enhancement === "self-consistency") {
       const runner = new SelfConsistencyRunner({ n: 3, earlyStopThreshold: 0.67 });
-      agentRun = enhancedAgentRun(model, runner, task);
+      agentRun = enhancedAgentRun(model, runner, finalTask);
     } else if (enhancement === "reflect-refine") {
       const runner = new ReflectRefineRunner({ maxCycles: 2 });
-      agentRun = enhancedAgentRun(model, runner, task);
+      agentRun = enhancedAgentRun(model, runner, finalTask);
     } else if (enhancement === "budget-forcing") {
       const runner = new BudgetForcingRunner({ maxBudgetTokens: 2000 });
-      agentRun = enhancedAgentRun(model, runner, task);
-    } else if (useCheckpoint) {
-      const cpId = checkpointId ?? task.slice(0, 40);
-      const cpRun = new CheckpointableRun(
-        { checkpointer: globalCheckpointer },
-        agent.assembler
-      );
-      const cpTraceId = `cp-${cpId}-${Date.now()}`;
-      agentRun = cpRun.run(agent.run(task, cpTraceId), task, cpTraceId);
+      agentRun = enhancedAgentRun(model, runner, finalTask);
+    } else if (agentMode === "ptc") {
+      agentRun = ptcAgentRun(model, tools, finalTask, codeLanguage, config);
     } else {
-      agentRun = agent.run(task);
+      const agent =
+        agentMode === "tool"
+          ? createToolAgent(model, tools, agentExtras)
+          : createCodeAgent(model, tools, {
+              ...agentExtras,
+              codeLanguage,
+              e2bApiKey: config.e2bApiKey,
+            });
+
+      if (useCheckpoint) {
+        const cpId = checkpointId ?? finalTask.slice(0, 40);
+        const cpTraceId = `cp-${cpId}-${Date.now()}`;
+        const cpRun = new CheckpointableRun({ checkpointer: globalCheckpointer }, agent.assembler);
+        agentRun = cpRun.run(agent.run(finalTask, cpTraceId), finalTask, cpTraceId);
+      } else {
+        agentRun = agent.run(finalTask);
+      }
     }
 
-    // Prompt-cache session key
+    // Wrap with OtelBridge to emit model_start/model_done events
+    if (useOtel) {
+      const bridge = new OtelBridge({ exporter: new InMemorySpanExporter() });
+      agentRun = withOtel(agentRun, bridge);
+    }
+
+    // Content-addressed session cache
     const resolvedModelId = getModelId(model);
-    const sessionsKv = config.sessionsKv;
+    const sessionsKv = sessionId
+      ? config.sessionsKv
+        ? new SessionKvStore(config.sessionsKv, sessionId)
+        : config.sessionsKv
+      : config.sessionsKv;
     const kvKey = sessionsKv
-      ? await contentHash({ task, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement })
+      ? await contentHash({
+          task: finalTask,
+          agentMode,
+          maxSteps: clampedSteps,
+          modelId: resolvedModelId,
+          enhancement,
+        })
       : null;
 
     if (kvKey && sessionsKv) {
@@ -247,6 +337,39 @@ export function createApp(config: AppConfig) {
     });
   });
 
+  // ── POST /eval ────────────────────────────────────────────────────────────
+  app.post("/eval", async (c) => {
+    const {
+      samples,
+      scorerNames = ["exactMatch"],
+      modelId,
+      agentMode = "tool",
+      maxSteps = 5,
+    } = await c.req.json();
+    if (!Array.isArray(samples) || samples.length === 0)
+      return c.json({ error: "samples array required" }, 400);
+
+    const model = resolveModel(modelId, undefined, config);
+    if (!model) return c.json({ error: "Model not available" }, 400);
+
+    const tools = buildTools(config.filesKv, false, config);
+    const agent =
+      agentMode === "code"
+        ? createCodeAgent(model, tools, { maxSteps })
+        : createToolAgent(model, tools, { maxSteps });
+
+    const scorerMap: Record<string, ReturnType<typeof exactMatch>> = {
+      exactMatch: exactMatch,
+      toolCallAccuracy: toolCallAccuracy,
+      trajectoryValidity: trajectoryValidity,
+      finalAnswerLength: finalAnswerLength(200),
+    };
+    const scorers = (scorerNames as string[]).map((n) => scorerMap[n]).filter(Boolean);
+
+    const results = await runEval(samples, (task: string) => agent.run(task), scorers);
+    return c.json(results);
+  });
+
   return app;
 }
 
@@ -254,27 +377,42 @@ export function createApp(config: AppConfig) {
 
 interface RunBody {
   task: string;
-  agentMode?: "code" | "tool";
+  agentMode?: "code" | "tool" | "multi" | "ptc";
   modelId?: string;
+  modelIds?: string[];
   maxSteps?: number;
-  // Enhancement runner: "self-consistency" | "reflect-refine" | "budget-forcing"
+  codeLanguage?: "js" | "python" | "node";
   enhancement?: string;
-  // Emit a planning step every N action steps
   planningInterval?: number;
-  // Guardrail config
   guardrails?: {
     maxInputChars?: number;
     forbiddenOutputPhrases?: string[];
     deniedTools?: string[];
   };
-  // Enable persistent memory tool
   useMemory?: boolean;
-  // Enable checkpointing
   useCheckpoint?: boolean;
   checkpointId?: string;
+  projectContext?: boolean;
+  useOtel?: boolean;
 }
 
-function resolveModel(modelId: string | undefined, config: AppConfig): Model | null {
+function resolveModel(
+  modelId: string | undefined,
+  modelIds: string[] | undefined,
+  config: AppConfig
+): Model | null {
+  // FallbackModel when multiple IDs provided
+  if (modelIds && modelIds.length > 1) {
+    const models = modelIds
+      .map((id) => resolveSingleModel(id, config))
+      .filter((m): m is Model => m !== null);
+    if (models.length === 0) return null;
+    return models.length === 1 ? models[0] : new FallbackModel(models);
+  }
+  return resolveSingleModel(modelId, config);
+}
+
+function resolveSingleModel(modelId: string | undefined, config: AppConfig): Model | null {
   const id = modelId ?? AnthropicModels.SONNET_LATEST;
   if (id.startsWith("claude")) {
     const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
@@ -304,34 +442,41 @@ function getModelId(model: Model): string {
   return (model as { modelId?: string }).modelId ?? "unknown";
 }
 
-function buildTools(filesKv: KvStore | undefined, useMemory: boolean): ToolDefinition[] {
+function resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvStore | undefined {
+  if (!config.filesKv) return undefined;
+  if (sessionId) return new SessionKvStore(config.filesKv, sessionId);
+  return config.filesKv;
+}
+
+function buildTools(
+  filesKv: KvStore | undefined,
+  useMemory: boolean,
+  config: AppConfig
+): ToolDefinition[] {
+  const shellRunner = createShellRunner(config);
   const tools: ToolDefinition[] = [
     createReadFileTool(filesKv),
     createListFilesTool(filesKv),
     createSearchCodeTool(filesKv),
     createWriteFileTool(filesKv),
-    createRunCommandTool(),
+    createPatchFileTool(filesKv),
+    createDeleteFileTool(filesKv),
+    createRenameFileTool(filesKv),
+    createRunCommandTool(shellRunner),
+    ...createGitTools(config),
   ];
   if (useMemory) {
-    const memTool = createMemoryTool({
-      backend: globalMemoryBackend,
-      description: "Read and write persistent memory across conversations",
-    });
-    // Override schema: Anthropic requires explicit type:object on each discriminated union variant
+    const memTool = createMemoryTool({ backend: globalMemoryBackend });
     tools.push({
       ...memTool,
       rawInputJsonSchema: {
         type: "object",
         description: "Perform memory operations: read, write, list, or delete",
         properties: {
-          op: {
-            type: "string",
-            enum: ["read", "write", "list", "delete"],
-            description: "Operation to perform",
-          },
-          key: { type: "string", description: "Key to read, write, or delete" },
-          value: { type: "string", description: "Value to write (for op=write)" },
-          prefix: { type: "string", description: "Key prefix filter (for op=list)" },
+          op: { type: "string", enum: ["read", "write", "list", "delete"] },
+          key: { type: "string" },
+          value: { type: "string" },
+          prefix: { type: "string" },
         },
         required: ["op"],
       },
@@ -341,22 +486,15 @@ function buildTools(filesKv: KvStore | undefined, useMemory: boolean): ToolDefin
 }
 
 function buildInputGuardrails(guardrails?: RunBody["guardrails"]) {
-  if (!guardrails) return [];
-  const guards = [];
-  if (guardrails.maxInputChars) guards.push(maxInputLength(guardrails.maxInputChars));
-  return guards;
+  if (!guardrails?.maxInputChars) return [];
+  return [maxInputLength(guardrails.maxInputChars)];
 }
 
 function buildOutputGuardrails(guardrails?: RunBody["guardrails"]) {
-  if (!guardrails) return [];
-  const guards = [];
-  if (guardrails.forbiddenOutputPhrases?.length) {
-    guards.push(forbiddenPhrases(guardrails.forbiddenOutputPhrases));
-  }
-  return guards;
+  if (!guardrails?.forbiddenOutputPhrases?.length) return [];
+  return [forbiddenPhrases(guardrails.forbiddenOutputPhrases)];
 }
 
-/** Wraps enhancement runner result into a fake AgentEvent stream for SSE. */
 async function* enhancedAgentRun(
   model: Model,
   runner: SelfConsistencyRunner | ReflectRefineRunner | BudgetForcingRunner,
@@ -364,23 +502,13 @@ async function* enhancedAgentRun(
 ): AsyncGenerator<AgentEvent> {
   const traceId = `enhanced-${Date.now()}`;
   const base = { traceId, parentTraceId: null, timestampMs: Date.now() };
-  const messages: import("@agentkit-js/core").ModelMessage[] = [
-    { role: "user", content: task },
-  ];
+  const messages: ModelMessage[] = [{ role: "user", content: task }];
 
   yield { ...base, channel: "text", event: "run_start", data: { task } } as AgentEvent;
   yield { ...base, channel: "thinking", event: "step_start", data: { step: 1 } } as AgentEvent;
 
   try {
-    // Run the enhancement with periodic heartbeat thinking_deltas to prevent stream timeout
-    const runnerPromise = runner.run(model, messages, { stream: true });
-    const heartbeat = setInterval(() => {
-      // can't yield inside setInterval, so we just log
-    }, 5_000);
-
-    const result = await runnerPromise;
-    clearInterval(heartbeat);
-
+    const result = await runner.run(model, messages, { stream: true });
     const runnerName = runner.constructor.name;
     const meta =
       "votes" in result
@@ -412,6 +540,87 @@ async function* enhancedAgentRun(
   }
 }
 
+async function* ptcAgentRun(
+  model: Model,
+  tools: ToolDefinition[],
+  task: string,
+  _codeLanguage: string,
+  _config: AppConfig
+): AsyncGenerator<AgentEvent> {
+  const traceId = `ptc-${Date.now()}`;
+  const base = { traceId, parentTraceId: null, timestampMs: Date.now() };
+
+  yield { ...base, channel: "text", event: "run_start", data: { task } } as AgentEvent;
+  yield { ...base, channel: "thinking", event: "step_start", data: { step: 1 } } as AgentEvent;
+  yield {
+    ...base,
+    channel: "thinking",
+    event: "thinking_delta",
+    data: { delta: "[PTC] Generating orchestration script…", step: 1 },
+  } as AgentEvent;
+
+  try {
+    const { QuickJSKernel } = await import("@agentkit-js/kernel-quickjs");
+    const { newQuickJSWASMModuleFromVariant } = await import("quickjs-emscripten-core");
+    const cfVariant = (await import("@jitl/quickjs-wasmfile-release-sync")).default;
+
+    const kernel = new QuickJSKernel({
+      timeoutMs: 30_000,
+      variant: cfVariant as unknown,
+      variantLoader: newQuickJSWASMModuleFromVariant as never,
+    });
+
+    const registry = new ToolRegistry();
+    for (const t of tools) registry.register(t);
+
+    const orchestrator = new ProgrammaticOrchestrator(kernel, registry);
+
+    // Generate script via model
+    const collectModelText = async (msgs: ModelMessage[]) => {
+      let text = "";
+      for await (const ev of model.generate(msgs, { stream: true })) {
+        if (ev.type === "text_delta" && ev.delta) text += ev.delta;
+      }
+      return text.trim();
+    };
+
+    const systemPrompt = `You are a PTC orchestrator. Generate a JavaScript script that calls tools via callTool(name, args).
+Available tools: ${tools.map((t) => t.name).join(", ")}.
+Set __finalAnswer__ = <result> to return the answer.
+Respond with ONLY a JS code block.`;
+
+    const script = await collectModelText([
+      { role: "user", content: `${systemPrompt}\n\nTask: ${task}` },
+    ]);
+
+    const codeMatch = /```(?:js|javascript)?\n([\s\S]+?)```/.exec(script);
+    const code = codeMatch?.[1]?.trim() ?? script;
+
+    yield {
+      ...base,
+      channel: "thinking",
+      event: "thinking_delta",
+      data: { delta: `[PTC] Executing script (${code.length} chars)…`, step: 1 },
+    } as AgentEvent;
+
+    const result = await orchestrator.run(code);
+
+    yield {
+      ...base,
+      channel: "text",
+      event: "final_answer",
+      data: { answer: result.finalOutput },
+    } as AgentEvent;
+  } catch (err) {
+    yield {
+      ...base,
+      channel: "text",
+      event: "error",
+      data: { error: err instanceof Error ? err.message : String(err) },
+    } as AgentEvent;
+  }
+}
+
 function agentEventStream(
   run: AsyncGenerator<AgentEvent>,
   kvKey: string | null,
@@ -426,9 +635,8 @@ function agentEventStream(
         for await (const event of run) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
           if (kvKey && sessionsKv) {
-            if (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS) {
+            if (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS)
               allEvents.push(event);
-            }
           }
           if (event.event === "final_answer") success = true;
         }
@@ -460,9 +668,8 @@ function streamCachedEvents(cachedJson: string): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      for (const ev of events) {
+      for (const ev of events)
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
-      }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       controller.close();
     },
@@ -478,8 +685,8 @@ function streamCachedEvents(cachedJson: string): Response {
 
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
-  const aB = enc.encode(a);
-  const bB = enc.encode(b);
+  const aB = enc.encode(a),
+    bB = enc.encode(b);
   const len = Math.max(aB.length, bB.length);
   let diff = aB.length ^ bB.length;
   for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0);

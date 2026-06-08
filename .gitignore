@@ -6,3 +6,4 @@ dist/
 *.env.local
 *.env
 .turbo/
+apps/worker/.bscode-files/

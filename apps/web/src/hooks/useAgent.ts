@@ -10,9 +10,13 @@ export interface TokenStats {
 }
 
 export interface AgentConfig {
-  agentMode: "code" | "tool";
+  agentMode: "code" | "tool" | "multi" | "ptc";
   modelId: string;
   maxSteps: number;
+  codeLanguage?: "js" | "python" | "node";
+  modelIds?: string[];
+  useOtel?: boolean;
+  projectContext?: boolean;
 }
 
 // Minimal shape we need from AgentEvent — avoids importing @agentkit-js/core in the browser bundle
@@ -23,7 +27,7 @@ interface AgentEventMinimal {
 }
 
 export function useAgent(config: AgentConfig) {
-  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8787";
+  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
   const [tokenStats, setTokenStats] = useState<TokenStats>({
     inputTokens: 0,
     outputTokens: 0,
@@ -68,6 +72,10 @@ export function useAgent(config: AgentConfig) {
         agentMode: config.agentMode,
         modelId: config.modelId,
         maxSteps: config.maxSteps,
+        codeLanguage: config.codeLanguage ?? "js",
+        useOtel: config.useOtel ?? true,
+        projectContext: config.projectContext ?? false,
+        ...(config.modelIds?.length ? { modelIds: config.modelIds } : {}),
       });
     },
     [run, config]

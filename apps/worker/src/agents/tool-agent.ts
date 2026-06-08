@@ -8,7 +8,11 @@ export interface ToolAgentExtras {
   outputGuardrails?: OutputGuardrail[];
 }
 
-export function createToolAgent(model: Model, tools: ToolDefinition[], extras: ToolAgentExtras = {}) {
+export function createToolAgent(
+  model: Model,
+  tools: ToolDefinition[],
+  extras: ToolAgentExtras = {}
+) {
   return new ToolCallingAgent({
     tools,
     model,

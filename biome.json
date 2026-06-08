@@ -9,6 +9,7 @@
     "ignoreUnknown": true,
     "includes": [
       "**",
+      "!**/apps/worker/.bscode-files/**",
       "!**/dist/**",
       "!**/node_modules/**",
       "!**/.wrangler/**",
