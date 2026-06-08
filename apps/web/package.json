@@ -10,7 +10,7 @@
     "deploy": "npx @cloudflare/next-on-pages && wrangler pages deploy .vercel/output/static"
   },
   "dependencies": {
-    "@agentkit-js/react": "link:../../../agentkit-js/packages/react",
+    "@agentkit-js/react": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
     "next": "^15.3.0",
     "react": "^19.0.0",
