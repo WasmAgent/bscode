@@ -1,0 +1,29 @@
+{
+  "name": "@bscode/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "wrangler deploy --dry-run --outdir=dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentkit-js/core": "link:../../../agentkit-js/packages/core",
+    "@agentkit-js/kernel-quickjs": "link:../../../agentkit-js/packages/kernel-quickjs",
+    "@agentkit-js/model-anthropic": "link:../../../agentkit-js/packages/model-anthropic",
+    "@agentkit-js/model-doubao": "link:../../../agentkit-js/packages/model-doubao",
+    "@agentkit-js/model-deepseek": "link:../../../agentkit-js/packages/model-deepseek",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "hono": "^4.6.0",
+    "quickjs-emscripten-core": "0.32.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241224.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.93.0"
+  }
+}

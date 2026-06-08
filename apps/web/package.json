@@ -1,0 +1,25 @@
+{
+  "name": "@bscode/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npx @cloudflare/next-on-pages && wrangler pages deploy .vercel/output/static"
+  },
+  "dependencies": {
+    "@agentkit-js/react": "link:../../../agentkit-js/packages/react",
+    "@monaco-editor/react": "^4.6.0",
+    "next": "^15.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}

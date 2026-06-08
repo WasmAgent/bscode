@@ -1,0 +1,19 @@
+{
+  "name": "bscode",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:worker": "pnpm --filter @bscode/worker dev",
+    "dev:web": "pnpm --filter @bscode/web dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "deploy:worker": "pnpm --filter @bscode/worker deploy",
+    "deploy:web": "pnpm --filter @bscode/web deploy",
+    "test:cli": "node scripts/bscode.mjs",
+    "test:code": "node scripts/bscode.mjs --mode code --steps 8",
+    "test:tool": "node scripts/bscode.mjs --mode tool --steps 10"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}

@@ -1,0 +1,24 @@
+name = "bscode-worker"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+AGENTKIT_LOG_LEVEL = "info"
+BSCODE_ALLOWED_ORIGIN = "*"
+
+# Virtual file system for the coding assistant
+# Create with: wrangler kv namespace create BSCODE_FILES
+# [[kv_namespaces]]
+# binding = "BSCODE_FILES"
+# id = "YOUR_KV_ID_HERE"
+
+# Session/prompt-cache result caching
+# Create with: wrangler kv namespace create BSCODE_SESSIONS
+# [[kv_namespaces]]
+# binding = "BSCODE_SESSIONS"
+# id = "YOUR_KV_ID_HERE"
+
+[dev]
+port = 8787
+local_protocol = "http"
