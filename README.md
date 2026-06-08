@@ -27,21 +27,40 @@ pnpm install
 
 # Copy env
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
-# Fill in ANTHROPIC_API_KEY (and optionally DOUBAO_API_KEY, DEEPSEEK_API_KEY)
+# Fill in ANTHROPIC_API_KEY (and optionally ANTHROPIC_BASE_URL, DOUBAO_API_KEY, DEEPSEEK_API_KEY)
 
-# Start Worker on :8787
-pnpm dev:worker
+# Start Worker with Node.js (QuickJS WASM works here)
+pnpm dev:worker          # http://localhost:8788
 
 # In another terminal, start Web on :3000
 pnpm dev:web
 ```
 
-## Deploy
+## CLI testing (no browser needed)
 
 ```bash
-# Worker
+# Code mode — agent writes JS, executes in QuickJS WASM sandbox
+node scripts/bscode.mjs --url http://localhost:8788 --mode code "sort [3,1,4,1,5,9]"
+
+# Tool mode — agent uses DAG-scheduled file tools
+node scripts/bscode.mjs --url http://localhost:8788 --mode tool "write a quicksort to quicksort.ts"
+
+# With raw event stream
+node scripts/bscode.mjs --url http://localhost:8788 --events "calculate 6*7"
+
+# Different model
+node scripts/bscode.mjs --model doubao-seed-1-6-251015 "write hello world"
+```
+
+## Deploy to Cloudflare
+
+```bash
+# Worker (also works in Cloudflare runtime)
 pnpm deploy:worker
 
 # Web (Cloudflare Pages)
 pnpm deploy:web
+
+# Local dev with Wrangler/Miniflare (CodeAgent WASM limited)
+pnpm dev:worker:cf
 ```

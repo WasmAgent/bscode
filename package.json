@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev:worker": "pnpm --filter @bscode/worker dev",
+    "dev:worker:cf": "pnpm --filter @bscode/worker dev:wrangler",
     "dev:web": "pnpm --filter @bscode/web dev",
     "build": "turbo build",
     "typecheck": "turbo typecheck",
