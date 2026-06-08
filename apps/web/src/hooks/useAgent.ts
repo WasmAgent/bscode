@@ -1,6 +1,6 @@
 "use client";
-import { useRef, useState, useCallback } from "react";
 import { useAgentRun } from "@agentkit-js/react";
+import { useCallback, useRef, useState } from "react";
 
 export interface TokenStats {
   inputTokens: number;
@@ -56,14 +56,19 @@ export function useAgent(config: AgentConfig) {
 
   const { messages, status, isRunning, finalAnswer, run, abort, reset } = useAgentRun(
     `${workerUrl}/run`,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: useAgentRun onEvent callback type
     { onEvent: onEvent as any }
   );
 
   const submit = useCallback(
     (task: string) => {
       setRawEvents([]);
-      run({ task, agentMode: config.agentMode, modelId: config.modelId, maxSteps: config.maxSteps });
+      run({
+        task,
+        agentMode: config.agentMode,
+        modelId: config.modelId,
+        maxSteps: config.maxSteps,
+      });
     },
     [run, config]
   );
@@ -74,5 +79,15 @@ export function useAgent(config: AgentConfig) {
     setTokenStats({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, calls: 0 });
   }, [reset]);
 
-  return { messages, status, isRunning, finalAnswer, rawEvents, tokenStats, submit, abort, resetAll };
+  return {
+    messages,
+    status,
+    isRunning,
+    finalAnswer,
+    rawEvents,
+    tokenStats,
+    submit,
+    abort,
+    resetAll,
+  };
 }

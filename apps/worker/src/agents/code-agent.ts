@@ -1,15 +1,17 @@
+import type { Model, ToolDefinition } from "@agentkit-js/core";
 import { CodeAgent } from "@agentkit-js/core";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
 import type { QuickJSKernelOptions } from "@agentkit-js/kernel-quickjs";
-import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
+import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
 import cfVariant from "@jitl/quickjs-wasmfile-release-sync";
-import type { ToolDefinition, Model } from "@agentkit-js/core";
+import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 
 export function createCodeAgent(model: Model, tools: ToolDefinition[]) {
   const kernel = new QuickJSKernel({
     timeoutMs: 15_000,
     variant: cfVariant as unknown,
-    variantLoader: newQuickJSWASMModuleFromVariant as unknown as NonNullable<QuickJSKernelOptions["variantLoader"]>,
+    variantLoader: newQuickJSWASMModuleFromVariant as unknown as NonNullable<
+      QuickJSKernelOptions["variantLoader"]
+    >,
   } satisfies QuickJSKernelOptions);
 
   return new CodeAgent({

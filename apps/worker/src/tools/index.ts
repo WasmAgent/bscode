@@ -1,17 +1,21 @@
-import { z } from "zod";
 import type { ToolDefinition } from "@agentkit-js/core";
 import type { KVNamespace } from "@cloudflare/workers-types";
+import { z } from "zod";
 
-export function createReadFileTool(kv: KVNamespace | undefined): ToolDefinition<{ path: string }, string> {
+export function createReadFileTool(
+  kv: KVNamespace | undefined
+): ToolDefinition<{ path: string }, string> {
   return {
     name: "read_file",
-    description: "Read the content of a file from the virtual file system. Returns the file content as a string.",
+    description:
+      "Read the content of a file from the virtual file system. Returns the file content as a string.",
     inputSchema: z.object({ path: z.string().describe("File path, e.g. src/index.ts") }),
     outputSchema: z.string(),
     readOnly: true,
     idempotent: true,
     forward: async ({ path }) => {
-      if (!kv) return `# (KV not bound)\n// File: ${path}\n// Add BSCODE_FILES KV namespace in wrangler.toml`;
+      if (!kv)
+        return `# (KV not bound)\n// File: ${path}\n// Add BSCODE_FILES KV namespace in wrangler.toml`;
       const content = await kv.get(normalizeKey(path), "text");
       if (content === null) return `Error: File not found: ${path}`;
       return content;
@@ -19,11 +23,15 @@ export function createReadFileTool(kv: KVNamespace | undefined): ToolDefinition<
   };
 }
 
-export function createListFilesTool(kv: KVNamespace | undefined): ToolDefinition<{ prefix?: string }, string> {
+export function createListFilesTool(
+  kv: KVNamespace | undefined
+): ToolDefinition<{ prefix?: string }, string> {
   return {
     name: "list_files",
     description: "List all files in the virtual file system, optionally filtered by a path prefix.",
-    inputSchema: z.object({ prefix: z.string().optional().describe("Optional path prefix filter, e.g. src/") }),
+    inputSchema: z.object({
+      prefix: z.string().optional().describe("Optional path prefix filter, e.g. src/"),
+    }),
     outputSchema: z.string(),
     readOnly: true,
     idempotent: true,
@@ -31,15 +39,18 @@ export function createListFilesTool(kv: KVNamespace | undefined): ToolDefinition
       if (!kv) return "file1.ts\nfile2.ts\nREADME.md  # (KV not bound — sample listing)";
       const list = await kv.list({ prefix: prefix ? `file:${prefix}` : "file:" });
       if (list.keys.length === 0) return "(no files found)";
-      return list.keys.map(k => k.name.replace(/^file:/, "")).join("\n");
+      return list.keys.map((k) => k.name.replace(/^file:/, "")).join("\n");
     },
   };
 }
 
-export function createSearchCodeTool(kv: KVNamespace | undefined): ToolDefinition<{ query: string; path?: string }, string> {
+export function createSearchCodeTool(
+  kv: KVNamespace | undefined
+): ToolDefinition<{ query: string; path?: string }, string> {
   return {
     name: "search_code",
-    description: "Search for a string or pattern across all files (or within a specific file). Returns matching lines with file paths and line numbers.",
+    description:
+      "Search for a string or pattern across all files (or within a specific file). Returns matching lines with file paths and line numbers.",
     inputSchema: z.object({
       query: z.string().describe("Text to search for"),
       path: z.string().optional().describe("Limit search to this file path"),
@@ -67,7 +78,9 @@ export function createSearchCodeTool(kv: KVNamespace | undefined): ToolDefinitio
   };
 }
 
-export function createWriteFileTool(kv: KVNamespace | undefined): ToolDefinition<{ path: string; content: string }, string> {
+export function createWriteFileTool(
+  kv: KVNamespace | undefined
+): ToolDefinition<{ path: string; content: string }, string> {
   return {
     name: "write_file",
     description: "Write or overwrite a file in the virtual file system.",
@@ -89,7 +102,8 @@ export function createWriteFileTool(kv: KVNamespace | undefined): ToolDefinition
 export function createRunCommandTool(): ToolDefinition<{ command: string; code?: string }, string> {
   return {
     name: "run_command",
-    description: "Simulate running a shell command. For code execution tasks, use the CodeAgent kernel directly instead.",
+    description:
+      "Simulate running a shell command. For code execution tasks, use the CodeAgent kernel directly instead.",
     inputSchema: z.object({
       command: z.string().describe("Shell command to simulate, e.g. npm test"),
       code: z.string().optional().describe("Optional code snippet to evaluate inline"),

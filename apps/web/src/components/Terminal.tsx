@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useRef } from "react";
 import type { AgentMessage } from "@agentkit-js/react";
+import { useEffect, useRef } from "react";
 
 // Minimal AgentEvent shape for the browser — avoids importing the Node-side core package
 interface AgentEventMinimal {
@@ -9,31 +9,31 @@ interface AgentEventMinimal {
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  run_start:     "#58a6ff",
-  step_start:    "#8b949e",
-  thinking_delta:"#bc8cff",
-  planning:      "#bc8cff",
-  tool_call:     "#e3b341",
-  tool_result:   "#3fb950",
-  model_start:   "#8b949e",
-  model_done:    "#8b949e",
-  final_answer:  "#3fb950",
-  error:         "#f85149",
-  status:        "#8b949e",
+  run_start: "#58a6ff",
+  step_start: "#8b949e",
+  thinking_delta: "#bc8cff",
+  planning: "#bc8cff",
+  tool_call: "#e3b341",
+  tool_result: "#3fb950",
+  model_start: "#8b949e",
+  model_done: "#8b949e",
+  final_answer: "#3fb950",
+  error: "#f85149",
+  status: "#8b949e",
 };
 
 const EVENT_PREFIXES: Record<string, string> = {
-  run_start:     "▶ RUN",
-  step_start:    "── STEP",
-  thinking_delta:"  ·",
-  planning:      "  PLAN",
-  tool_call:     "  → TOOL",
-  tool_result:   "  ← RESULT",
-  model_start:   "  ⚙ MODEL",
-  model_done:    "  ✓ MODEL",
-  final_answer:  "✓ ANSWER",
-  error:         "✗ ERROR",
-  status:        "  STATUS",
+  run_start: "▶ RUN",
+  step_start: "── STEP",
+  thinking_delta: "  ·",
+  planning: "  PLAN",
+  tool_call: "  → TOOL",
+  tool_result: "  ← RESULT",
+  model_start: "  ⚙ MODEL",
+  model_done: "  ✓ MODEL",
+  final_answer: "✓ ANSWER",
+  error: "✗ ERROR",
+  status: "  STATUS",
 };
 
 interface TerminalProps {
@@ -48,7 +48,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode }: TerminalP
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, rawEvents]);
+  }, []);
 
   const styles: Record<string, React.CSSProperties> = {
     container: {
@@ -106,10 +106,9 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode }: TerminalP
         <div style={styles.empty}>Raw AgentEvent stream will appear here.</div>
       )}
       {rawEvents.map((ev, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: event log display, no stable ID
         <div key={i} style={{ ...styles.line, color: EVENT_COLORS[ev.event] ?? "#c9d1d9" }}>
-          <span style={{ color: "#8b949e", marginRight: 8 }}>
-            {String(i).padStart(3, "0")}
-          </span>
+          <span style={{ color: "#8b949e", marginRight: 8 }}>{String(i).padStart(3, "0")}</span>
           <span style={{ marginRight: 8 }}>{EVENT_PREFIXES[ev.event] ?? ev.event}</span>
           <span style={{ color: "#c9d1d9" }}>{formatEventData(ev)}</span>
         </div>
@@ -135,16 +134,27 @@ function msgPrefix(role: string, toolName?: string): string {
 function formatEventData(ev: AgentEventMinimal): string {
   const d = ev.data as Record<string, unknown>;
   switch (ev.event) {
-    case "run_start":     return `task: "${String(d.task ?? "").slice(0, 80)}"`;
-    case "step_start":    return `step ${d.step}`;
-    case "thinking_delta":return String(d.delta ?? "").slice(0, 120);
-    case "planning":      return `step ${d.step} — ${String(d.plan ?? "").slice(0, 100)}`;
-    case "tool_call":     return `${d.toolName}(${JSON.stringify(d.args ?? {}).slice(0, 80)})`;
-    case "tool_result":   return `${d.toolName} → ${JSON.stringify(d.output ?? "").slice(0, 100)}`;
-    case "model_start":   return `${d.modelId} step ${d.step}`;
-    case "model_done":    return `${d.modelId} in:${d.inputTokens ?? 0} out:${d.outputTokens ?? 0} cache:${d.cacheReadTokens ?? 0}`;
-    case "final_answer":  return String(d.answer ?? "").slice(0, 200);
-    case "error":         return String(d.error ?? "");
-    default:              return JSON.stringify(d).slice(0, 120);
+    case "run_start":
+      return `task: "${String(d.task ?? "").slice(0, 80)}"`;
+    case "step_start":
+      return `step ${d.step}`;
+    case "thinking_delta":
+      return String(d.delta ?? "").slice(0, 120);
+    case "planning":
+      return `step ${d.step} — ${String(d.plan ?? "").slice(0, 100)}`;
+    case "tool_call":
+      return `${d.toolName}(${JSON.stringify(d.args ?? {}).slice(0, 80)})`;
+    case "tool_result":
+      return `${d.toolName} → ${JSON.stringify(d.output ?? "").slice(0, 100)}`;
+    case "model_start":
+      return `${d.modelId} step ${d.step}`;
+    case "model_done":
+      return `${d.modelId} in:${d.inputTokens ?? 0} out:${d.outputTokens ?? 0} cache:${d.cacheReadTokens ?? 0}`;
+    case "final_answer":
+      return String(d.answer ?? "").slice(0, 200);
+    case "error":
+      return String(d.error ?? "");
+    default:
+      return JSON.stringify(d).slice(0, 120);
   }
 }

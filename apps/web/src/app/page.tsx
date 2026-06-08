@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AgentPanel } from "@/components/AgentPanel";
 import { Editor } from "@/components/Editor";
 import { Terminal } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
-import { useAgent, type AgentConfig } from "@/hooks/useAgent";
+import { type AgentConfig, useAgent } from "@/hooks/useAgent";
 
 const DEFAULT_CODE = `// BSCode — AI Coding Assistant
 // Powered by agentkit-js on Cloudflare Workers
@@ -71,7 +71,7 @@ export default function Home() {
     background: "#0d1117",
   };
 
-  const header = (label: string, extra?: React.ReactNode): React.CSSProperties => ({
+  const header = (_label: string, _extra?: React.ReactNode): React.CSSProperties => ({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -100,7 +100,15 @@ export default function Home() {
   return (
     <div style={layout}>
       {/* ── Left panel ─────────────────────────────────────── */}
-      <div style={{ gridColumn: 1, gridRow: "1 / 3", display: "flex", flexDirection: "column", borderRight: "1px solid #30363d" }}>
+      <div
+        style={{
+          gridColumn: 1,
+          gridRow: "1 / 3",
+          display: "flex",
+          flexDirection: "column",
+          borderRight: "1px solid #30363d",
+        }}
+      >
         <AgentPanel
           config={config}
           onChange={setConfig}
@@ -113,12 +121,21 @@ export default function Home() {
 
         {/* Sample tasks */}
         <div style={{ padding: "0 12px 12px", borderTop: "1px solid #30363d", marginTop: "auto" }}>
-          <div style={{ fontSize: 11, color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.8, padding: "8px 0 6px" }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "#8b949e",
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+              padding: "8px 0 6px",
+            }}
+          >
             Sample Tasks
           </div>
-          {SAMPLE_TASKS.map((t, i) => (
+          {SAMPLE_TASKS.map((t) => (
             <button
-              key={i}
+              type="button"
+              key={t}
               onClick={() => setTask(t)}
               style={{
                 display: "block",
@@ -144,19 +161,40 @@ export default function Home() {
                 (e.currentTarget as HTMLButtonElement).style.color = "#8b949e";
               }}
             >
-              {t.slice(0, 60)}{t.length > 60 ? "…" : ""}
+              {t.slice(0, 60)}
+              {t.length > 60 ? "…" : ""}
             </button>
           ))}
         </div>
       </div>
 
       {/* ── Center: Editor ──────────────────────────────────── */}
-      <div style={{ gridColumn: 2, gridRow: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div
+        style={{
+          gridColumn: 2,
+          gridRow: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
         <div style={header("Editor")}>
           <span>Editor</span>
           <div style={{ display: "flex", gap: 4 }}>
-            <button style={tabBtn(activeTab === "editor")} onClick={() => setActiveTab("editor")}>Code</button>
-            <button style={tabBtn(activeTab === "output")} onClick={() => setActiveTab("output")}>Output</button>
+            <button
+              type="button"
+              style={tabBtn(activeTab === "editor")}
+              onClick={() => setActiveTab("editor")}
+            >
+              Code
+            </button>
+            <button
+              type="button"
+              style={tabBtn(activeTab === "output")}
+              onClick={() => setActiveTab("output")}
+            >
+              Output
+            </button>
           </div>
         </div>
         <div style={{ flex: 1, overflow: "hidden" }}>
@@ -170,7 +208,16 @@ export default function Home() {
       </div>
 
       {/* ── Right: Terminal ─────────────────────────────────── */}
-      <div style={{ gridColumn: 3, gridRow: 1, display: "flex", flexDirection: "column", overflow: "hidden", borderLeft: "1px solid #30363d" }}>
+      <div
+        style={{
+          gridColumn: 3,
+          gridRow: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          borderLeft: "1px solid #30363d",
+        }}
+      >
         <div style={header("Terminal")}>
           <span>
             Terminal
@@ -181,9 +228,22 @@ export default function Home() {
             )}
           </span>
           <div style={{ display: "flex", gap: 4 }}>
-            <button style={tabBtn(terminalView === "messages")} onClick={() => setTerminalView("messages")}>Messages</button>
-            <button style={tabBtn(terminalView === "events")} onClick={() => setTerminalView("events")}>Events</button>
             <button
+              type="button"
+              style={tabBtn(terminalView === "messages")}
+              onClick={() => setTerminalView("messages")}
+            >
+              Messages
+            </button>
+            <button
+              type="button"
+              style={tabBtn(terminalView === "events")}
+              onClick={() => setTerminalView("events")}
+            >
+              Events
+            </button>
+            <button
+              type="button"
               onClick={resetAll}
               style={{ ...tabBtn(false), marginLeft: 4, color: "#f85149" }}
             >

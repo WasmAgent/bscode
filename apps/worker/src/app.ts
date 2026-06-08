@@ -1,20 +1,20 @@
-import { Hono } from "hono";
-import { AnthropicModel, AnthropicModels } from "@agentkit-js/model-anthropic";
-import { DoubaoModel } from "@agentkit-js/model-doubao";
-import { DeepSeekModel } from "@agentkit-js/model-deepseek";
 import type { AgentEvent, Model, ToolDefinition } from "@agentkit-js/core";
+import { AnthropicModel, AnthropicModels } from "@agentkit-js/model-anthropic";
+import { DeepSeekModel } from "@agentkit-js/model-deepseek";
+import { DoubaoModel } from "@agentkit-js/model-doubao";
+import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
 import { createToolAgent } from "./agents/tool-agent.js";
+import type { AppConfig, KvStore } from "./platform.js";
 import {
-  createReadFileTool,
   createListFilesTool,
+  createReadFileTool,
+  createRunCommandTool,
   createSearchCodeTool,
   createWriteFileTool,
-  createRunCommandTool,
 } from "./tools/index.js";
-import { type AppConfig, type KvStore } from "./platform.js";
 
-export { type AppConfig } from "./platform.js";
+export type { AppConfig } from "./platform.js";
 
 const SESSION_TTL = 3600;
 const MAX_TASK_BYTES = 10_240;
@@ -63,7 +63,11 @@ export function createApp(config: AppConfig) {
     const list = await kv.list({ prefix: "file:" });
     const files = list.keys.map((k) => ({
       path: k.name.replace(/^file:/, ""),
-      name: k.name.replace(/^file:/, "").split("/").pop() ?? "",
+      name:
+        k.name
+          .replace(/^file:/, "")
+          .split("/")
+          .pop() ?? "",
     }));
     return c.json({ files });
   });
@@ -104,7 +108,12 @@ export function createApp(config: AppConfig) {
       return c.json({ error: `task must be under ${MAX_TASK_BYTES} bytes` }, 400);
     }
 
-    if (!config.anthropicApiKey && !config.anthropicAuthToken && !config.doubaoApiKey && !config.deepseekApiKey) {
+    if (
+      !config.anthropicApiKey &&
+      !config.anthropicAuthToken &&
+      !config.doubaoApiKey &&
+      !config.deepseekApiKey
+    ) {
       return c.json({ error: "No API key configured" }, 500);
     }
 
@@ -218,7 +227,8 @@ function agentEventStream(
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         if (kvKey && sessionsKv && success) {
-          await sessionsKv.put(kvKey, JSON.stringify(allEvents), { expirationTtl: SESSION_TTL })
+          await sessionsKv
+            .put(kvKey, JSON.stringify(allEvents), { expirationTtl: SESSION_TTL })
             .catch(console.error);
         }
       } catch (err) {

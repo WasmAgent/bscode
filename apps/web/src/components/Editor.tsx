@@ -11,7 +11,13 @@ interface EditorProps {
   path?: string;
 }
 
-export function Editor({ value, onChange, language = "typescript", readOnly = false, path }: EditorProps) {
+export function Editor({
+  value,
+  onChange,
+  language = "typescript",
+  readOnly = false,
+  path,
+}: EditorProps) {
   return (
     <div style={{ height: "100%", overflow: "hidden", borderRadius: 4 }}>
       <MonacoEditor

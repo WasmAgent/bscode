@@ -1,5 +1,5 @@
+import type { Model, ToolDefinition } from "@agentkit-js/core";
 import { ToolCallingAgent } from "@agentkit-js/core";
-import type { ToolDefinition, Model } from "@agentkit-js/core";
 
 export function createToolAgent(model: Model, tools: ToolDefinition[]) {
   return new ToolCallingAgent({
