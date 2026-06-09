@@ -8,6 +8,8 @@ export interface UseWebContainerReturn {
   status: WcStatus;
   previewUrl: string | null;
   terminalLines: string[];
+  /** Last error message from a failed build/install — used for auto-fix */
+  buildError: string | null;
   /** Mount a FileSystemTree and start the dev server */
   runProject: (files: FileSystemTree) => Promise<void>;
   /** Tear down the current project (kill processes, unmount) */
@@ -31,14 +33,25 @@ async function getContainer(): Promise<WebContainer> {
 export function useWebContainer(): UseWebContainerReturn {
   const [status, setStatus] = useState<WcStatus>("idle");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const devProcessRef = useRef<Awaited<ReturnType<WebContainer["spawn"]>> | null>(null);
   const serverUnsubRef = useRef<(() => void) | null>(null);
 
   const appendLine = useCallback((line: string) => {
-    // Strip ANSI escape codes (cursor movement, color codes, etc.)
-    const clean = line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/\r/g, "");
-    if (!clean.trim()) return; // skip blank lines after stripping
+    // Strip ANSI escape codes (cursor movement, color, etc.) and carriage returns
+    const clean = line
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")  // ANSI CSI sequences
+      .replace(/\x1b\][^\x07]*\x07/g, "")       // OSC sequences
+      .replace(/\r\n/g, "\n")
+      .replace(/\r[^\n]/g, "")                   // \r without \n (spinner overwrite)
+      .replace(/\r$/, "")
+      .split("\n")
+      .map((l) => l.trimEnd())
+      // Skip pure spinner characters and empty lines
+      .filter((l) => l.trim() && !/^[\\|/\-]{1,3}$/.test(l.trim()))
+      .join("\n");
+    if (!clean.trim()) return;
     setTerminalLines((prev) => [...prev.slice(-500), clean]);
   }, []);
 
@@ -49,6 +62,7 @@ export function useWebContainer(): UseWebContainerReturn {
     serverUnsubRef.current = null;
     setStatus("idle");
     setPreviewUrl(null);
+    setBuildError(null);
     setTerminalLines([]);
   }, []);
 
@@ -72,29 +86,47 @@ export function useWebContainer(): UseWebContainerReturn {
           setStatus("ready");
         });
 
-        // npm install
+        // npm install — collect output for error reporting
         setStatus("installing");
         appendLine("[wc] Running npm install…");
         const installProc = await wc.spawn("npm", ["install"]);
+        const installLines: string[] = [];
 
         installProc.output.pipeTo(
-          new WritableStream({ write: (chunk) => appendLine(chunk) })
+          new WritableStream({
+            write: (chunk) => {
+              appendLine(chunk);
+              installLines.push(chunk);
+            },
+          })
         );
 
         const installExit = await installProc.exit;
         if (installExit !== 0) {
-          throw new Error(`npm install exited with code ${installExit}`);
+          const errMsg = installLines.join("").slice(-1000); // last 1000 chars of output
+          setBuildError(errMsg);
+          throw new Error(`npm install failed (exit ${installExit})\n${errMsg}`);
         }
         appendLine("[wc] npm install done.");
 
-        // npm run dev
+        // npm run dev — collect build errors if dev server crashes
         setStatus("starting");
         appendLine("[wc] Starting dev server…");
         const devProc = await wc.spawn("npm", ["run", "dev"]);
         devProcessRef.current = devProc;
+        const devLines: string[] = [];
 
         devProc.output.pipeTo(
-          new WritableStream({ write: (chunk) => appendLine(chunk) })
+          new WritableStream({
+            write: (chunk) => {
+              appendLine(chunk);
+              devLines.push(chunk);
+              // Detect build errors from Vite output
+              if (/error:|Error:|failed to compile/i.test(chunk)) {
+                setBuildError((prev) => (prev ? prev + chunk : chunk).slice(-2000));
+              }
+            },
+          })
         );
         // dev process runs indefinitely; status set to "ready" via server-ready event
       } catch (err) {
@@ -114,7 +146,7 @@ export function useWebContainer(): UseWebContainerReturn {
     };
   }, []);
 
-  return { status, previewUrl, terminalLines, runProject, reset };
+  return { status, previewUrl, terminalLines, buildError, runProject, reset };
 }
 
 /** Convert flat {path, content}[] to a FileSystemTree for WebContainers mount() */

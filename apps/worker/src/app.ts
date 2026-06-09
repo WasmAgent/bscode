@@ -460,6 +460,19 @@ or {"mode":"tool","framework":null}`;
         if (projectContext) {
           const fileTree = await buildProjectFileTree(filesKv);
           const ctxParts: string[] = ["## Project Files\n" + fileTree];
+
+          // Relevance filtering: include content of files that match task keywords
+          // (avoids sending the full workspace to the model for large projects)
+          if (filesKv) {
+            const relevantFiles = await getRelevantFileContents(filesKv, task, 5);
+            if (relevantFiles.length > 0) {
+              ctxParts.push(
+                "## Relevant File Contents\n" +
+                relevantFiles.map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 800)}\n\`\`\``).join("\n\n")
+              );
+            }
+          }
+
           const shell = createShellRunner(config);
           if (shell) {
             const [status, readme, pkg] = await Promise.all([
@@ -987,6 +1000,41 @@ function streamCachedEvents(cachedJson: string): Response {
       "X-Bscode-Cache": "HIT",
     },
   });
+}
+
+/**
+ * Return up to maxFiles files whose names or content keywords overlap with the task text.
+ * Simple keyword matching — avoids sending the full workspace for large projects.
+ */
+async function getRelevantFileContents(
+  kv: KvStore,
+  task: string,
+  maxFiles = 5
+): Promise<{ path: string; content: string }[]> {
+  const list = await kv.list({ prefix: "file:" });
+  const taskWords = task.toLowerCase().match(/\b\w{3,}\b/g) ?? [];
+  if (taskWords.length === 0) return [];
+
+  const scored: Array<{ path: string; score: number }> = [];
+  for (const key of list.keys) {
+    const path = key.name.replace(/^file:/, "");
+    // Skip binary-ish or very short paths, meta keys, session-namespaced files
+    if (path.startsWith("session:") || path.startsWith("meta:")) continue;
+    const pathScore = taskWords.filter((w) => path.toLowerCase().includes(w)).length;
+    if (pathScore > 0) scored.push({ path, score: pathScore });
+  }
+
+  // Sort by relevance, take top N
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, maxFiles);
+
+  const results = await Promise.all(
+    top.map(async ({ path }) => {
+      const content = (await kv.get(`file:${path}`)) ?? "";
+      return { path, content };
+    })
+  );
+  return results.filter((r) => r.content.length > 0);
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

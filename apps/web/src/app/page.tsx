@@ -28,6 +28,8 @@ interface ConversationTurn {
   finalAnswer: string | null;
   error: string | null;
   status: "running" | "done" | "error";
+  /** Write progress: list of file paths written so far (for framework mode) */
+  writtenFiles: string[];
 }
 
 let toastId = 0;
@@ -112,7 +114,7 @@ export default function Home() {
 
   const { user, pushing, login: githubLogin, pushToGitHub } = useGitHub();
   const { importing, importFromZip, importFromDirectory, uploadFiles } = useImport();
-  const { status: wcStatus, previewUrl, terminalLines: wcLines, runProject, reset: wcReset } =
+  const { status: wcStatus, previewUrl, terminalLines: wcLines, buildError, runProject, reset: wcReset } =
     useWebContainer();
 
   // ── Scroll chat to bottom ──────────────────────────────────────────────────
@@ -175,9 +177,30 @@ export default function Home() {
     prevIsRunning.current = isRunning;
   }, [isRunning, messages, finalAnswer, addToast]);
 
-  // ── Tool results → execution output ───────────────────────────────────────
+  // ── Tool results → execution output + write progress ─────────────────────
   useEffect(() => {
-    if (rawEvents.length === 0) return;
+    if (rawEvents.length === 0 || !currentTurnId.current) return;
+
+    // Track write_file tool_calls to show file write progress in the turn bubble
+    const writtenFiles = rawEvents
+      .filter((ev) => ev.event === "tool_call")
+      .map((ev) => {
+        const d = ev.data as Record<string, unknown>;
+        if (d.toolName !== "write_file") return null;
+        const args = d.args as Record<string, unknown> | undefined;
+        return String(args?.path ?? "").trim() || null;
+      })
+      .filter(Boolean) as string[];
+
+    if (writtenFiles.length > 0) {
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === currentTurnId.current ? { ...t, writtenFiles } : t
+        )
+      );
+    }
+
+    // Execution output for preview
     const kernelResults = rawEvents
       .filter((ev) => ev.event === "tool_result")
       .map((ev) => {
@@ -220,11 +243,36 @@ export default function Home() {
   }, [previewUrl, addToast]);
 
   useEffect(() => {
-    if (wcStatus === "error") {
+    if (wcStatus === "error" && buildError) {
       setPreview((prev) => ({ ...prev, error: "WebContainers build failed" }));
-      addToast("Build failed", "error");
+      addToast("Build failed — auto-fixing…", "warn");
+
+      // Auto-fix loop: fetch workspace files and ask agent to fix the error
+      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+      fetch(`${workerUrl}/files/bulk`)
+        .then((r) => r.json())
+        .then((data: { files: { path: string; content: string }[] }) => {
+          if (!data.files?.length) { addToast("No files to fix", "warn"); return; }
+          // Provide error context + file list so agent can fix precisely
+          const fileSummary = data.files
+            .filter((f) => /\.(ts|tsx|js|jsx|vue|svelte|json)$/.test(f.path))
+            .slice(0, 10)
+            .map((f) => `${f.path}:\n${f.content.slice(0, 500)}`)
+            .join("\n---\n");
+          const fixTask = `WebContainers build failed with this error:
+\`\`\`
+${buildError.slice(0, 800)}
+\`\`\`
+
+Project files:
+${fileSummary}
+
+Please fix the error. Use patch_file or write_file to correct the broken files.`;
+          handleSubmit(fixTask);
+        })
+        .catch(() => addToast("Could not auto-fix: failed to fetch files", "error"));
     }
-  }, [wcStatus, addToast]);
+  }, [wcStatus, buildError, addToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Final answer → preview ─────────────────────────────────────────────────
   useEffect(() => {
@@ -264,6 +312,7 @@ export default function Home() {
           timestamp: Date.now(),
           agentText: "",
           toolLines: [],
+          writtenFiles: [],
           finalAnswer: null,
           error: null,
           status: "running",
@@ -741,6 +790,21 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockP
           {isActive ? "⟳" : turn.status === "error" ? "✗" : "✓"}
         </div>
         <div style={{ flex: 1 }}>
+          {/* File write progress — shown during framework-mode runs */}
+          {isActive && turn.writtenFiles.length > 0 && (
+            <div style={{ marginBottom: 8, background: "#0d1117", border: "1px solid #30363d", borderRadius: 5, padding: "6px 10px" }}>
+              <div style={{ fontSize: 10, color: "#8b949e", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.6 }}>
+                Writing files ({turn.writtenFiles.length})
+              </div>
+              {turn.writtenFiles.map((f, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: ordered file list
+                <div key={i} style={{ fontSize: 11, color: "#3fb950", fontFamily: "JetBrains Mono, monospace", lineHeight: 1.6 }}>
+                  ✓ {f}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Tool lines */}
           {turn.toolLines.length > 0 && (
             <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 2 }}>
