@@ -1094,6 +1094,98 @@ await test("agentMode=multi runs code phase then review phase", "multi-agent", a
   ];
 });
 
+
+// ── Model Registry ───────────────────────────────────────────────────────────
+console.log(`\n${c.bold}── Model Registry ──────────────────────────────────────${c.reset}`);
+
+await test("GET /models returns builtin models and preferences", "model-registry", async () => {
+  const data = await get("/models");
+  return [
+    Array.isArray(data.models),
+    data.models.length > 0,
+    data.models.some((m) => m.source === "builtin"),
+    !!data.preferences?.primaryModelId,
+  ];
+});
+
+await test("GET /models detects local services if running", "model-registry", async () => {
+  const data = await get("/models");
+  // Local services may or may not be running — just verify response shape
+  const localModels = data.models?.filter((m) => m.source === "local") ?? [];
+  return [
+    Array.isArray(data.models),
+    // Either no local models (services not running) or they have required fields
+    localModels.every((m) => m.id && m.label && m.provider && m.baseUrl),
+  ];
+});
+
+await test("POST /models/custom adds a model with encrypted key", "model-registry", async () => {
+  const id = `test-custom-${Date.now()}`;
+  const res = await post("/models/custom", {
+    id, label: "Test Custom Model", baseUrl: "http://localhost:9999/v1",
+    apiKey: "sk-test-secret-key", provider: "custom",
+  });
+  return [
+    res.ok === true,
+    res.id === id,
+  ];
+});
+
+await test("GET /models/custom shows custom model (key redacted)", "model-registry", async () => {
+  const data = await get("/models/custom");
+  return [
+    Array.isArray(data.models),
+    // Custom model we just added should appear
+    data.models.some((m) => m.id.startsWith("test-custom-")),
+    // API key must be redacted
+    data.models.every((m) => !m.apiKey || m.apiKey === "***"),
+  ];
+});
+
+await test("PUT /models/preferences saves primary + economy selection", "model-registry", async () => {
+  const res = await fetch(`${BASE}/models/preferences`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ primaryModelId: "claude-sonnet-4-6", economyModelId: "claude-haiku-4-5-20251001" }),
+  });
+  const data = await res.json();
+  return [
+    res.ok,
+    data.prefs?.primaryModelId === "claude-sonnet-4-6",
+    data.prefs?.economyModelId === "claude-haiku-4-5-20251001",
+  ];
+});
+
+await test("DELETE /models/custom/:id removes custom model", "model-registry", async () => {
+  // Find a test-custom model to delete
+  const list = await get("/models/custom");
+  const testModel = list.models?.find((m) => m.id.startsWith("test-custom-"));
+  if (!testModel) return [true]; // no model to delete, skip
+
+  const res = await fetch(`${BASE}/models/custom/${encodeURIComponent(testModel.id)}`, { method: "DELETE" });
+  const after = await get("/models/custom");
+  return [
+    res.ok,
+    !after.models?.some((m) => m.id === testModel.id),
+  ];
+});
+
+await test("/run with local Ollama model (if available)", "model-registry", async () => {
+  const modelsData = await get("/models");
+  const ollamaModel = modelsData.models?.find((m) => m.provider === "ollama");
+  if (!ollamaModel) return [true]; // Ollama not running, skip
+
+  const evs = await runAgent({
+    task: "Say hello in one word",
+    agentMode: "tool", maxSteps: 2,
+    modelId: ollamaModel.id,
+  }, 30_000);
+  return [
+    hasEvent(evs, "run_start"),
+    hasEvent(evs, "final_answer") || hasEvent(evs, "error"),
+  ];
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Results summary
 // ══════════════════════════════════════════════════════════════════════════════

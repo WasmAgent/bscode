@@ -1,19 +1,26 @@
 "use client";
 import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
+import { ModelManager } from "@/components/ModelManager";
 import type { AgentConfig } from "@/hooks/useAgent";
 
-const MODELS = [
+// Static fallback models (shown before /models loads)
+const DEFAULT_MODELS = [
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", provider: "anthropic" },
   { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", provider: "anthropic" },
-  { id: "doubao-seed-1-6-251015", label: "Doubao Seed-1.6", provider: "doubao" },
-  { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", provider: "deepseek" },
-  { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "deepseek" },
 ];
 
 const PROVIDER_COLORS: Record<string, string> = {
   anthropic: "#cc785c",
   doubao: "#4e7fff",
   deepseek: "#6c63ff",
+  openai: "#10a37f",
+  ollama: "#ff6b35",
+  lmstudio: "#a855f7",
+  llamacpp: "#eab308",
+  vllm: "#06b6d4",
+  localai: "#22c55e",
+  custom: "#8b949e",
 };
 
 interface AgentPanelProps {
@@ -24,6 +31,7 @@ interface AgentPanelProps {
   onSubmit: () => void;
   onAbort: () => void;
   isRunning: boolean;
+  workerUrl?: string;
 }
 
 const panelStyle: CSSProperties = {
@@ -139,6 +147,34 @@ export function AgentPanel({
   onAbort,
   isRunning,
 }: AgentPanelProps) {
+  const [dynamicModels, setDynamicModels] = useState(DEFAULT_MODELS);
+  const [economyModelId, setEconomyModelId] = useState<string | undefined>(undefined);
+  const [showModelManager, setShowModelManager] = useState(false);
+
+  useEffect(() => {
+    fetch(`${workerUrl}/models`)
+      .then((r) => r.json())
+      .then(
+        (data: {
+          models: Array<{ id: string; label: string; provider: string; available: boolean }>;
+          preferences: { primaryModelId: string; economyModelId?: string };
+        }) => {
+          const available = data.models.filter((m) => m.available);
+          if (available.length > 0) setDynamicModels(available);
+          if (
+            data.preferences?.primaryModelId &&
+            data.preferences.primaryModelId !== config.modelId
+          ) {
+            onChange({ ...config, modelId: data.preferences.primaryModelId });
+          }
+          if (data.preferences?.economyModelId) setEconomyModelId(data.preferences.economyModelId);
+        }
+      )
+      .catch(() => {
+        /* keep defaults */
+      });
+  }, [onChange, config.modelId, config]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div style={panelStyle}>
       <div>
@@ -170,25 +206,91 @@ export function AgentPanel({
       </div>
 
       <div>
-        <div style={labelStyle}>Model</div>
+        <div
+          style={{
+            ...labelStyle,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>Model</span>
+          <button
+            type="button"
+            onClick={() => setShowModelManager(true)}
+            style={{
+              fontSize: 10,
+              background: "transparent",
+              border: "1px solid #30363d",
+              borderRadius: 3,
+              color: "#8b949e",
+              padding: "1px 6px",
+              cursor: "pointer",
+            }}
+          >
+            ⚙ Configure
+          </button>
+        </div>
         <select
           style={selectStyle}
           value={config.modelId}
           onChange={(e) => onChange({ ...config, modelId: e.target.value })}
         >
-          {MODELS.map((m) => (
+          {dynamicModels.map((m) => (
             <option key={m.id} value={m.id}>
               {m.label}
             </option>
           ))}
         </select>
-        <div style={{ marginTop: 4, fontSize: 11, color: "#8b949e" }}>
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: "#8b949e",
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
           <span
-            style={providerDotStyle(MODELS.find((m) => m.id === config.modelId)?.provider ?? "")}
+            style={providerDotStyle(
+              dynamicModels.find((m) => m.id === config.modelId)?.provider ?? ""
+            )}
           />
-          {MODELS.find((m) => m.id === config.modelId)?.provider ?? ""}
+          <span>{dynamicModels.find((m) => m.id === config.modelId)?.provider ?? ""}</span>
+          {economyModelId && (
+            <span
+              style={{
+                marginLeft: "auto",
+                fontSize: 9,
+                color: "#3fb950",
+                border: "1px solid #238636",
+                borderRadius: 3,
+                padding: "1px 4px",
+              }}
+            >
+              Economy:{" "}
+              {dynamicModels
+                .find((m) => m.id === economyModelId)
+                ?.label?.split(" ")
+                .slice(-2)
+                .join(" ") ?? economyModelId.split("/").pop()}
+            </span>
+          )}
         </div>
       </div>
+
+      {showModelManager && (
+        <ModelManager
+          workerUrl={workerUrl}
+          currentPrefs={{ primaryModelId: config.modelId, economyModelId }}
+          onClose={() => setShowModelManager(false)}
+          onApply={(prefs) => {
+            onChange({ ...config, modelId: prefs.primaryModelId });
+            setEconomyModelId(prefs.economyModelId);
+          }}
+        />
+      )}
 
       <div>
         <div style={labelStyle}>Max Steps</div>

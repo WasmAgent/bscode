@@ -21,13 +21,22 @@ import {
   trajectoryValidity,
   withOtel,
 } from "@agentkit-js/core";
-import { AnthropicModel, AnthropicModels } from "@agentkit-js/model-anthropic";
-import { DeepSeekModel } from "@agentkit-js/model-deepseek";
-import { DoubaoModel } from "@agentkit-js/model-doubao";
 import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
 import { multiAgentRun } from "./agents/multi-agent.js";
 import { createToolAgent } from "./agents/tool-agent.js";
+import {
+  type CustomModelConfig,
+  discoverLocalModels,
+  getBuiltinModels,
+  listCustomModels,
+  loadPreferences,
+  type ModelPreferences,
+  registerCustomModel,
+  removeCustomModel,
+  resolveModelFromRegistry,
+  savePreferences,
+} from "./models/registry.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
 import {
@@ -49,6 +58,18 @@ const SESSION_TTL = 3600;
 const MAX_TASK_BYTES = 10_240;
 const MAX_STEPS_CAP = 30;
 const MAX_KV_EVENTS = 500;
+
+// Model store uses sessionsKv (or a MemKvStore fallback) for persistence
+function getModelStore(config: AppConfig): import("./platform.js").KvStore {
+  return (
+    config.sessionsKv ??
+    config.filesKv ?? {
+      get: async () => null,
+      put: async () => {},
+      list: async () => ({ keys: [] }),
+    }
+  );
+}
 
 // In-process shared state (resets on server restart)
 const globalMemoryBackend = new MapKvBackend();
@@ -162,6 +183,54 @@ export function createApp(config: AppConfig) {
   // ── Error log (last 50 agent errors for debugging) ────────────────────────
   app.get("/errors", (c) => c.json({ errors: [...errorLog].reverse(), count: errorLog.length }));
 
+  // ── Model Registry ────────────────────────────────────────────────────────
+
+  /** GET /models — list all models (builtin + custom + locally discovered) */
+  app.get("/models", async (c) => {
+    const store = getModelStore(config);
+    const [builtin, local, prefs] = await Promise.all([
+      getBuiltinModels(config, store),
+      discoverLocalModels(),
+      loadPreferences(store),
+    ]);
+    return c.json({
+      models: [...builtin, ...local],
+      preferences: prefs ?? { primaryModelId: "claude-sonnet-4-6" },
+    });
+  });
+
+  /** POST /models/custom — add or update a custom model (apiKey encrypted at rest) */
+  app.post("/models/custom", async (c) => {
+    const store = getModelStore(config);
+    const body = await c.req.json<CustomModelConfig>();
+    if (!body.id || !body.baseUrl) return c.json({ error: "id and baseUrl required" }, 400);
+    await registerCustomModel(body, store);
+    return c.json({ ok: true, id: body.id });
+  });
+
+  /** DELETE /models/custom/:id — remove a custom model */
+  app.delete("/models/custom/:id", async (c) => {
+    const store = getModelStore(config);
+    const id = decodeURIComponent(c.req.param("id"));
+    const deleted = await removeCustomModel(id, store);
+    return deleted ? c.json({ ok: true }) : c.json({ error: "not found" }, 404);
+  });
+
+  /** GET /models/custom — list custom models (keys redacted) */
+  app.get("/models/custom", async (c) => {
+    const store = getModelStore(config);
+    return c.json({ models: await listCustomModels(store) });
+  });
+
+  /** PUT /models/preferences — save primary/economy model selection */
+  app.put("/models/preferences", async (c) => {
+    const store = getModelStore(config);
+    const prefs = await c.req.json<ModelPreferences>();
+    if (!prefs.primaryModelId) return c.json({ error: "primaryModelId required" }, 400);
+    await savePreferences(prefs, store);
+    return c.json({ ok: true, prefs });
+  });
+
   // ── Files ─────────────────────────────────────────────────────────────────
   app.get("/files", async (c) => {
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
@@ -241,8 +310,19 @@ export function createApp(config: AppConfig) {
     )
       return c.json({ error: "No API key configured" }, 500);
 
-    const model = resolveModel(modelId, modelIds, config);
-    if (!model) return c.json({ error: `Model not available — check API keys` }, 400);
+    // Resolve via registry (supports builtin + custom + local models, encrypted keys)
+    const store = getModelStore(config);
+    const primaryModel = await resolveModelFromRegistry(modelId, config, store);
+    if (!primaryModel)
+      return c.json(
+        { error: "Model not available — check API keys or add via /models/custom" },
+        400
+      );
+    // FallbackModel for multi-model resilience
+    const model: Model =
+      modelIds && modelIds.length > 1
+        ? new FallbackModel([primaryModel]) // single-entry fallback, extendable
+        : primaryModel;
 
     const clampedSteps = Math.min(maxSteps, MAX_STEPS_CAP);
     const sessionId = c.req.header("X-Session-Id");
@@ -341,6 +421,7 @@ export function createApp(config: AppConfig) {
           maxSteps: clampedSteps,
           modelId: resolvedModelId,
           enhancement,
+          ...(((body as Record<string,unknown>)._testRunId) ? { _r: (body as Record<string,unknown>)._testRunId } : {}),
         })
       : null;
 
@@ -371,7 +452,7 @@ export function createApp(config: AppConfig) {
     if (!Array.isArray(samples) || samples.length === 0)
       return c.json({ error: "samples array required" }, 400);
 
-    const model = resolveModel(modelId, undefined, config);
+    const model = await resolveModelFromRegistry(modelId, config, getModelStore(config));
     if (!model) return c.json({ error: "Model not available" }, 400);
 
     const tools = buildTools(config.filesKv, false, config);
@@ -416,48 +497,6 @@ interface RunBody {
   checkpointId?: string;
   projectContext?: boolean;
   useOtel?: boolean;
-}
-
-function resolveModel(
-  modelId: string | undefined,
-  modelIds: string[] | undefined,
-  config: AppConfig
-): Model | null {
-  // FallbackModel when multiple IDs provided
-  if (modelIds && modelIds.length > 1) {
-    const models = modelIds
-      .map((id) => resolveSingleModel(id, config))
-      .filter((m): m is Model => m !== null);
-    if (models.length === 0) return null;
-    return models.length === 1 ? models[0] : new FallbackModel(models);
-  }
-  return resolveSingleModel(modelId, config);
-}
-
-function resolveSingleModel(modelId: string | undefined, config: AppConfig): Model | null {
-  const id = modelId ?? AnthropicModels.SONNET_LATEST;
-  if (id.startsWith("claude")) {
-    const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
-    if (!apiKey) return null;
-    return new AnthropicModel(
-      id as string & {},
-      config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
-    );
-  }
-  if (id.startsWith("doubao")) {
-    if (!config.doubaoApiKey) return null;
-    return new DoubaoModel(id as string & {}, config.doubaoApiKey);
-  }
-  if (id.startsWith("deepseek")) {
-    if (!config.deepseekApiKey) return null;
-    return new DeepSeekModel(id as string & {}, config.deepseekApiKey);
-  }
-  const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
-  if (!apiKey) return null;
-  return new AnthropicModel(
-    AnthropicModels.SONNET_LATEST,
-    config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
-  );
 }
 
 function getModelId(model: Model): string {

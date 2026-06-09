@@ -23,7 +23,8 @@
     "diff": "^9.0.0",
     "hono": "^4.6.0",
     "quickjs-emscripten-core": "0.32.0",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "@agentkit-js/model-openai": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241224.0",

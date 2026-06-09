@@ -128,6 +128,7 @@ export default function Home() {
           onSubmit={handleSubmit}
           onAbort={abort}
           isRunning={isRunning}
+          workerUrl={process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788"}
         />
 
         {/* Sample tasks */}
