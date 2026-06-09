@@ -77,6 +77,10 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         inputTokens?: number;
         outputTokens?: number;
         cacheReadTokens?: number;
+        // New enriched fields from agentkit-js TokenBudget
+        cacheHitRate?: number;
+        estimatedUsd?: number;
+        calls?: number;
       };
       setTokenStats((prev) => {
         const next = {
