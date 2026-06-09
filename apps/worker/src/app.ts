@@ -2,6 +2,7 @@ import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@agentkit-
 import {
   BudgetForcingRunner,
   CheckpointableRun,
+  classifierGuardrail,
   createMemoryTool,
   exactMatch,
   FallbackModel,
@@ -11,6 +12,7 @@ import {
   InMemorySpanExporter,
   MapKvBackend,
   maxInputLength,
+  MessageAssembler,
   OtelBridge,
   ProgrammaticOrchestrator,
   ReflectRefineRunner,
@@ -164,6 +166,63 @@ export function createApp(config: AppConfig) {
       workdir: config.workdir ?? null,
     })
   );
+
+  // ── Enhance Prompt — expand vague task into detailed spec (bolt.new pattern) ─
+  // Uses Claude Haiku to rewrite a vague user prompt into a detailed, actionable
+  // specification. Returns the enhanced prompt so the frontend can show a preview
+  // before submitting to the full agent run.
+  app.post("/enhance-prompt", async (c) => {
+    const { task, mode, framework } = await c.req.json<{
+      task: string;
+      mode?: string;
+      framework?: string | null;
+    }>();
+    if (!task) return c.json({ error: "task required" }, 400);
+
+    const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
+    if (!apiKey) return c.json({ enhanced: task }); // passthrough fallback
+
+    const { AnthropicModel } = await import("@agentkit-js/model-anthropic");
+    const model = new AnthropicModel(
+      "claude-haiku-4-5-20251001",
+      config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
+    );
+
+    const modeCtx = framework
+      ? `The user is building a ${framework} web app.`
+      : mode === "code"
+        ? "The user wants to write and execute JavaScript/Python code."
+        : "The user wants to use file tools to build or modify a codebase.";
+
+    const systemMsg = `You are a prompt engineer. Your job is to take a vague coding task and expand it into a clear, detailed specification that a coding agent can execute precisely.
+
+${modeCtx}
+
+Rules:
+- Keep the enhanced prompt concise (3-8 sentences)
+- Add specific technical details that were implied but not stated
+- Specify expected inputs, outputs, and edge cases
+- Mention UI/UX details for frontend tasks (colors, interactions, layout)
+- Do NOT change the core intent — only add clarity
+- Write in the same language as the original (Chinese stays Chinese, English stays English)
+- Reply with ONLY the enhanced task description, no preamble`;
+
+    try {
+      let enhanced = "";
+      for await (const ev of model.generate(
+        [
+          { role: "system", content: systemMsg },
+          { role: "user", content: task },
+        ],
+        { stream: true, maxTokens: 300 }
+      )) {
+        if (ev.type === "text_delta" && ev.delta) enhanced += ev.delta;
+      }
+      return c.json({ enhanced: enhanced.trim() || task });
+    } catch {
+      return c.json({ enhanced: task });
+    }
+  });
 
   // ── Task classifier — detects agent mode from task description ────────────
   // Uses Claude Haiku for fast, cheap classification (typically < 500ms).
@@ -494,14 +553,28 @@ or {"mode":"tool","framework":null}`;
         ]);
         const inputGuardrails = buildInputGuardrails(guardrails);
         const outputGuardrails = buildOutputGuardrails(guardrails);
+        // Merge resource budget from request into enhancementPolicy
+        const mergedPolicy = {
+          ...body.enhancementPolicy,
+          ...(body.maxBudgetTokens || body.maxDurationMs
+            ? {
+                budget: {
+                  ...body.enhancementPolicy?.budget,
+                  ...(body.maxBudgetTokens ? { maxTokens: body.maxBudgetTokens } : {}),
+                  ...(body.maxDurationMs ? { maxDurationMs: body.maxDurationMs } : {}),
+                },
+              }
+            : {}),
+        };
+
         const agentExtras = {
           maxSteps: clampedSteps,
           planningInterval,
           inputGuardrails,
           outputGuardrails,
           framework: body.framework,
-          // New: enhancement policy, stop conditions, cache tuning, scheduler
-          enhancementPolicy: body.enhancementPolicy,
+          // Enhancement policy with merged resource budget
+          enhancementPolicy: Object.keys(mergedPolicy).length > 0 ? mergedPolicy : undefined,
           stopConditions: body.stopConditions,
           chunkSizeSteps: body.chunkSizeSteps,
           systemPrefixTtl: body.systemPrefixTtl,
@@ -549,6 +622,20 @@ or {"mode":"tool","framework":null}`;
           if (body.conversationHistory?.length) {
             for (const turn of body.conversationHistory) {
               agent.assembler.addStep({ type: "user_message", content: turn.content });
+            }
+          }
+
+          // Auto-compact: if history is long, summarise it before the new task.
+          // Triggered when autoCompactThreshold is set and the assembled messages
+          // would exceed that token count (estimated). Keeps latency low by
+          // compressing the earliest chunks into a summary.
+          if (body.autoCompactThreshold && body.autoCompactThreshold > 0) {
+            const msgs = agent.assembler.build();
+            const { estimateMessagesTokens } = await import("@agentkit-js/core");
+            const estimatedTokens = estimateMessagesTokens(msgs);
+            if (estimatedTokens > body.autoCompactThreshold) {
+              await agent.assembler.compact(model);
+              console.log(`[auto-compact] compressed history from ~${estimatedTokens} tokens`);
             }
           }
 
@@ -698,6 +785,16 @@ interface RunBody {
   // ── Conversation context (new) ───────────────────────────────────────────────
   /** Previous turns to inject as context — enables multi-turn conversation */
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+
+  // ── Resource budget (new) ────────────────────────────────────────────────────
+  /** Maximum total tokens (input+output) before agent stops automatically */
+  maxBudgetTokens?: number;
+  /** Maximum wall-clock milliseconds before agent stops */
+  maxDurationMs?: number;
+
+  // ── Auto-compact (new) ────────────────────────────────────────────────────────
+  /** Auto-compact history when context exceeds this many tokens (default: off) */
+  autoCompactThreshold?: number;
 }
 
 function getModelId(model: Model): string {

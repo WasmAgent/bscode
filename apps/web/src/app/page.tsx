@@ -30,6 +30,8 @@ interface ConversationTurn {
   status: "running" | "done" | "error";
   /** Write progress: list of file paths written so far (for framework mode) */
   writtenFiles: string[];
+  /** Whether the thinking section is collapsed in the UI */
+  thinkingCollapsed: boolean;
 }
 
 let toastId = 0;
@@ -164,6 +166,7 @@ export default function Home() {
                 ...t,
                 finalAnswer: finalAnswer ?? null,
                 status: hasError ? "error" : "done",
+                thinkingCollapsed: true, // auto-collapse thinking when done
               }
             : t
         )
@@ -294,12 +297,37 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(
-    (taskText: string) => {
+    async (taskText: string) => {
       const text = taskText.trim();
       if (!text || isRunning || classifying) return;
       setInputText("");
       setPreview(undefined);
       wcReset();
+
+      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+
+      // ── @ file reference resolution ─────────────────────────────────────────
+      // Parse @filename mentions in task, fetch their contents, inject inline.
+      // e.g. "Fix the bug in @src/App.tsx" → appends file content to task.
+      let resolvedText = text;
+      const atMentions = [...text.matchAll(/@([\w./\-]+\.\w+)/g)].map((m) => m[1]);
+      if (atMentions.length > 0) {
+        const fileContents = await Promise.all(
+          atMentions.map(async (path) => {
+            try {
+              const res = await fetch(`${workerUrl}/files/${encodeURIComponent(path)}`);
+              if (!res.ok) return null;
+              const data = await res.json() as { content: string };
+              return { path, content: data.content };
+            } catch { return null; }
+          })
+        );
+        const injected = fileContents
+          .filter(Boolean)
+          .map((f) => `\n\n### @${f!.path}\n\`\`\`\n${f!.content.slice(0, 2000)}\n\`\`\``)
+          .join("");
+        if (injected) resolvedText = text + injected;
+      }
 
       const id = `turn-${++turnId}`;
       currentTurnId.current = id;
@@ -307,12 +335,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         ...prev,
         {
           id,
-          task: text,
+          task: text, // show original text in UI, not the injected version
           detectedMode: null,
           timestamp: Date.now(),
           agentText: "",
           toolLines: [],
           writtenFiles: [],
+          thinkingCollapsed: false,
           finalAnswer: null,
           error: null,
           status: "running",
@@ -320,8 +349,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       ]);
       resetAll();
 
-      // Build conversation history from completed turns (max last 5 to avoid context overflow)
-      // This gives the agent true multi-turn memory across conversation rounds.
+      // Build conversation history from completed turns (max last 5)
       const history = turns
         .filter((t) => t.status === "done" && t.finalAnswer)
         .slice(-5)
@@ -330,10 +358,37 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           { role: "assistant", content: t.finalAnswer! },
         ]);
 
-      submit(text, history.length > 0 ? history : undefined);
+      submit(resolvedText, history.length > 0 ? history : undefined);
     },
-    [isRunning, classifying, submit, resetAll, wcReset]
+    [isRunning, classifying, submit, resetAll, wcReset, turns]
   );
+
+  // ── Enhance Prompt ─────────────────────────────────────────────────────────
+  // Calls /enhance-prompt to rewrite a vague task into a detailed spec (bolt.new)
+  const [enhancing, setEnhancing] = useState(false);
+  const handleEnhancePrompt = useCallback(async () => {
+    const text = inputText.trim();
+    if (!text || enhancing) return;
+    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+    setEnhancing(true);
+    try {
+      const res = await fetch(`${workerUrl}/enhance-prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          task: text,
+          mode: config.agentMode,
+          framework: config.framework,
+        }),
+      });
+      const data = await res.json() as { enhanced: string };
+      if (data.enhanced && data.enhanced !== text) {
+        setInputText(data.enhanced);
+        addToast("Prompt enhanced ✨", "info");
+      }
+    } catch { /* ignore */ }
+    finally { setEnhancing(false); }
+  }, [inputText, config, enhancing, addToast]);
 
   // ── One-click Fix ──────────────────────────────────────────────────────────
   const handleFix = useCallback(() => {
@@ -664,7 +719,25 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               </div>
             </div>
             <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 10, color: "#484f58" }}>Cmd+Enter to send</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 10, color: "#484f58" }}>Cmd+Enter · @file to reference</span>
+                {/* Enhance Prompt button (bolt.new pattern) */}
+                {inputText.trim() && !isRunning && !classifying && (
+                  <button
+                    type="button"
+                    onClick={handleEnhancePrompt}
+                    disabled={enhancing}
+                    title="Enhance prompt — expand into detailed spec (bolt.new ✨)"
+                    style={{
+                      padding: "2px 8px", borderRadius: 3, border: "1px solid #30363d",
+                      background: "transparent", color: enhancing ? "#8b949e" : "#bc8cff",
+                      fontSize: 10, cursor: enhancing ? "wait" : "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    {enhancing ? "⟳" : "✨ Enhance"}
+                  </button>
+                )}
+              </div>
               <TokenMeter stats={tokenStats} compact />
             </div>
           </div>
@@ -749,7 +822,14 @@ interface TurnBlockProps {
 
 function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockProps) {
   const label = modeLabel(turn.detectedMode);
-  const displayText = isActive ? streamingText : turn.agentText;
+  const thinkingText = isActive ? streamingText : turn.agentText;
+  const displayText = turn.status === "done" && turn.finalAnswer ? turn.finalAnswer : null;
+  const [thinkingCollapsed, setThinkingCollapsed] = useState(turn.thinkingCollapsed);
+
+  // Sync collapse state when turn finishes
+  useEffect(() => {
+    if (turn.thinkingCollapsed) setThinkingCollapsed(true);
+  }, [turn.thinkingCollapsed]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -817,7 +897,38 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockP
             </div>
           )}
 
-          {/* Agent text / error */}
+          {/* Thinking section — collapsible, shown while running or when expanded */}
+          {thinkingText && (
+            <div style={{ marginBottom: displayText ? 8 : 0 }}>
+              <button
+                type="button"
+                onClick={() => setThinkingCollapsed((c) => !c)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  background: "none", border: "none", padding: "2px 0",
+                  color: "#8b949e", fontSize: 10, cursor: "pointer",
+                  fontFamily: "JetBrains Mono, monospace",
+                }}
+              >
+                <span style={{ transform: thinkingCollapsed ? "rotate(-90deg)" : "rotate(0)", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
+                {isActive ? "Thinking…" : `Thought (${thinkingText.split(/\s+/).length} words)`}
+                {isActive && <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#bc8cff", animation: "pulse 1s infinite", marginLeft: 2 }} />}
+              </button>
+              {!thinkingCollapsed && (
+                <div style={{
+                  background: "#0d1117", border: "1px solid #21262d", borderRadius: 5,
+                  padding: "8px 10px", fontSize: 11, color: "#8b949e", lineHeight: 1.6,
+                  whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
+                  maxHeight: 200, overflowY: "auto", marginTop: 4,
+                }}>
+                  {thinkingText}
+                  {isActive && <span style={{ display: "inline-block", width: 6, height: 12, background: "#bc8cff", animation: "blink 1s step-end infinite", verticalAlign: "text-bottom", marginLeft: 2 }} />}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Final answer — shown prominently when done */}
           {turn.status === "error" && turn.error ? (
             <div style={{
               background: "#1a0a0a", border: "1px solid #f8514933", borderRadius: 6,
@@ -835,14 +946,8 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockP
               maxHeight: 300, overflowY: "auto",
             }}>
               {displayText}
-              {isActive && (
-                <span style={{
-                  display: "inline-block", width: 7, height: 13, background: "#58a6ff",
-                  animation: "blink 1s step-end infinite", verticalAlign: "text-bottom", marginLeft: 3,
-                }} />
-              )}
             </div>
-          ) : isActive ? (
+          ) : isActive && !thinkingText ? (
             <div style={{ color: "#8b949e", fontSize: 12 }}>
               <span style={{ animation: "pulse 1.2s infinite" }}>Thinking…</span>
             </div>

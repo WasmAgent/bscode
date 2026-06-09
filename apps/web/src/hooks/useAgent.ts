@@ -37,6 +37,12 @@ export interface AgentConfig {
   systemPrefixTtl?: "5m" | "1h";
   /** Scheduler override */
   scheduler?: "dag" | "parallel";
+  /** Max total tokens before auto-stop (cost control) */
+  maxBudgetTokens?: number;
+  /** Max milliseconds before auto-stop */
+  maxDurationMs?: number;
+  /** Auto-compact history when estimated tokens exceed this threshold (e.g. 80000) */
+  autoCompactThreshold?: number;
 }
 
 export interface ClassifyResult {
@@ -144,6 +150,9 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         ...(effectiveConfig.stopConditions?.length ? { stopConditions: effectiveConfig.stopConditions } : {}),
         ...(effectiveConfig.enhancementPolicy ? { enhancementPolicy: effectiveConfig.enhancementPolicy } : {}),
         ...(effectiveConfig.scheduler ? { scheduler: effectiveConfig.scheduler } : {}),
+        ...(effectiveConfig.maxBudgetTokens ? { maxBudgetTokens: effectiveConfig.maxBudgetTokens } : {}),
+        ...(effectiveConfig.maxDurationMs ? { maxDurationMs: effectiveConfig.maxDurationMs } : {}),
+        ...(effectiveConfig.autoCompactThreshold ? { autoCompactThreshold: effectiveConfig.autoCompactThreshold } : {}),
         ...(conversationHistory?.length ? { conversationHistory } : {}),
       });
     },

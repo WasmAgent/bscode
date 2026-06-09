@@ -1,5 +1,5 @@
 import type { InputGuardrail, Model, OutputGuardrail, ToolDefinition } from "@agentkit-js/core";
-import { CodeAgent } from "@agentkit-js/core";
+import { CodeAgent, codeGuardrail } from "@agentkit-js/core";
 import { PyodideKernel } from "@agentkit-js/kernel-pyodide";
 import type { QuickJSKernelOptions } from "@agentkit-js/kernel-quickjs";
 import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
@@ -75,6 +75,8 @@ __finalAnswer__ = result
     kernel,
     inputGuardrails: extras.inputGuardrails,
     outputGuardrails: extras.outputGuardrails,
+    // S3: static code analysis — blocks dangerous patterns (eval, exec, rm, etc.)
+    codeGuardrails: [codeGuardrail()],
     systemPrompt,
   });
 }
