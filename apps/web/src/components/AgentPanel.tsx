@@ -32,6 +32,10 @@ interface AgentPanelProps {
   onAbort: () => void;
   isRunning: boolean;
   workerUrl?: string;
+  /** Whether the auto-classifier is currently running */
+  classifying?: boolean;
+  /** Mode detected by classifier (shown as badge) */
+  detectedMode?: { mode: string; framework: string | null } | null;
 }
 
 const panelStyle: CSSProperties = {
@@ -153,6 +157,8 @@ export function AgentPanel({
   onAbort,
   isRunning,
   workerUrl = "http://localhost:8788",
+  classifying = false,
+  detectedMode = null,
 }: AgentPanelProps) {
   const [dynamicModels, setDynamicModels] = useState(DEFAULT_MODELS);
   const [economyModelId, setEconomyModelId] = useState<string | undefined>(undefined);
@@ -191,65 +197,106 @@ export function AgentPanel({
 
       <hr style={dividerStyle} />
 
+      {/* ── Mode: Auto-detect toggle + manual override ─────── */}
       <div>
-        <div style={labelStyle}>Agent Mode</div>
-        <div style={modeRowStyle}>
-          {(["code", "tool"] as const).map((mode) => (
-            <button
-              type="button"
-              key={mode}
-              style={modeBtnStyle(config.agentMode === mode && !config.framework)}
-              onClick={() => onChange({ ...config, agentMode: mode, framework: null })}
-            >
-              {mode === "code" ? "Code + WASM" : "Tool + DAG"}
-            </button>
-          ))}
-          <button
-            type="button"
-            style={{
-              ...modeBtnStyle(!!config.framework),
-              borderColor: config.framework ? "#3fb950" : undefined,
-              color: config.framework ? "#3fb950" : undefined,
-              background: config.framework ? "#238636" + "22" : undefined,
-            }}
-            onClick={() =>
-              onChange({
-                ...config,
-                agentMode: "tool",
-                framework: config.framework ? null : "react",
-              })
-            }
-          >
-            Framework
-          </button>
+        <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Mode</span>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", textTransform: "none", letterSpacing: 0 }}>
+            <input
+              type="checkbox"
+              checked={config.autoMode ?? true}
+              onChange={(e) => onChange({ ...config, autoMode: e.target.checked })}
+              style={{ accentColor: "#58a6ff" }}
+            />
+            <span style={{ fontSize: 10, color: "#8b949e" }}>Auto-detect</span>
+          </label>
         </div>
-        <div style={{ marginTop: 6, fontSize: 11, color: "#8b949e" }}>
-          {config.framework
-            ? "ToolAgent writes project files → WebContainers runs Vite dev server"
-            : config.agentMode === "code"
-              ? "CodeAgent writes JS, executes in QuickJS WASM sandbox"
-              : "ToolCallingAgent uses DAG scheduler for parallel tool calls"}
-        </div>
-      </div>
 
-      {/* Framework selector — shown only in Framework mode */}
-      {config.framework && (
-        <div>
-          <div style={labelStyle}>Framework</div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {(["react", "vue", "svelte", "vanilla"] as const).map((fw) => (
+        {/* Auto mode: show detected badge or "analyzing…" */}
+        {config.autoMode ? (
+          <div style={{ minHeight: 28, display: "flex", alignItems: "center", gap: 6 }}>
+            {classifying ? (
+              <span style={{ fontSize: 11, color: "#e3b341", animation: "pulse 1s infinite" }}>⟳ Analyzing task…</span>
+            ) : detectedMode ? (
+              <>
+                <span style={{
+                  fontSize: 11,
+                  background: detectedMode.mode === "framework" ? "#23863622" : "#1f6feb22",
+                  border: `1px solid ${detectedMode.mode === "framework" ? "#3fb950" : "#58a6ff"}`,
+                  borderRadius: 4,
+                  padding: "2px 8px",
+                  color: detectedMode.mode === "framework" ? "#3fb950" : "#58a6ff",
+                }}>
+                  {detectedMode.mode === "framework"
+                    ? `Framework · ${detectedMode.framework ?? "react"}`
+                    : detectedMode.mode === "code"
+                      ? "Code + WASM"
+                      : "Tool + DAG"}
+                </span>
+                <span style={{ fontSize: 10, color: "#484f58" }}>auto-detected</span>
+              </>
+            ) : (
+              <span style={{ fontSize: 11, color: "#484f58" }}>Will auto-detect on Run</span>
+            )}
+          </div>
+        ) : (
+          /* Manual mode: show full buttons */
+          <>
+            <div style={modeRowStyle}>
+              {(["code", "tool"] as const).map((mode) => (
+                <button
+                  type="button"
+                  key={mode}
+                  style={modeBtnStyle(config.agentMode === mode && !config.framework)}
+                  onClick={() => onChange({ ...config, agentMode: mode, framework: null })}
+                >
+                  {mode === "code" ? "Code + WASM" : "Tool + DAG"}
+                </button>
+              ))}
               <button
                 type="button"
-                key={fw}
-                style={{ ...modeBtnStyle(config.framework === fw), flex: "unset", padding: "5px 10px" }}
-                onClick={() => onChange({ ...config, framework: fw })}
+                style={{
+                  ...modeBtnStyle(!!config.framework),
+                  borderColor: config.framework ? "#3fb950" : undefined,
+                  color: config.framework ? "#3fb950" : undefined,
+                  background: config.framework ? "#238636" + "22" : undefined,
+                }}
+                onClick={() => onChange({ ...config, agentMode: "tool", framework: config.framework ? null : "react" })}
               >
-                {fw === "react" ? "React" : fw === "vue" ? "Vue 3" : fw === "svelte" ? "Svelte" : "Vanilla"}
+                Framework
               </button>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+            {config.framework && (
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                {(["react", "vue", "svelte", "vanilla"] as const).map((fw) => (
+                  <button
+                    type="button"
+                    key={fw}
+                    style={{ ...modeBtnStyle(config.framework === fw), flex: "unset", padding: "5px 10px" }}
+                    onClick={() => onChange({ ...config, framework: fw })}
+                  >
+                    {fw === "react" ? "React" : fw === "vue" ? "Vue 3" : fw === "svelte" ? "Svelte" : "Vanilla"}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!config.framework && (config.agentMode === "code" || config.agentMode === "ptc") && (
+              <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                {CODE_LANGS.map((lang) => (
+                  <button
+                    type="button"
+                    key={lang.id}
+                    style={{ ...modeBtnStyle(config.codeLanguage === lang.id || (!config.codeLanguage && lang.id === "js")), flex: 1 }}
+                    onClick={() => onChange({ ...config, codeLanguage: lang.id })}
+                  >
+                    {lang.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       <div>
         <div
@@ -353,29 +400,6 @@ export function AgentPanel({
           />
         </div>
       </div>
-
-      {(config.agentMode === "code" || config.agentMode === "ptc") && (
-        <div>
-          <div style={labelStyle}>Language</div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {CODE_LANGS.map((lang) => (
-              <button
-                type="button"
-                key={lang.id}
-                style={{
-                  ...modeBtnStyle(
-                    config.codeLanguage === lang.id || (!config.codeLanguage && lang.id === "js")
-                  ),
-                  flex: 1,
-                }}
-                onClick={() => onChange({ ...config, codeLanguage: lang.id })}
-              >
-                {lang.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <label

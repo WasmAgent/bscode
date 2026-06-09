@@ -165,6 +165,63 @@ export function createApp(config: AppConfig) {
     })
   );
 
+  // ── Task classifier — detects agent mode from task description ────────────
+  // Uses Claude Haiku for fast, cheap classification (typically < 500ms).
+  // Returns { mode, framework } so the frontend can auto-configure before running.
+  app.post("/classify", async (c) => {
+    const { task } = await c.req.json<{ task: string }>();
+    if (!task) return c.json({ error: "task required" }, 400);
+
+    const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
+    if (!apiKey) return c.json({ mode: "tool", framework: null }); // fallback
+
+    const { AnthropicModel } = await import("@agentkit-js/model-anthropic");
+    const model = new AnthropicModel(
+      "claude-haiku-4-5-20251001",
+      config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
+    );
+
+    const prompt = `Classify this coding task into exactly one category. Reply with ONLY valid JSON.
+
+Task: "${task.slice(0, 500)}"
+
+Categories:
+- "framework": The task asks to build a UI app, web app, website, game with frontend, or use React/Vue/Svelte/Next.js/Vite. Also choose this for games (贪吃蛇, calculator app, todo app, etc).
+- "code": The task asks to write/execute an algorithm, function, data structure, or math computation. Single-file scripts.
+- "tool": Everything else — file operations, multi-file projects without a framework, analysis, refactoring.
+
+If mode is "framework", also pick: "react" | "vue" | "svelte" | "vanilla"
+- react: React, Next.js, or unspecified frontend framework
+- vue: Vue.js
+- svelte: Svelte
+- vanilla: Pure JS/TS, Canvas games, HTML-only, no framework preference
+
+Reply JSON only, no explanation:
+{"mode":"framework","framework":"react"}
+or {"mode":"code","framework":null}
+or {"mode":"tool","framework":null}`;
+
+    try {
+      let text = "";
+      for await (const ev of model.generate(
+        [{ role: "user", content: prompt }],
+        { stream: true, maxTokens: 50 }
+      )) {
+        if (ev.type === "text_delta" && ev.delta) text += ev.delta;
+      }
+      const jsonMatch = /\{[^}]+\}/.exec(text.trim());
+      if (!jsonMatch) return c.json({ mode: "tool", framework: null });
+      const result = JSON.parse(jsonMatch[0]) as { mode: string; framework: string | null };
+      const validModes = ["code", "tool", "framework"];
+      const validFrameworks = ["react", "vue", "svelte", "vanilla", null];
+      if (!validModes.includes(result.mode)) return c.json({ mode: "tool", framework: null });
+      if (!validFrameworks.includes(result.framework)) result.framework = "react";
+      return c.json(result);
+    } catch {
+      return c.json({ mode: "tool", framework: null });
+    }
+  });
+
   // ── Memory ────────────────────────────────────────────────────────────────
   app.get("/memory", async (c) => {
     const keys = await globalMemoryBackend.list("mem:");
@@ -266,6 +323,21 @@ export function createApp(config: AppConfig) {
       })
     );
     return c.json({ files });
+  });
+
+  // Batch write — import multiple files in one request (used by ZIP/directory import).
+  app.post("/files/bulk", async (c) => {
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
+    if (!kv) return c.json({ error: "KV not bound" }, 503);
+    const { files } = await c.req.json<{ files: { path: string; content: string }[] }>();
+    if (!Array.isArray(files) || files.length === 0)
+      return c.json({ error: "files array required" }, 400);
+    await Promise.all(
+      files.map(({ path, content }) =>
+        kv.put(`file:${path.replace(/^\/+/, "")}`, content ?? "")
+      )
+    );
+    return c.json({ ok: true, count: files.length, paths: files.map((f) => f.path) });
   });
 
   app.post("/files", async (c) => {
@@ -402,7 +474,11 @@ export function createApp(config: AppConfig) {
           finalTask = `${ctxParts.join("\n\n")}\n\n---\n\n${task}`;
         }
 
-        const tools = buildTools(filesKv, useMemory, config, guardrails?.deniedTools);
+        const tools = buildTools(filesKv, useMemory, config, [
+          ...(guardrails?.deniedTools ?? []),
+          // Framework mode: block run_command and git tools — WebContainers handles execution
+          ...(body.framework ? ["run_command", "git_status", "git_diff", "git_log", "git_commit", "git_checkout"] : []),
+        ]);
         const inputGuardrails = buildInputGuardrails(guardrails);
         const outputGuardrails = buildOutputGuardrails(guardrails);
         const agentExtras = { maxSteps: clampedSteps, planningInterval, inputGuardrails, outputGuardrails, framework: body.framework };

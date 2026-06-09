@@ -26,7 +26,11 @@ const config = {
   clientToken: process.env.BSCODE_CLIENT_TOKEN,
   allowedOrigin: process.env.BSCODE_ALLOWED_ORIGIN ?? "*",
   filesKv: new FsKvStore(join(workdir, ".bscode-files")),
-  sessionsKv: new MemKvStore(),
+  // sessionsKv is intentionally undefined in local dev.
+  // Using MemKvStore here would cache run results in-process — stale results
+  // survive worker restarts (within the same process) and cause hard-to-diagnose
+  // bugs when agent logic changes. On Cloudflare, a real KV namespace is used.
+  sessionsKv: undefined,
   enableShell: true,
   workdir,
 };
@@ -131,5 +135,15 @@ server.listen(port, () => {
   console.log(`  Shell    : enabled (git tools active)`);
   console.log(`  Model    : ${modelProvider}`);
   console.log(`\n  CLI: node ../../scripts/bscode.mjs --url http://localhost:${port} "task"\n`);
+});
+
+// Graceful shutdown — bun --watch sends SIGTERM before restarting.
+// Close the server and wait for existing connections to finish so the
+// new process can bind the same port without EADDRINUSE.
+process.on("SIGTERM", () => {
+  server.close(() => process.exit(0));
+});
+process.on("SIGINT", () => {
+  server.close(() => process.exit(0));
 });
 

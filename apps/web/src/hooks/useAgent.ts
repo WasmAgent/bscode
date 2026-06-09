@@ -19,6 +19,13 @@ export interface AgentConfig {
   projectContext?: boolean;
   /** Framework mode — when set, uses a framework-aware system prompt and auto-mounts to WebContainers */
   framework?: "react" | "vue" | "svelte" | "vanilla" | null;
+  /** Whether to auto-detect mode from task text before running */
+  autoMode?: boolean;
+}
+
+export interface ClassifyResult {
+  mode: "code" | "tool" | "framework";
+  framework: "react" | "vue" | "svelte" | "vanilla" | null;
 }
 
 // Minimal shape we need from AgentEvent — avoids importing @agentkit-js/core in the browser bundle
@@ -28,7 +35,7 @@ interface AgentEventMinimal {
   traceId?: string;
 }
 
-export function useAgent(config: AgentConfig) {
+export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<AgentConfig>) => void) {
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
   const [tokenStats, setTokenStats] = useState<TokenStats>({
     inputTokens: 0,
@@ -37,6 +44,8 @@ export function useAgent(config: AgentConfig) {
     calls: 0,
   });
   const [rawEvents, setRawEvents] = useState<AgentEventMinimal[]>([]);
+  const [classifying, setClassifying] = useState(false);
+  const [detectedMode, setDetectedMode] = useState<ClassifyResult | null>(null);
   const statsRef = useRef(tokenStats);
 
   const onEvent = useCallback((ev: AgentEventMinimal) => {
@@ -67,26 +76,61 @@ export function useAgent(config: AgentConfig) {
   );
 
   const submit = useCallback(
-    (task: string) => {
+    async (task: string) => {
       setRawEvents([]);
+      setDetectedMode(null);
+
+      let effectiveConfig = config;
+
+      // Auto-detect mode if enabled — call /classify before launching agent
+      if (config.autoMode) {
+        setClassifying(true);
+        try {
+          const res = await fetch(`${workerUrl}/classify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task }),
+          });
+          const result = (await res.json()) as ClassifyResult;
+          setDetectedMode(result);
+
+          // Build updated config based on classification
+          const agentMode = result.mode === "framework" ? "tool" : result.mode;
+          const framework = result.mode === "framework" ? result.framework : null;
+          // Framework mode needs more steps to write all project files
+          const maxSteps = result.mode === "framework"
+            ? Math.max(config.maxSteps, 20)
+            : config.maxSteps;
+          effectiveConfig = { ...config, agentMode, framework, maxSteps };
+
+          // Notify parent so UI reflects the auto-detected mode
+          onConfigUpdate?.({ agentMode, framework, maxSteps });
+        } catch {
+          // Classification failed — proceed with current config
+        } finally {
+          setClassifying(false);
+        }
+      }
+
       run({
         task,
-        agentMode: config.agentMode,
-        modelId: config.modelId,
-        maxSteps: config.maxSteps,
-        codeLanguage: config.codeLanguage ?? "js",
-        useOtel: config.useOtel ?? true,
-        projectContext: config.projectContext ?? false,
-        ...(config.framework ? { framework: config.framework } : {}),
-        ...(config.modelIds?.length ? { modelIds: config.modelIds } : {}),
+        agentMode: effectiveConfig.agentMode,
+        modelId: effectiveConfig.modelId,
+        maxSteps: effectiveConfig.maxSteps,
+        codeLanguage: effectiveConfig.codeLanguage ?? "js",
+        useOtel: effectiveConfig.useOtel ?? true,
+        projectContext: effectiveConfig.projectContext ?? false,
+        ...(effectiveConfig.framework ? { framework: effectiveConfig.framework } : {}),
+        ...(effectiveConfig.modelIds?.length ? { modelIds: effectiveConfig.modelIds } : {}),
       });
     },
-    [run, config]
+    [run, config, workerUrl, onConfigUpdate]
   );
 
   const resetAll = useCallback(() => {
     reset();
     setRawEvents([]);
+    setDetectedMode(null);
     setTokenStats({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, calls: 0 });
   }, [reset]);
 
@@ -94,6 +138,8 @@ export function useAgent(config: AgentConfig) {
     messages,
     status,
     isRunning,
+    classifying,
+    detectedMode,
     finalAnswer,
     rawEvents,
     tokenStats,

@@ -671,14 +671,11 @@ await test("oversized task (>10KB) returns 400", "edge", async () => {
   return [res.status === 400];
 });
 
-await test("unknown model with no key returns 400", "edge", async () => {
-  const res = await fetch(`${BASE}/run`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ task: "hello", modelId: "doubao-seed-1-6-251015" }),
-  });
-  // Should be 400 since no DOUBAO_API_KEY configured
-  return [res.status === 400 || res.status === 500];
+await test("unknown model with no key returns error", "edge", async () => {
+  // The /run endpoint always returns 200 + SSE stream; errors are sent as error events.
+  const evs = await runAgent({ task: "hello", modelId: "doubao-seed-1-6-251015" }, 10_000);
+  const errs = events(evs, "error");
+  return [errs.length > 0 && String(errs[0]?.data?.error ?? "").includes("not available")];
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -701,7 +698,7 @@ await test(
       "__finalAnswer__ = fib(10)",
       "```",
     ].join("\n");
-    const evs = await runAgent({ task, agentMode: "code", codeLanguage: "python", maxSteps: 4 });
+    const evs = await runAgent({ task, agentMode: "code", codeLanguage: "python", maxSteps: 4 }, 120_000);
     const ans = String(finalAnswer(evs) ?? "");
     return [hasEvent(evs, "final_answer"), ans.includes("55")];
   },

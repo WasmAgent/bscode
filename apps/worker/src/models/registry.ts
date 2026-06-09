@@ -373,7 +373,21 @@ export async function resolveModelFromRegistry(
     });
   }
 
-  // Fallback to Anthropic
+  // Fallback to Anthropic only when no explicit modelId was requested
+  // (or when the id doesn't match any known provider pattern).
+  // If the caller explicitly requested a doubao/deepseek/etc. model but the key
+  // is missing, return null so the caller returns a proper 400 instead of
+  // silently switching to a different provider.
+  const isExplicitProviderRequest =
+    id.startsWith("doubao") ||
+    id.startsWith("deepseek") ||
+    id.startsWith("ollama") ||
+    id.startsWith("local:") ||
+    id.startsWith("gpt") ||
+    id.startsWith("o1") ||
+    id.startsWith("o3");
+  if (isExplicitProviderRequest) return null;
+
   const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
   if (!apiKey) return null;
   return new AnthropicModel(

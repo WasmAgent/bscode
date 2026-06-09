@@ -36,7 +36,10 @@ export function useWebContainer(): UseWebContainerReturn {
   const serverUnsubRef = useRef<(() => void) | null>(null);
 
   const appendLine = useCallback((line: string) => {
-    setTerminalLines((prev) => [...prev.slice(-500), line]); // cap at 500 lines
+    // Strip ANSI escape codes (cursor movement, color codes, etc.)
+    const clean = line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/\r/g, "");
+    if (!clean.trim()) return; // skip blank lines after stripping
+    setTerminalLines((prev) => [...prev.slice(-500), clean]);
   }, []);
 
   const reset = useCallback(() => {

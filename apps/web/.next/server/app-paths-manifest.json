@@ -1,3 +1,5 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/github/callback/route": "app/api/github/callback/route.js",
   "/page": "app/page.js"
 }
