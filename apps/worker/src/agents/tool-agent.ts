@@ -1,5 +1,19 @@
-import type { InputGuardrail, Model, OutputGuardrail, ToolDefinition } from "@agentkit-js/core";
-import { ToolCallingAgent } from "@agentkit-js/core";
+import type {
+  EnhancementPolicy,
+  InputGuardrail,
+  Model,
+  OutputGuardrail,
+  StopCondition,
+  ToolDefinition,
+} from "@agentkit-js/core";
+import {
+  MessageAssembler,
+  ToolCallingAgent,
+  ToolRegistry,
+  costBudget,
+  noProgress,
+  stepCountIs,
+} from "@agentkit-js/core";
 
 export type Framework = "react" | "vue" | "svelte" | "vanilla";
 
@@ -9,6 +23,15 @@ export interface ToolAgentExtras {
   inputGuardrails?: InputGuardrail[];
   outputGuardrails?: OutputGuardrail[];
   framework?: Framework | null;
+  // Enhancement policy — controls self-consistency, reflect-refine, budget-forcing, parallel-fork-join
+  enhancementPolicy?: EnhancementPolicy;
+  // Stop conditions: "noProgress", "costBudget:<maxUSD>", "stepCount:<n>"
+  stopConditions?: string[];
+  // Prompt-cache settings
+  chunkSizeSteps?: number;         // seal a cache breakpoint every N steps (B2)
+  systemPrefixTtl?: "5m" | "1h";  // cache TTL for the system prompt prefix
+  // Tool scheduler
+  scheduler?: "dag" | "parallel";
 }
 
 const GENERAL_PROMPT = `You are BSCode, an expert coding assistant.
@@ -34,7 +57,6 @@ Rules:
 - Write clean, working code — no placeholders or TODOs
 - Write every file completely in a SINGLE write_file call — never split a file across multiple calls
 - Keep each file under 300 lines; split into multiple component files if needed
-- If a component would be long, split it into multiple smaller component files (e.g. src/components/Counter.tsx)
 - After writing all files, respond with a brief summary of what was created`,
 
   vue: `You are BSCode, an expert Vue 3 + Vite developer.
@@ -85,6 +107,20 @@ Rules:
 - Write every file completely, do NOT truncate`,
 };
 
+/** Parse a stop-condition descriptor string into a StopCondition instance. */
+function parseStopCondition(desc: string): StopCondition | null {
+  if (desc === "noProgress") return noProgress();
+  if (desc.startsWith("stepCount:")) {
+    const n = Number(desc.split(":")[1]);
+    return isNaN(n) ? null : stepCountIs(n);
+  }
+  if (desc.startsWith("costBudget:")) {
+    const maxUsd = Number(desc.split(":")[1]);
+    return isNaN(maxUsd) ? null : costBudget(maxUsd);
+  }
+  return null;
+}
+
 export function createToolAgent(
   model: Model,
   tools: ToolDefinition[],
@@ -94,14 +130,34 @@ export function createToolAgent(
     ? FRAMEWORK_PROMPTS[extras.framework]
     : GENERAL_PROMPT;
 
+  const stopConditions: StopCondition[] = (extras.stopConditions ?? [])
+    .map(parseStopCondition)
+    .filter((s): s is StopCondition => s !== null);
+
+  // Build the ToolRegistry first so we can get the full toolsSchema for the assembler.
+  // This is needed to pass chunkSizeSteps + systemPrefixTtl while still including tools.
+  const registry = new ToolRegistry();
+  for (const tool of tools) registry.register(tool);
+
+  // B2 prompt-cache: seal breakpoints every chunkSizeSteps, use 1h TTL for system prefix
+  const assembler = new MessageAssembler({
+    systemPrompt,
+    toolsSchema: registry.toJsonSchema(),
+    chunkSizeSteps: extras.chunkSizeSteps ?? 5,
+    systemPrefixTtl: extras.systemPrefixTtl ?? "1h",
+  });
+
   return new ToolCallingAgent({
     tools,
     model,
+    assembler,
     maxSteps: extras.maxSteps ?? 15,
     planningInterval: extras.planningInterval,
-    scheduler: "dag",
+    scheduler: extras.scheduler ?? "dag",
     inputGuardrails: extras.inputGuardrails,
     outputGuardrails: extras.outputGuardrails,
+    enhancementPolicy: extras.enhancementPolicy,
+    stopWhen: stopConditions,
     systemPrompt,
   });
 }

@@ -1,13 +1,14 @@
 "use client";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentPanel } from "@/components/AgentPanel";
 import { Terminal, type PreviewContent } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
-import { type AgentConfig, useAgent } from "@/hooks/useAgent";
+import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
 import { useGitHub } from "@/hooks/useGitHub";
 import { useImport } from "@/hooks/useImport";
 import { toFileSystemTree, useWebContainer } from "@/hooks/useWebContainer";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Toast {
   id: number;
@@ -15,7 +16,62 @@ interface Toast {
   kind: "info" | "success" | "warn" | "error";
 }
 
+interface ConversationTurn {
+  id: string;
+  task: string;
+  detectedMode: ClassifyResult | null;
+  timestamp: number;
+  /** Accumulated agent output for this turn */
+  agentText: string;
+  /** Tool calls/results summary lines */
+  toolLines: string[];
+  finalAnswer: string | null;
+  error: string | null;
+  status: "running" | "done" | "error";
+}
+
 let toastId = 0;
+let turnId = 0;
+
+const TOAST_COLORS: Record<Toast["kind"], string> = {
+  info: "#58a6ff",
+  success: "#3fb950",
+  warn: "#e3b341",
+  error: "#f85149",
+};
+
+const MODE_COLORS: Record<string, string> = {
+  "Code + WASM": "#bc8cff",
+  "Tool + DAG": "#58a6ff",
+  "Framework · react": "#3fb950",
+  "Framework · vue": "#3fb950",
+  "Framework · svelte": "#e3b341",
+  "Framework · vanilla": "#58a6ff",
+};
+
+function modeLabel(d: ClassifyResult | null): string {
+  if (!d) return "";
+  if (d.mode === "code") return "Code + WASM";
+  if (d.mode === "tool") return "Tool + DAG";
+  return `Framework · ${d.framework ?? "react"}`;
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const mono: React.CSSProperties = { fontFamily: "JetBrains Mono, monospace" };
+
+const iconBtn = (color = "#8b949e"): React.CSSProperties => ({
+  padding: "4px 8px",
+  borderRadius: 3,
+  border: "none",
+  background: "transparent",
+  color,
+  fontSize: 11,
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+});
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [config, setConfig] = useState<AgentConfig>({
@@ -28,13 +84,20 @@ export default function Home() {
     framework: null,
     autoMode: true,
   });
+
+  // Chat history
+  const [turns, setTurns] = useState<ConversationTurn[]>([]);
+  const currentTurnId = useRef<string | null>(null);
+
+  const [inputText, setInputText] = useState("");
   const [preview, setPreview] = useState<PreviewContent | undefined>(undefined);
-  const [task, setTask] = useState("");
-  const [terminalView, setTerminalView] = useState<"messages" | "events" | "preview">("messages");
+  const [previewView, setPreviewView] = useState<"messages" | "events" | "preview">("preview");
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const prevIsRunning = useRef(false);
-  const [lastError, setLastError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevIsRunning = useRef(false);
 
   const addToast = useCallback((message: string, kind: Toast["kind"] = "info") => {
     const id = ++toastId;
@@ -42,33 +105,77 @@ export default function Home() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);
 
-  const { messages, isRunning, rawEvents, tokenStats, finalAnswer, submit, abort, resetAll, classifying, detectedMode } =
-    useAgent(config, (update) => setConfig((prev) => ({ ...prev, ...update })));
+  const {
+    messages, isRunning, rawEvents, tokenStats, finalAnswer,
+    submit, abort, resetAll, classifying, detectedMode,
+  } = useAgent(config, (update) => setConfig((prev) => ({ ...prev, ...update })));
 
-  const { user, pushing, login: githubLogin, logout: githubLogout, pushToGitHub } = useGitHub();
+  const { user, pushing, login: githubLogin, pushToGitHub } = useGitHub();
   const { importing, importFromZip, importFromDirectory, uploadFiles } = useImport();
-
   const { status: wcStatus, previewUrl, terminalLines: wcLines, runProject, reset: wcReset } =
     useWebContainer();
 
-  // When WebContainers gets a preview URL → show it in Preview tab
+  // ── Scroll chat to bottom ──────────────────────────────────────────────────
   useEffect(() => {
-    if (previewUrl) {
-      setPreview((prev) => ({ ...prev, url: previewUrl }));
-      setTerminalView("preview");
-      addToast("Framework app is live in Preview", "success");
-    }
-  }, [previewUrl, addToast]);
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [turns, messages]);
 
-  // When WebContainers errors → surface it
+  // ── Track detectedMode onto current turn ───────────────────────────────────
   useEffect(() => {
-    if (wcStatus === "error") {
-      setPreview((prev) => ({ ...prev, error: "WebContainers build failed — check terminal output" }));
-      addToast("WebContainers build failed", "error");
-    }
-  }, [wcStatus, addToast]);
+    if (!detectedMode || !currentTurnId.current) return;
+    setTurns((prev) =>
+      prev.map((t) => t.id === currentTurnId.current ? { ...t, detectedMode } : t)
+    );
+  }, [detectedMode]);
 
-  // Extract execution output from tool_result events
+  // ── Sync streaming messages into current turn ──────────────────────────────
+  useEffect(() => {
+    if (!currentTurnId.current) return;
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const toolLines = messages
+      .filter((m) => m.role === "tool")
+      .map((m) => m.content);
+    const errorMsg = messages.find((m) => m.role === "error")?.content ?? null;
+    setTurns((prev) =>
+      prev.map((t) =>
+        t.id === currentTurnId.current
+          ? {
+              ...t,
+              agentText: lastAssistant?.content ?? t.agentText,
+              toolLines,
+              error: errorMsg,
+              status: isRunning ? "running" : errorMsg ? "error" : t.status,
+            }
+          : t
+      )
+    );
+  }, [messages, isRunning]);
+
+  // ── Finalize turn on completion ────────────────────────────────────────────
+  useEffect(() => {
+    if (prevIsRunning.current && !isRunning && currentTurnId.current) {
+      const hasError = messages.some((m) => m.role === "error");
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === currentTurnId.current
+            ? {
+                ...t,
+                finalAnswer: finalAnswer ?? null,
+                status: hasError ? "error" : "done",
+              }
+            : t
+        )
+      );
+      if (hasError) {
+        addToast("Agent encountered an error", "error");
+      } else if (finalAnswer) {
+        addToast("Done", "success");
+      }
+    }
+    prevIsRunning.current = isRunning;
+  }, [isRunning, messages, finalAnswer, addToast]);
+
+  // ── Tool results → execution output ───────────────────────────────────────
   useEffect(() => {
     if (rawEvents.length === 0) return;
     const kernelResults = rawEvents
@@ -84,464 +191,630 @@ export default function Home() {
     }
   }, [rawEvents]);
 
-  // After a framework-mode run completes: fetch workspace files and mount to WebContainers
+  // ── Framework mode → WebContainers ────────────────────────────────────────
   const prevIsFrameworkRunning = useRef(false);
   useEffect(() => {
     const wasRunning = prevIsFrameworkRunning.current;
     prevIsFrameworkRunning.current = isRunning && !!config.framework;
-
     if (wasRunning && !isRunning && config.framework) {
       const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
-      setTerminalView("preview");
+      setPreviewView("preview");
       addToast("Mounting files into WebContainers…", "info");
-
       fetch(`${workerUrl}/files/bulk`)
         .then((r) => r.json())
         .then((data: { files: { path: string; content: string }[] }) => {
-          if (!data.files?.length) {
-            addToast("No files written — check agent output", "warn");
-            return;
-          }
-          const tree = toFileSystemTree(data.files);
-          runProject(tree);
+          if (!data.files?.length) { addToast("No files written", "warn"); return; }
+          runProject(toFileSystemTree(data.files));
         })
-        .catch((err: Error) => {
-          addToast(`Failed to fetch workspace files: ${err.message}`, "error");
-        });
+        .catch((err: Error) => addToast(`Mount failed: ${err.message}`, "error"));
     }
   }, [isRunning, config.framework, runProject, addToast]);
 
-  // Detect when agent finishes
+  // ── WebContainers preview URL ──────────────────────────────────────────────
   useEffect(() => {
-    if (prevIsRunning.current && !isRunning) {
-      const errorMsg = messages.find((m) => m.role === "error")?.content ?? null;
-      if (errorMsg) {
-        setLastError(errorMsg);
-        addToast("Agent encountered an error", "error");
-      } else if (finalAnswer) {
-        setLastError(null);
-        addToast("Agent finished", "success");
-      }
+    if (previewUrl) {
+      setPreview((prev) => ({ ...prev, url: previewUrl }));
+      setPreviewView("preview");
+      addToast("App is live", "success");
     }
-    prevIsRunning.current = isRunning;
-  }, [isRunning, messages, finalAnswer, addToast]);
+  }, [previewUrl, addToast]);
 
-  // Handle final answer → preview
+  useEffect(() => {
+    if (wcStatus === "error") {
+      setPreview((prev) => ({ ...prev, error: "WebContainers build failed" }));
+      addToast("Build failed", "error");
+    }
+  }, [wcStatus, addToast]);
+
+  // ── Final answer → preview ─────────────────────────────────────────────────
   useEffect(() => {
     if (!finalAnswer) return;
-
-    // HTML document (fenced or bare)
     const htmlFenced = /```(?:html)?\n([\s\S]+?)```/.exec(finalAnswer)?.[1];
     const isHtmlDoc = /<(!DOCTYPE|html)\b/i.test(finalAnswer);
     const htmlContent = htmlFenced ?? (isHtmlDoc ? finalAnswer : null);
     if (htmlContent) {
       setPreview((prev) => ({ ...prev, html: htmlContent.trim() }));
-      setTerminalView("preview");
-      addToast("HTML rendered in Preview", "success");
+      setPreviewView("preview");
       return;
     }
-
-    // Plain text output
     const plain = finalAnswer.trim();
     if (plain) {
       setPreview((prev) => ({ ...prev, output: plain }));
-      setTerminalView("preview");
+      setPreviewView("preview");
     }
-  }, [finalAnswer, addToast]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [finalAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSubmit = useCallback(() => {
-    if (!task.trim() || isRunning) return;
-    submit(task);
-    setPreview(undefined);
-    setLastError(null);
-    wcReset();
-    setTerminalView("messages");
-  }, [task, isRunning, submit, wcReset]);
+  // ── Submit ─────────────────────────────────────────────────────────────────
+  const handleSubmit = useCallback(
+    (taskText: string) => {
+      const text = taskText.trim();
+      if (!text || isRunning || classifying) return;
+      setInputText("");
+      setPreview(undefined);
+      wcReset();
 
-  // Download workspace files as ZIP
+      const id = `turn-${++turnId}`;
+      currentTurnId.current = id;
+      setTurns((prev) => [
+        ...prev,
+        {
+          id,
+          task: text,
+          detectedMode: null,
+          timestamp: Date.now(),
+          agentText: "",
+          toolLines: [],
+          finalAnswer: null,
+          error: null,
+          status: "running",
+        },
+      ]);
+      resetAll();
+
+      // Build conversation history from completed turns (max last 5 to avoid context overflow)
+      // This gives the agent true multi-turn memory across conversation rounds.
+      const history = turns
+        .filter((t) => t.status === "done" && t.finalAnswer)
+        .slice(-5)
+        .flatMap((t): Array<{ role: "user" | "assistant"; content: string }> => [
+          { role: "user", content: t.task },
+          { role: "assistant", content: t.finalAnswer! },
+        ]);
+
+      submit(text, history.length > 0 ? history : undefined);
+    },
+    [isRunning, classifying, submit, resetAll, wcReset]
+  );
+
+  // ── One-click Fix ──────────────────────────────────────────────────────────
+  const handleFix = useCallback(() => {
+    const lastTurn = turns.at(-1);
+    if (!lastTurn?.error) return;
+    const fixTask = `请修复以下错误：\n${lastTurn.error}\n\n原始任务：${lastTurn.task}`;
+    handleSubmit(fixTask);
+  }, [turns, handleSubmit]);
+
+  // ── ZIP download ───────────────────────────────────────────────────────────
   const handleDownloadZip = useCallback(async () => {
     const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
     setIsDownloading(true);
     try {
       const res = await fetch(`${workerUrl}/files/bulk`);
       const data = (await res.json()) as { files: { path: string; content: string }[] };
-      if (!data.files?.length) {
-        addToast("No files to download", "warn");
-        return;
-      }
-
-      // Derive a meaningful filename. Priority:
-      // 1. package.json "name" (usually already kebab-case ASCII)
-      // 2. Task text — extract ASCII words, fall back to timestamp for pure-CJK tasks
-      const toSlug = (str: string): string => {
-        // Extract ASCII word sequences first (catches mixed text like "用Vue3写一个app")
-        const asciiWords = str.match(/[a-zA-Z0-9]+/g) ?? [];
-        if (asciiWords.length >= 2) {
-          return asciiWords.join("-").toLowerCase().slice(0, 40).replace(/-+$/, "");
-        }
-        // Pure ASCII path: strip specials, kebab
-        const ascii = str
-          .normalize("NFKD")
-          .replace(/[^\x00-\x7F]/g, " ")  // drop non-ASCII
-          .replace(/[^\w\s-]/g, " ")
-          .trim()
-          .replace(/\s+/g, "-")
-          .replace(/-+/g, "-")
-          .toLowerCase()
-          .slice(0, 40)
-          .replace(/^-+|-+$/, "");
-        return ascii || "";
+      if (!data.files?.length) { addToast("No files to download", "warn"); return; }
+      const toSlug = (str: string) => {
+        const w = str.match(/[a-zA-Z0-9]+/g) ?? [];
+        if (w.length >= 2) return w.join("-").toLowerCase().slice(0, 40).replace(/-+$/, "");
+        return str.normalize("NFKD").replace(/[^\x00-\x7F]/g, " ").replace(/[^\w\s-]/g, " ")
+          .trim().replace(/\s+/g, "-").replace(/-+/g, "-").toLowerCase().slice(0, 40).replace(/^-+|-+$/, "");
       };
-
-      // Priority 1: package.json "name"
-      let baseName = "";
-      const pkgFile = data.files.find((f) => f.path === "package.json");
-      if (pkgFile) {
-        try {
-          const pkg = JSON.parse(pkgFile.content) as { name?: string };
-          if (pkg.name) baseName = toSlug(pkg.name);
-        } catch { /* ignore */ }
-      }
-
-      // Priority 2: task text (extract meaningful slug)
-      if (!baseName && task.trim()) {
-        baseName = toSlug(task.trim());
-      }
-
-      // Fallback: timestamp so it's still unique and sortable
-      if (!baseName || baseName.length < 3) baseName = `project-${Date.now().toString(36)}`;
-
-      const filename = `${baseName}.zip`;
-
+      let name = "";
+      const pkg = data.files.find((f) => f.path === "package.json");
+      if (pkg) { try { name = toSlug((JSON.parse(pkg.content) as { name?: string }).name ?? ""); } catch { /**/ } }
+      if (!name) name = toSlug(turns.at(-1)?.task ?? "");
+      if (!name || name.length < 3) name = `project-${Date.now().toString(36)}`;
       const zip = new JSZip();
-      for (const { path, content } of data.files) {
-        zip.file(path, content);
-      }
+      for (const { path, content } of data.files) zip.file(path, content);
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
+      a.href = url; a.download = `${name}.zip`; a.click();
       URL.revokeObjectURL(url);
-      addToast(`Downloaded ${data.files.length} files as ${filename}`, "success");
-    } catch (err) {
-      addToast(`Download failed: ${(err as Error).message}`, "error");
-    } finally {
-      setIsDownloading(false);
-    }
-  }, [addToast, task]);
+      addToast(`Downloaded ${data.files.length} files as ${name}.zip`, "success");
+    } catch (err) { addToast(`Download failed: ${(err as Error).message}`, "error"); }
+    finally { setIsDownloading(false); }
+  }, [addToast, turns]);
 
-  // Push workspace files to a new GitHub repo
-  const handlePushToGitHub = useCallback(async () => {
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
-    try {
-      const result = await pushToGitHub(workerUrl);
-      addToast(`Pushed to GitHub: ${result.repoName}`, "success");
-      window.open(result.repoUrl, "_blank");
-    } catch (err) {
-      addToast(`GitHub push failed: ${(err as Error).message}`, "error");
-    }
-  }, [pushToGitHub, addToast]);
-
-  // Import from ZIP file
+  // ── Import ─────────────────────────────────────────────────────────────────
   const handleImportZip = useCallback(() => {
     const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
     const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".zip";
+    input.type = "file"; input.accept = ".zip";
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
+      const file = input.files?.[0]; if (!file) return;
       try {
         const files = await importFromZip(file);
         if (!files.length) { addToast("ZIP contains no importable files", "warn"); return; }
-        const count = await uploadFiles(files, workerUrl);
-        addToast(`Imported ${count} files from ${file.name}`, "success");
-      } catch (err) {
-        addToast(`Import failed: ${(err as Error).message}`, "error");
-      }
+        addToast(`Imported ${await uploadFiles(files, workerUrl)} files`, "success");
+      } catch (err) { addToast(`Import failed: ${(err as Error).message}`, "error"); }
     };
     input.click();
   }, [importFromZip, uploadFiles, addToast]);
 
-  // Import from local directory
-  const handleImportDirectory = useCallback(async () => {
+  const handleImportDir = useCallback(async () => {
     const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
     try {
       const files = await importFromDirectory();
-      if (!files.length) { addToast("No importable files found in directory", "warn"); return; }
-      const count = await uploadFiles(files, workerUrl);
-      addToast(`Imported ${count} files from directory`, "success");
-    } catch (err) {
-      addToast(`Import failed: ${(err as Error).message}`, "error");
-    }
+      if (!files.length) { addToast("No importable files found", "warn"); return; }
+      addToast(`Imported ${await uploadFiles(files, workerUrl)} files from directory`, "success");
+    } catch (err) { addToast(`Import failed: ${(err as Error).message}`, "error"); }
   }, [importFromDirectory, uploadFiles, addToast]);
 
-  const header: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "0 12px",
-    height: 36,
-    background: "#161b22",
-    borderBottom: "1px solid #30363d",
-    fontSize: 11,
-    color: "#8b949e",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    flexShrink: 0,
-  };
+  // ── GitHub ─────────────────────────────────────────────────────────────────
+  const handleGitHub = useCallback(async () => {
+    if (!user) { githubLogin(); return; }
+    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+    try {
+      const r = await pushToGitHub(workerUrl);
+      addToast(`Pushed: ${r.repoName}`, "success");
+      window.open(r.repoUrl, "_blank");
+    } catch (err) { addToast(`GitHub: ${(err as Error).message}`, "error"); }
+  }, [user, githubLogin, pushToGitHub, addToast]);
 
-  const tabBtn = (active: boolean): React.CSSProperties => ({
-    padding: "4px 10px",
-    borderRadius: 3,
-    border: "none",
-    background: active ? "#1f6feb33" : "transparent",
-    color: active ? "#58a6ff" : "#8b949e",
-    fontSize: 11,
-    fontWeight: active ? 600 : 400,
-    cursor: "pointer",
-  });
+  // ── Last error ─────────────────────────────────────────────────────────────
+  const lastTurnError = turns.at(-1)?.status === "error" ? turns.at(-1)?.error : null;
 
-  const TOAST_COLORS: Record<Toast["kind"], string> = {
-    info: "#58a6ff",
-    success: "#3fb950",
-    warn: "#e3b341",
-    error: "#f85149",
-  };
-
-  const hasFiles = !!(preview?.html || preview?.url || (preview?.logs?.length ?? 0) > 0 || preview?.output);
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const hasPreview = !!(preview?.html || preview?.url || (preview?.logs?.length ?? 0) > 0 || preview?.output);
 
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "280px 1fr",
-      gridTemplateRows: "1fr 32px",
-      height: "100vh",
-      overflow: "hidden",
-      background: "#0d1117",
-    }}>
-      {/* ── Toast notifications ─────────────────────────────── */}
-      <div style={{
-        position: "fixed",
-        bottom: 48,
-        right: 16,
-        zIndex: 9999,
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        pointerEvents: "none",
-      }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0d1117", ...mono }}>
+
+      {/* ── Toasts ── */}
+      <div style={{ position: "fixed", bottom: 56, right: 16, zIndex: 9999, display: "flex", flexDirection: "column", gap: 6, pointerEvents: "none" }}>
         {toasts.map((t) => (
           <div key={t.id} style={{
-            background: "#21262d",
-            border: `1px solid ${TOAST_COLORS[t.kind]}44`,
-            borderLeft: `3px solid ${TOAST_COLORS[t.kind]}`,
-            borderRadius: 4,
-            padding: "7px 12px",
-            fontSize: 11,
-            color: "#c9d1d9",
-            fontFamily: "JetBrains Mono, monospace",
-            animation: "slideIn 0.15s ease",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-          }}>
-            {t.message}
-          </div>
+            background: "#21262d", border: `1px solid ${TOAST_COLORS[t.kind]}44`,
+            borderLeft: `3px solid ${TOAST_COLORS[t.kind]}`, borderRadius: 4,
+            padding: "7px 12px", fontSize: 11, color: "#c9d1d9",
+            animation: "slideIn 0.15s ease", boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+          }}>{t.message}</div>
         ))}
       </div>
 
-      {/* ── Left panel ─────────────────────────────────────── */}
+      {/* ── Top navbar ── */}
       <div style={{
-        gridColumn: 1,
-        gridRow: "1 / 3",
-        display: "flex",
-        flexDirection: "column",
-        borderRight: "1px solid #30363d",
-        overflow: "hidden",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 16px", height: 44, background: "#161b22",
+        borderBottom: "1px solid #30363d", flexShrink: 0,
       }}>
-        <AgentPanel
-          config={config}
-          onChange={setConfig}
-          task={task}
-          onTaskChange={setTask}
-          onSubmit={handleSubmit}
-          onAbort={abort}
-          isRunning={isRunning || classifying}
-          workerUrl={process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788"}
-          classifying={classifying}
-          detectedMode={detectedMode}
-        />
-      </div>
-
-      {/* ── Right: Preview / Terminal ───────────────────────── */}
-      <div style={{
-        gridColumn: 2,
-        gridRow: 1,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}>
-        {/* Header */}
-        <div style={header}>
-          <span>
-            Output
-            {isRunning && (
-              <span style={{ marginLeft: 8, color: "#3fb950", animation: "pulse 1.2s ease-in-out infinite" }}>
-                ● running
-              </span>
-            )}
-            {!isRunning && wcStatus === "installing" && (
-              <span style={{ marginLeft: 8, color: "#e3b341", animation: "pulse 1.2s ease-in-out infinite" }}>
-                ● installing
-              </span>
-            )}
-            {!isRunning && wcStatus === "starting" && (
-              <span style={{ marginLeft: 8, color: "#e3b341", animation: "pulse 1.2s ease-in-out infinite" }}>
-                ● starting
-              </span>
-            )}
-            {!isRunning && wcStatus === "ready" && previewUrl && (
-              <span style={{ marginLeft: 8, color: "#3fb950" }}>● live</span>
-            )}
-          </span>
-          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            <button type="button" style={tabBtn(terminalView === "messages")} onClick={() => setTerminalView("messages")}>
-              Messages
-            </button>
-            <button type="button" style={tabBtn(terminalView === "events")} onClick={() => setTerminalView("events")}>
-              Events
-            </button>
-            <button
-              type="button"
-              style={{
-                ...tabBtn(terminalView === "preview"),
-                color: hasFiles
-                  ? terminalView === "preview" ? "#3fb950" : "#e3b341"
-                  : "#8b949e",
-                fontWeight: hasFiles && terminalView !== "preview" ? 700 : undefined,
-              }}
-              onClick={() => setTerminalView("preview")}
-              title={hasFiles ? "View rendered output" : "No preview yet"}
-            >
-              Preview{hasFiles && terminalView !== "preview" ? " ●" : ""}
-            </button>
-
-            {/* Separator */}
-            <span style={{ width: 1, height: 14, background: "#30363d", margin: "0 4px" }} />
-
-            {/* Import from directory */}
-            <button
-              type="button"
-              onClick={handleImportDirectory}
-              disabled={importing}
-              title="Import project from local directory (auto-filters .gitignore, skips .env)"
-              style={{ ...tabBtn(false), color: importing ? "#8b949e" : "#c9d1d9", cursor: importing ? "wait" : "pointer" }}
-            >
-              {importing ? "…" : "⬆ Dir"}
-            </button>
-
-            {/* Import from ZIP */}
-            <button
-              type="button"
-              onClick={handleImportZip}
-              disabled={importing}
-              title="Import project from ZIP archive"
-              style={{ ...tabBtn(false), color: importing ? "#8b949e" : "#c9d1d9", cursor: importing ? "wait" : "pointer" }}
-            >
-              {importing ? "…" : "⬆ ZIP"}
-            </button>
-
-            {/* Download ZIP */}
-            <button
-              type="button"
-              onClick={handleDownloadZip}
-              disabled={isDownloading}
-              title="Download project as ZIP"
-              style={{
-                ...tabBtn(false),
-                color: "#58a6ff",
-                opacity: isDownloading ? 0.5 : 1,
-                cursor: isDownloading ? "wait" : "pointer",
-              }}
-            >
-              {isDownloading ? "…" : "⬇ ZIP"}
-            </button>
-
-            {/* GitHub: login or push */}
-            {user ? (
+        {/* Left: logo + mode */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ color: "#58a6ff", fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>BSCode</span>
+          {/* Mode toggle */}
+          <div style={{ display: "flex", gap: 3 }}>
+            {(["code", "tool"] as const).map((mode) => (
               <button
+                key={mode}
                 type="button"
-                onClick={handlePushToGitHub}
-                disabled={pushing}
-                title={`Push to GitHub as ${user.login}`}
+                onClick={() => setConfig((c) => ({ ...c, agentMode: mode, framework: null }))}
                 style={{
-                  ...tabBtn(false),
-                  color: pushing ? "#8b949e" : "#3fb950",
-                  cursor: pushing ? "wait" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
+                  padding: "3px 8px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
+                  background: config.agentMode === mode && !config.framework ? "#1f6feb33" : "transparent",
+                  color: config.agentMode === mode && !config.framework ? "#58a6ff" : "#8b949e",
+                  fontWeight: 600,
                 }}
               >
-                {pushing ? "…" : (
-                  <>
-                    <img
-                      src={user.avatar_url}
-                      alt={user.login}
-                      width={14}
-                      height={14}
-                      style={{ borderRadius: "50%", verticalAlign: "middle" }}
-                    />
-                    Push
-                  </>
-                )}
+                {mode === "code" ? "Code" : "Tool"}
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={githubLogin}
-                title="Connect GitHub to push code"
-                style={{ ...tabBtn(false), color: "#8b949e" }}
-              >
-                GitHub
-              </button>
-            )}
-
+            ))}
             <button
               type="button"
-              onClick={() => { resetAll(); setPreview(undefined); wcReset(); }}
-              style={{ ...tabBtn(false), color: "#f85149" }}
-              title="Clear all output"
+              onClick={() => setConfig((c) => ({ ...c, agentMode: "tool", framework: c.framework ? null : "react" }))}
+              style={{
+                padding: "3px 8px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
+                background: config.framework ? "#23863622" : "transparent",
+                color: config.framework ? "#3fb950" : "#8b949e",
+                fontWeight: 600,
+              }}
             >
-              Clear
+              {config.framework ? `⚡ ${config.framework}` : "Framework"}
             </button>
+          </div>
+          {/* Framework selector */}
+          {config.framework && (
+            <div style={{ display: "flex", gap: 3 }}>
+              {(["react", "vue", "svelte", "vanilla"] as const).map((fw) => (
+                <button
+                  key={fw}
+                  type="button"
+                  onClick={() => setConfig((c) => ({ ...c, framework: fw }))}
+                  style={{
+                    padding: "2px 7px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
+                    background: config.framework === fw ? "#3fb95022" : "transparent",
+                    color: config.framework === fw ? "#3fb950" : "#8b949e",
+                  }}
+                >
+                  {fw === "react" ? "React" : fw === "vue" ? "Vue" : fw === "svelte" ? "Svelte" : "Vanilla"}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Auto-detect badge */}
+          <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: 10, color: "#8b949e" }}>
+            <input
+              type="checkbox"
+              checked={config.autoMode ?? true}
+              onChange={(e) => setConfig((c) => ({ ...c, autoMode: e.target.checked }))}
+              style={{ accentColor: "#58a6ff", width: 11, height: 11 }}
+            />
+            Auto-detect
+          </label>
+        </div>
+
+        {/* Right: model + tools */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <select
+            value={config.modelId}
+            onChange={(e) => setConfig((c) => ({ ...c, modelId: e.target.value }))}
+            style={{ background: "#21262d", border: "1px solid #30363d", borderRadius: 4, color: "#c9d1d9", fontSize: 11, padding: "3px 6px", cursor: "pointer" }}
+          >
+            <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+            <option value="claude-opus-4-8">Opus 4.8</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+          </select>
+          <button type="button" onClick={handleImportDir} disabled={importing} style={iconBtn(importing ? "#8b949e" : "#c9d1d9")} title="Import from directory">⬆ Dir</button>
+          <button type="button" onClick={handleImportZip} disabled={importing} style={iconBtn(importing ? "#8b949e" : "#c9d1d9")} title="Import ZIP">⬆ ZIP</button>
+          <button type="button" onClick={handleDownloadZip} disabled={isDownloading} style={iconBtn("#58a6ff")} title="Download ZIP">⬇ ZIP</button>
+          <button
+            type="button"
+            onClick={handleGitHub}
+            disabled={pushing}
+            style={{ ...iconBtn(user ? "#3fb950" : "#8b949e"), display: "flex", alignItems: "center", gap: 4 }}
+            title={user ? `Push to GitHub (${user.login})` : "Connect GitHub"}
+          >
+            {user ? <img src={user.avatar_url} alt={user.login} width={13} height={13} style={{ borderRadius: "50%" }} /> : null}
+            {pushing ? "…" : user ? "Push" : "GitHub"}
+          </button>
+          <button type="button" onClick={() => setSettingsOpen((o) => !o)} style={iconBtn("#8b949e")} title="Settings">⚙</button>
+        </div>
+      </div>
+
+      {/* ── Main area ── */}
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
+
+        {/* ── Left: chat history ── */}
+        <div style={{ display: "flex", flexDirection: "column", borderRight: "1px solid #30363d", overflow: "hidden" }}>
+          {/* Chat scroll area */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 24 }}>
+            {turns.length === 0 && (
+              <div style={{ color: "#484f58", fontSize: 13, textAlign: "center", marginTop: 60 }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
+                <div>Describe a task to get started.</div>
+                <div style={{ fontSize: 11, marginTop: 6, color: "#30363d" }}>
+                  e.g. "写一个 Vue 3 Todo List" · "implement quicksort" · "create a React dashboard"
+                </div>
+              </div>
+            )}
+            {turns.map((turn) => (
+              <TurnBlock
+                key={turn.id}
+                turn={turn}
+                isActive={turn.id === currentTurnId.current && isRunning}
+                streamingText={
+                  turn.id === currentTurnId.current
+                    ? messages.find((m) => m.role === "assistant")?.content
+                    : undefined
+                }
+                onFix={turn.status === "error" ? () => {
+                  const fixTask = `修复错误：${turn.error}\n\n原始任务：${turn.task}`;
+                  handleSubmit(fixTask);
+                } : undefined}
+                onRetry={() => handleSubmit(turn.task)}
+              />
+            ))}
+            <div ref={chatBottomRef} />
+          </div>
+
+          {/* ── Input bar ── */}
+          <div style={{
+            borderTop: "1px solid #30363d",
+            padding: "12px 16px",
+            background: "#0d1117",
+            flexShrink: 0,
+          }}>
+            {/* Fix error banner */}
+            {lastTurnError && !isRunning && (
+              <div style={{
+                marginBottom: 10,
+                background: "#1a0a0a",
+                border: "1px solid #f8514933",
+                borderRadius: 6,
+                padding: "8px 12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}>
+                <span style={{ fontSize: 11, color: "#f85149", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  ✗ {lastTurnError.slice(0, 120)}{lastTurnError.length > 120 ? "…" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleFix}
+                  style={{
+                    flexShrink: 0, padding: "4px 12px", borderRadius: 4, border: "none",
+                    background: "#f85149", color: "#fff", fontSize: 11, fontWeight: 700,
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  ⚡ Fix Error
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <textarea
+                ref={textareaRef}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleSubmit(inputText);
+                  }
+                }}
+                placeholder="Describe a coding task…  (Cmd+Enter to send)"
+                rows={2}
+                style={{
+                  flex: 1,
+                  background: "#161b22",
+                  border: "1px solid #30363d",
+                  borderRadius: 8,
+                  color: "#c9d1d9",
+                  fontSize: 13,
+                  padding: "10px 12px",
+                  resize: "none" as const,
+                  outline: "none",
+                  lineHeight: 1.5,
+                  fontFamily: "inherit",
+                  transition: "border-color 0.15s",
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#58a6ff44"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#30363d"; }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {isRunning || classifying ? (
+                  <button
+                    type="button"
+                    onClick={abort}
+                    style={{
+                      padding: "10px 16px", borderRadius: 8, border: "none",
+                      background: "#b91c1c", color: "#fff", fontSize: 12,
+                      fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    ■ Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSubmit(inputText)}
+                    disabled={!inputText.trim()}
+                    style={{
+                      padding: "10px 16px", borderRadius: 8, border: "none",
+                      background: inputText.trim() ? "#1f6feb" : "#21262d",
+                      color: inputText.trim() ? "#fff" : "#8b949e",
+                      fontSize: 12, fontWeight: 700, cursor: inputText.trim() ? "pointer" : "default",
+                      fontFamily: "inherit", transition: "background 0.15s",
+                    }}
+                  >
+                    {classifying ? "⟳" : "▶ Run"}
+                  </button>
+                )}
+              </div>
+            </div>
+            <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: "#484f58" }}>Cmd+Enter to send</span>
+              <TokenMeter stats={tokenStats} compact />
+            </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div style={{ flex: 1, overflow: "hidden" }}>
-          <Terminal
-            messages={messages}
-            rawEvents={rawEvents}
-            isRunning={isRunning}
-            viewMode={terminalView}
-            preview={preview}
-            wcLines={wcLines}
-          />
+        {/* ── Right: preview ── */}
+        <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Preview header */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "0 12px", height: 36, background: "#161b22",
+            borderBottom: "1px solid #30363d", flexShrink: 0, fontSize: 11, color: "#8b949e",
+          }}>
+            <span style={{ textTransform: "uppercase", letterSpacing: 0.8 }}>
+              Preview
+              {!isRunning && wcStatus === "installing" && <span style={{ marginLeft: 8, color: "#e3b341", animation: "pulse 1.2s ease-in-out infinite" }}>● installing</span>}
+              {!isRunning && wcStatus === "starting" && <span style={{ marginLeft: 8, color: "#e3b341", animation: "pulse 1.2s ease-in-out infinite" }}>● starting</span>}
+              {!isRunning && wcStatus === "ready" && previewUrl && <span style={{ marginLeft: 8, color: "#3fb950" }}>● live</span>}
+            </span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {(["preview", "messages", "events"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setPreviewView(v)}
+                  style={{
+                    padding: "3px 8px", borderRadius: 3, border: "none",
+                    background: previewView === v ? "#1f6feb33" : "transparent",
+                    color: previewView === v ? "#58a6ff" : (v === "preview" && hasPreview && previewView !== "preview") ? "#e3b341" : "#8b949e",
+                    fontSize: 10, cursor: "pointer",
+                    fontWeight: previewView === v ? 600 : 400,
+                  }}
+                >
+                  {v.charAt(0).toUpperCase() + v.slice(1)}{v === "preview" && hasPreview && previewView !== "preview" ? " ●" : ""}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => { resetAll(); setPreview(undefined); wcReset(); }}
+                style={{ padding: "3px 8px", borderRadius: 3, border: "none", background: "transparent", color: "#f85149", fontSize: 10, cursor: "pointer" }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <Terminal
+              messages={messages}
+              rawEvents={rawEvents}
+              isRunning={isRunning}
+              viewMode={previewView}
+              preview={preview}
+              wcLines={wcLines}
+            />
+          </div>
         </div>
-      </div>
-
-      {/* ── Bottom: TokenMeter ──────────────────────────────── */}
-      <div style={{ gridColumn: "2 / 3", gridRow: 2 }}>
-        <TokenMeter stats={tokenStats} />
       </div>
 
       <style>{`
         @keyframes blink { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }
         @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
         @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        textarea:focus { outline: none !important; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
       `}</style>
+    </div>
+  );
+}
+
+// ── TurnBlock component ───────────────────────────────────────────────────────
+
+interface TurnBlockProps {
+  turn: ConversationTurn;
+  isActive: boolean;
+  streamingText?: string;
+  onFix?: () => void;
+  onRetry: () => void;
+}
+
+function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockProps) {
+  const label = modeLabel(turn.detectedMode);
+  const displayText = isActive ? streamingText : turn.agentText;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* User bubble */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{
+          maxWidth: "80%", background: "#1f6feb22", border: "1px solid #1f6feb44",
+          borderRadius: "12px 12px 3px 12px", padding: "10px 14px",
+        }}>
+          <div style={{ fontSize: 12, color: "#c9d1d9", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+            {turn.task}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+            {label && (
+              <span style={{
+                fontSize: 10, padding: "1px 6px", borderRadius: 3,
+                background: `${MODE_COLORS[label] ?? "#58a6ff"}22`,
+                border: `1px solid ${MODE_COLORS[label] ?? "#58a6ff"}44`,
+                color: MODE_COLORS[label] ?? "#58a6ff",
+              }}>{label}</span>
+            )}
+            <span style={{ fontSize: 10, color: "#484f58", marginLeft: "auto" }}>
+              {new Date(turn.timestamp).toLocaleTimeString()}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Agent response */}
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+          background: isActive ? "#1f6feb" : turn.status === "error" ? "#b91c1c" : "#238636",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 13, marginTop: 2,
+          animation: isActive ? "pulse 1.2s ease-in-out infinite" : undefined,
+        }}>
+          {isActive ? "⟳" : turn.status === "error" ? "✗" : "✓"}
+        </div>
+        <div style={{ flex: 1 }}>
+          {/* Tool lines */}
+          {turn.toolLines.length > 0 && (
+            <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 2 }}>
+              {turn.toolLines.map((line, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: ordered tool lines
+                <div key={i} style={{ fontSize: 11, color: "#e3b341", fontFamily: "JetBrains Mono, monospace" }}>
+                  {line.slice(0, 120)}{line.length > 120 ? "…" : ""}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Agent text / error */}
+          {turn.status === "error" && turn.error ? (
+            <div style={{
+              background: "#1a0a0a", border: "1px solid #f8514933", borderRadius: 6,
+              padding: "10px 12px", fontSize: 12, color: "#f85149", lineHeight: 1.6,
+              whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
+            }}>
+              <span style={{ fontWeight: 700 }}>Error: </span>
+              {turn.error}
+            </div>
+          ) : displayText ? (
+            <div style={{
+              background: "#161b22", border: "1px solid #30363d", borderRadius: 6,
+              padding: "10px 12px", fontSize: 12, color: "#c9d1d9", lineHeight: 1.7,
+              whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
+              maxHeight: 300, overflowY: "auto",
+            }}>
+              {displayText}
+              {isActive && (
+                <span style={{
+                  display: "inline-block", width: 7, height: 13, background: "#58a6ff",
+                  animation: "blink 1s step-end infinite", verticalAlign: "text-bottom", marginLeft: 3,
+                }} />
+              )}
+            </div>
+          ) : isActive ? (
+            <div style={{ color: "#8b949e", fontSize: 12 }}>
+              <span style={{ animation: "pulse 1.2s infinite" }}>Thinking…</span>
+            </div>
+          ) : null}
+
+          {/* Action buttons */}
+          {!isActive && turn.status !== "running" && (
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              {onFix && (
+                <button
+                  type="button"
+                  onClick={onFix}
+                  style={{
+                    padding: "4px 10px", borderRadius: 4, border: "1px solid #f8514944",
+                    background: "transparent", color: "#f85149", fontSize: 11,
+                    cursor: "pointer", fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  ⚡ Fix
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onRetry}
+                style={{
+                  padding: "4px 10px", borderRadius: 4, border: "1px solid #30363d",
+                  background: "transparent", color: "#8b949e", fontSize: 11,
+                  cursor: "pointer", fontFamily: "JetBrains Mono, monospace",
+                }}
+              >
+                ↺ Retry
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,8 @@ import type { TokenStats } from "@/hooks/useAgent";
 
 interface TokenMeterProps {
   stats: TokenStats;
+  /** Compact single-line inline mode for embedding in the input bar */
+  compact?: boolean;
 }
 
 function hitStyle(pct: number): CSSProperties {
@@ -44,9 +46,24 @@ const trackStyle: CSSProperties = {
   overflow: "hidden",
 };
 
-export function TokenMeter({ stats }: TokenMeterProps) {
+export function TokenMeter({ stats, compact }: TokenMeterProps) {
   const total = stats.inputTokens + stats.cacheReadTokens;
   const hitRate = total > 0 ? Math.round((stats.cacheReadTokens / total) * 100) : 0;
+
+  // Compact inline mode — shows just key stats in one short line
+  if (compact) {
+    if (!stats.calls) return null;
+    return (
+      <span style={{ fontSize: 10, color: "#484f58", display: "flex", gap: 8, alignItems: "center" }}>
+        <span>{stats.calls} call{stats.calls !== 1 ? "s" : ""}</span>
+        <span>{(stats.inputTokens + stats.outputTokens).toLocaleString()} tok</span>
+        {hitRate > 0 && <span style={{ color: hitRate > 50 ? "#3fb950" : "#e3b341" }}>{hitRate}% cache</span>}
+        {stats.inputTokens > 0 && (
+          <span>~${((stats.inputTokens * 3 + stats.outputTokens * 15) / 1_000_000).toFixed(4)}</span>
+        )}
+      </span>
+    );
+  }
 
   return (
     <div style={barStyle}>

@@ -481,16 +481,46 @@ or {"mode":"tool","framework":null}`;
         ]);
         const inputGuardrails = buildInputGuardrails(guardrails);
         const outputGuardrails = buildOutputGuardrails(guardrails);
-        const agentExtras = { maxSteps: clampedSteps, planningInterval, inputGuardrails, outputGuardrails, framework: body.framework };
+        const agentExtras = {
+          maxSteps: clampedSteps,
+          planningInterval,
+          inputGuardrails,
+          outputGuardrails,
+          framework: body.framework,
+          // New: enhancement policy, stop conditions, cache tuning, scheduler
+          enhancementPolicy: body.enhancementPolicy,
+          stopConditions: body.stopConditions,
+          chunkSizeSteps: body.chunkSizeSteps,
+          systemPrefixTtl: body.systemPrefixTtl,
+          scheduler: body.scheduler,
+        };
 
         let agentRun: AsyncGenerator<AgentEvent>;
 
-        if (enhancement === "self-consistency") {
-          agentRun = enhancedAgentRun(model, new SelfConsistencyRunner({ n: 3, earlyStopThreshold: 0.67 }), finalTask);
-        } else if (enhancement === "reflect-refine") {
-          agentRun = enhancedAgentRun(model, new ReflectRefineRunner({ maxCycles: 2 }), finalTask);
-        } else if (enhancement === "budget-forcing") {
+        // ── Enhancement runner selection ──────────────────────────────────────
+        // Support both legacy flat "enhancement" string and new enhancementPolicy object.
+        // enhancementPolicy takes precedence when both are provided.
+        const policy = body.enhancementPolicy;
+        const useParallelFork = policy?.parallelForkJoin?.enabled;
+        const useSelfConsistency = policy?.selfConsistency?.enabled ?? (enhancement === "self-consistency");
+        const useReflectRefine = policy?.reflectRefine?.enabled ?? (enhancement === "reflect-refine");
+        const useBudgetForcing = policy?.budgetForcing?.enabled ?? (enhancement === "budget-forcing");
+
+        if (useSelfConsistency) {
+          const n = policy?.selfConsistency?.n ?? 3;
+          const threshold = policy?.selfConsistency?.earlyStopThreshold ?? 0.67;
+          agentRun = enhancedAgentRun(model, new SelfConsistencyRunner({ n, earlyStopThreshold: threshold }), finalTask);
+        } else if (useReflectRefine) {
+          const maxCycles = policy?.reflectRefine?.maxCycles ?? 2;
+          agentRun = enhancedAgentRun(model, new ReflectRefineRunner({ maxCycles }), finalTask);
+        } else if (useBudgetForcing) {
           agentRun = enhancedAgentRun(model, new BudgetForcingRunner({ maxBudgetTokens: 2000 }), finalTask);
+        } else if (useParallelFork) {
+          const { ParallelForkJoinRunner } = await import("@agentkit-js/core");
+          const branches = policy?.parallelForkJoin?.branches ?? 3;
+          const concurrency = policy?.parallelForkJoin?.concurrency ?? 2;
+          const aggregation = policy?.parallelForkJoin?.aggregation ?? "summary";
+          agentRun = enhancedAgentRun(model, new ParallelForkJoinRunner({ branches, concurrency, aggregation }), finalTask);
         } else if (agentMode === "multi") {
           agentRun = multiAgentRun(model, tools, finalTask, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
         } else if (agentMode === "ptc") {
@@ -500,6 +530,14 @@ or {"mode":"tool","framework":null}`;
             agentMode === "tool"
               ? createToolAgent(model, tools, agentExtras)
               : createCodeAgent(model, tools, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
+
+          // Inject conversation history as prior user_message + assistant steps
+          // so the agent has multi-turn context within its MessageAssembler.
+          if (body.conversationHistory?.length) {
+            for (const turn of body.conversationHistory) {
+              agent.assembler.addStep({ type: "user_message", content: turn.content });
+            }
+          }
 
           if (useCheckpoint) {
             const cpId = checkpointId ?? finalTask.slice(0, 40);
@@ -626,6 +664,27 @@ interface RunBody {
   useOtel?: boolean;
   /** Framework mode — activates framework-aware system prompt in ToolAgent */
   framework?: "react" | "vue" | "svelte" | "vanilla" | null;
+
+  // ── Enhancement policy (replaces flat "enhancement" string for new features) ──
+  /** Inline enhancement policy — configures runners with custom parameters */
+  enhancementPolicy?: import("@agentkit-js/core").EnhancementPolicy;
+
+  // ── Stop conditions (new) ────────────────────────────────────────────────────
+  /** Stop condition descriptors: "noProgress", "stepCount:<n>", "costBudget:<maxUSD>" */
+  stopConditions?: string[];
+
+  // ── Prompt-cache tuning (new) ────────────────────────────────────────────────
+  /** Seal a B2 cache breakpoint every N action steps (default: 5) */
+  chunkSizeSteps?: number;
+  /** Cache TTL for the system prompt prefix (default: "1h") */
+  systemPrefixTtl?: "5m" | "1h";
+
+  // ── Scheduler override (new) ─────────────────────────────────────────────────
+  scheduler?: "dag" | "parallel";
+
+  // ── Conversation context (new) ───────────────────────────────────────────────
+  /** Previous turns to inject as context — enables multi-turn conversation */
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 function getModelId(model: Model): string {

@@ -21,6 +21,22 @@ export interface AgentConfig {
   framework?: "react" | "vue" | "svelte" | "vanilla" | null;
   /** Whether to auto-detect mode from task text before running */
   autoMode?: boolean;
+  /** Stop conditions: "noProgress", "stepCount:<n>", "costBudget:<maxUSD>" */
+  stopConditions?: string[];
+  /** Enhancement policy — replaces flat enhancement string, adds ParallelForkJoin */
+  enhancementPolicy?: {
+    selfConsistency?: { enabled: boolean; n?: number; earlyStopThreshold?: number };
+    reflectRefine?: { enabled: boolean; maxCycles?: number };
+    budgetForcing?: { enabled: boolean };
+    parallelForkJoin?: { enabled: boolean; branches?: number; concurrency?: number; aggregation?: "summary" | "first" };
+    budget?: { maxTokens?: number; maxSteps?: number; maxDurationMs?: number };
+  };
+  /** Seal a B2 cache breakpoint every N steps (default: 5 for prompt-cache savings) */
+  chunkSizeSteps?: number;
+  /** Cache TTL for system prompt prefix (default: "1h" for extended Anthropic cache) */
+  systemPrefixTtl?: "5m" | "1h";
+  /** Scheduler override */
+  scheduler?: "dag" | "parallel";
 }
 
 export interface ClassifyResult {
@@ -76,7 +92,7 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
   );
 
   const submit = useCallback(
-    async (task: string) => {
+    async (task: string, conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>) => {
       setRawEvents([]);
       setDetectedMode(null);
 
@@ -120,8 +136,15 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         codeLanguage: effectiveConfig.codeLanguage ?? "js",
         useOtel: effectiveConfig.useOtel ?? true,
         projectContext: effectiveConfig.projectContext ?? false,
+        // Prompt-cache optimisation: 5-step chunks + 1h system prefix TTL
+        chunkSizeSteps: effectiveConfig.chunkSizeSteps ?? 5,
+        systemPrefixTtl: effectiveConfig.systemPrefixTtl ?? "1h",
         ...(effectiveConfig.framework ? { framework: effectiveConfig.framework } : {}),
         ...(effectiveConfig.modelIds?.length ? { modelIds: effectiveConfig.modelIds } : {}),
+        ...(effectiveConfig.stopConditions?.length ? { stopConditions: effectiveConfig.stopConditions } : {}),
+        ...(effectiveConfig.enhancementPolicy ? { enhancementPolicy: effectiveConfig.enhancementPolicy } : {}),
+        ...(effectiveConfig.scheduler ? { scheduler: effectiveConfig.scheduler } : {}),
+        ...(conversationHistory?.length ? { conversationHistory } : {}),
       });
     },
     [run, config, workerUrl, onConfigUpdate]
