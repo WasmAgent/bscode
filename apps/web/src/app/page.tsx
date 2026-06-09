@@ -43,6 +43,7 @@ export default function Home() {
   });
   const [originalCode, setOriginalCode] = useState<string | undefined>(undefined);
   const [isDiffMode, setIsDiffMode] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | undefined>(undefined);
   const [task, setTask] = useState("");
   const [editorCode, setEditorCode] = useState(DEFAULT_CODE);
   const [terminalView, setTerminalView] = useState<"messages" | "events">("messages");
@@ -68,6 +69,7 @@ export default function Home() {
   const handleSubmit = useCallback(() => {
     if (!task.trim() || isRunning) return;
     submit(task);
+    setPreviewHtml(undefined);
     setActiveTab("output");
   }, [task, isRunning, submit]);
 
@@ -256,6 +258,18 @@ export default function Home() {
             >
               Events
             </button>
+            {previewHtml && (
+              <button
+                type="button"
+                style={{
+                  ...tabBtn(terminalView === "preview"),
+                  color: terminalView === "preview" ? "#3fb950" : "#8b949e",
+                }}
+                onClick={() => setTerminalView("preview")}
+              >
+                Preview
+              </button>
+            )}
             <button
               type="button"
               onClick={resetAll}
@@ -271,6 +285,7 @@ export default function Home() {
             rawEvents={rawEvents}
             isRunning={isRunning}
             viewMode={terminalView}
+            previewHtml={previewHtml}
           />
         </div>
       </div>

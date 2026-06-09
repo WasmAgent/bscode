@@ -40,10 +40,11 @@ interface TerminalProps {
   messages: AgentMessage[];
   rawEvents: AgentEventMinimal[];
   isRunning: boolean;
-  viewMode: "messages" | "events";
+  viewMode: "messages" | "events" | "preview";
+  previewHtml?: string;
 }
 
-export function Terminal({ messages, rawEvents, isRunning, viewMode }: TerminalProps) {
+export function Terminal({ messages, rawEvents, isRunning, viewMode, previewHtml }: TerminalProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,6 +82,37 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode }: TerminalP
       marginTop: 40,
     },
   };
+
+  if (viewMode === "preview") {
+    if (!previewHtml) {
+      return (
+        <div
+          style={{
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#0d1117",
+            color: "#8b949e",
+            fontSize: 12,
+            fontFamily: "JetBrains Mono, monospace",
+          }}
+        >
+          No preview available — ask the agent to generate HTML content.
+        </div>
+      );
+    }
+    return (
+      <div style={{ height: "100%", overflow: "hidden", background: "#fff" }}>
+        <iframe
+          title="bscode-preview"
+          srcDoc={previewHtml}
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+        />
+      </div>
+    );
+  }
 
   if (viewMode === "messages") {
     return (
@@ -152,8 +184,11 @@ function formatEventData(ev: AgentEventMinimal): string {
       return `${d.modelId} in:${d.inputTokens ?? 0} out:${d.outputTokens ?? 0} cache:${d.cacheReadTokens ?? 0}`;
     case "final_answer":
       return String(d.answer ?? "").slice(0, 200);
-    case "error":
-      return String(d.error ?? "");
+    case "error": {
+      const errMsg = String(d.error ?? "");
+      const stack = d.stack ? `\n  ${String(d.stack).split("\n").slice(0, 3).join("\n  ")}` : "";
+      return errMsg + stack;
+    }
     default:
       return JSON.stringify(d).slice(0, 120);
   }

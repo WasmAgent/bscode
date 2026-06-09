@@ -26,6 +26,7 @@ import { DeepSeekModel } from "@agentkit-js/model-deepseek";
 import { DoubaoModel } from "@agentkit-js/model-doubao";
 import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
+import { multiAgentRun } from "./agents/multi-agent.js";
 import { createToolAgent } from "./agents/tool-agent.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
@@ -40,6 +41,7 @@ import {
   createWriteFileTool,
 } from "./tools/index.js";
 import { createGitTools, createShellRunner } from "./tools/shell.js";
+import { createWebSearchTool } from "./tools/web-search.js";
 
 export type { AppConfig } from "./platform.js";
 
@@ -50,6 +52,14 @@ const MAX_KV_EVENTS = 500;
 
 // In-process shared state (resets on server restart)
 const globalMemoryBackend = new MapKvBackend();
+
+// Circular error log for /errors endpoint (last 50 errors)
+const errorLog: Array<{ timestampMs: number; message: string; stack?: string; traceId?: string }> =
+  [];
+function recordError(message: string, stack?: string, traceId?: string) {
+  errorLog.push({ timestampMs: Date.now(), message, stack, traceId });
+  if (errorLog.length > 50) errorLog.shift();
+}
 const globalCheckpointer = new InMemoryCheckpointer();
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
@@ -107,6 +117,7 @@ export function createApp(config: AppConfig) {
         "patch-file",
         "evals",
         "ptc",
+        "web-search",
       ],
       tools: [
         "read_file",
@@ -117,6 +128,7 @@ export function createApp(config: AppConfig) {
         "list_files",
         "search_code",
         "run_command",
+        "web_search",
         "memory",
         ...(config.enableShell
           ? ["git_status", "git_diff", "git_log", "git_commit", "git_checkout"]
@@ -146,6 +158,9 @@ export function createApp(config: AppConfig) {
 
   // ── Checkpoints ───────────────────────────────────────────────────────────
   app.get("/checkpoints", (c) => c.json({ count: globalCheckpointer.size }));
+
+  // ── Error log (last 50 agent errors for debugging) ────────────────────────
+  app.get("/errors", (c) => c.json({ errors: [...errorLog].reverse(), count: errorLog.length }));
 
   // ── Files ─────────────────────────────────────────────────────────────────
   app.get("/files", async (c) => {
@@ -235,7 +250,12 @@ export function createApp(config: AppConfig) {
 
     // Optionally prepend project context
     let finalTask = task;
-    if (projectContext && config.enableShell) {
+    if (projectContext) {
+      // Always: inject file tree from KV (no shell needed)
+      const fileTree = await buildProjectFileTree(filesKv);
+      const ctxParts: string[] = ["## Project Files\n" + fileTree];
+
+      // Optional: add git status + readme when shell available
       const shell = createShellRunner(config);
       if (shell) {
         const [status, readme, pkg] = await Promise.all([
@@ -243,19 +263,15 @@ export function createApp(config: AppConfig) {
           filesKv?.get("file:README.md") ?? Promise.resolve(null),
           filesKv?.get("file:package.json") ?? Promise.resolve(null),
         ]);
-        const ctx = [
-          "## Project Context",
-          `Git status:\n${status}`,
-          readme ? `README:\n${readme.slice(0, 1000)}` : null,
-          pkg ? `package.json:\n${pkg.slice(0, 500)}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n\n");
-        finalTask = `${ctx}\n\n---\n\n${task}`;
+        ctxParts.push(`Git status:\n${status}`);
+        if (readme) ctxParts.push(`README:\n${readme.slice(0, 1000)}`);
+        if (pkg) ctxParts.push(`package.json:\n${pkg.slice(0, 500)}`);
       }
+
+      finalTask = `${ctxParts.join("\n\n")}\n\n---\n\n${task}`;
     }
 
-    const tools = buildTools(filesKv, useMemory, config);
+    const tools = buildTools(filesKv, useMemory, config, guardrails?.deniedTools);
     const inputGuardrails = buildInputGuardrails(guardrails);
     const outputGuardrails = buildOutputGuardrails(guardrails);
 
@@ -277,6 +293,12 @@ export function createApp(config: AppConfig) {
     } else if (enhancement === "budget-forcing") {
       const runner = new BudgetForcingRunner({ maxBudgetTokens: 2000 });
       agentRun = enhancedAgentRun(model, runner, finalTask);
+    } else if (agentMode === "multi") {
+      agentRun = multiAgentRun(model, tools, finalTask, {
+        ...agentExtras,
+        codeLanguage,
+        e2bApiKey: config.e2bApiKey,
+      });
     } else if (agentMode === "ptc") {
       agentRun = ptcAgentRun(model, tools, finalTask, codeLanguage, config);
     } else {
@@ -448,10 +470,46 @@ function resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvSto
   return config.filesKv;
 }
 
+/** Build a tree-style string of all files in the KV store for project context. */
+async function buildProjectFileTree(kv: KvStore | undefined): Promise<string> {
+  if (!kv) return "(no files in workspace)";
+  const list = await kv.list({ prefix: "file:" });
+  const paths = list.keys.map((k) => k.name.replace(/^file:/, "")).sort();
+  if (paths.length === 0) return "(workspace is empty)";
+
+  // Build directory tree
+  const tree: Record<string, string[]> = {};
+  for (const p of paths) {
+    const parts = p.split("/");
+    if (parts.length === 1) {
+      if (!tree[""]) tree[""] = [];
+      tree[""].push(p);
+    } else {
+      const dir = parts.slice(0, -1).join("/");
+      if (!tree[dir]) tree[dir] = [];
+      tree[dir].push(parts[parts.length - 1]);
+    }
+  }
+
+  const lines: string[] = [];
+  // Root files first
+  for (const f of tree[""] ?? []) lines.push(`  ${f}`);
+  // Directories
+  for (const [dir, files] of Object.entries(tree)) {
+    if (!dir) continue;
+    lines.push(`  ${dir}/`);
+    for (const f of files) lines.push(`    ${f}`);
+  }
+
+  return `${paths.length} file(s):
+${lines.join("\n")}`;
+}
+
 function buildTools(
   filesKv: KvStore | undefined,
   useMemory: boolean,
-  config: AppConfig
+  config: AppConfig,
+  deniedTools?: string[]
 ): ToolDefinition[] {
   const shellRunner = createShellRunner(config);
   const tools: ToolDefinition[] = [
@@ -463,8 +521,13 @@ function buildTools(
     createDeleteFileTool(filesKv),
     createRenameFileTool(filesKv),
     createRunCommandTool(shellRunner),
+    createWebSearchTool(),
     ...createGitTools(config),
   ];
+  // P4: filter out denied tools
+  const filteredTools = deniedTools?.length
+    ? tools.filter((t) => !deniedTools.includes(t.name))
+    : tools;
   if (useMemory) {
     const memTool = createMemoryTool({ backend: globalMemoryBackend });
     tools.push({
@@ -482,7 +545,7 @@ function buildTools(
       },
     });
   }
-  return tools;
+  return filteredTools;
 }
 
 function buildInputGuardrails(guardrails?: RunBody["guardrails"]) {
@@ -648,8 +711,16 @@ function agentEventStream(
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const stack =
+          err instanceof Error && err.stack
+            ? err.stack.split("\n").slice(0, 4).join("\n")
+            : undefined;
+        // Record to in-memory error log for /errors endpoint
+        recordError(msg, stack);
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ event: "error", data: { error: msg } })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({ event: "error", data: { error: msg, ...(stack ? { stack } : {}) } })}\n\n`
+          )
         );
       } finally {
         controller.close();

@@ -15,6 +15,7 @@
  *   --url   <url>          Worker URL (default: http://localhost:8787)
  *   --events               Show raw AgentEvent stream instead of pretty output
  *   --json                 Print full JSON events (implies --events)
+ *   --trace                Show error stack traces
  */
 
 import { parseArgs } from "node:util";
@@ -28,8 +29,10 @@ const { values, positionals } = parseArgs({
     url: { type: "string", default: "http://localhost:8787" },
     events: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
+    trace: { type: "boolean", default: false },
   },
   allowPositionals: true,
+  strict: false,
 });
 
 const task = positionals.join(" ").trim();
@@ -43,6 +46,7 @@ const agentMode = values.mode;
 const modelId = values.model;
 const maxSteps = parseInt(values.steps, 10);
 const showRaw = values.events || values.json;
+const showTrace = values.trace;
 const showJson = values.json;
 
 // ANSI colors
@@ -205,6 +209,7 @@ function prettyPrintEvent(ev) {
       break;
     case "error":
       console.log(`  ${c.red}✗ ERROR: ${d.error}${c.reset}`);
+      if (showTrace && d.stack) console.log(`${c.dim}${d.stack}${c.reset}`);
       break;
     default:
     // skip status/guardrail etc.

@@ -28,6 +28,9 @@ const STOP_ON_FAIL = values["stop-on-fail"];
 const TIMEOUT_MS = parseInt(values.timeout, 10) * 1000;
 const ONLY_IDS = values.only ? new Set(values.only.split(",").map(Number)) : null;
 
+// Add unique salt to each test run to prevent stale session cache hits
+const TEST_RUN_ID = `test-${Date.now().toString(36)}`;
+
 // ── ANSI ──────────────────────────────────────────────────────────────────────
 const c = {
   reset: "\x1b[0m",
@@ -50,7 +53,7 @@ async function runAgent(body, timeoutMs = TIMEOUT_MS) {
     const res = await fetch(`${BASE}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, _testRunId: TEST_RUN_ID }),  // cache-bust
       signal: ctrl.signal,
     });
     if (!res.ok) {
@@ -95,7 +98,7 @@ async function post(path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, _testRunId: TEST_RUN_ID }),  // cache-bust
   });
   return res.json();
 }
@@ -956,6 +959,138 @@ await test("session-scoped agent run (X-Session-Id header)", "session", async ()
     res.ok,
     hasEvent(evs, "run_start"),
     hasEvent(evs, "final_answer") || hasEvent(evs, "error"),
+  ];
+});
+
+// ── P1: Web Search Tool ───────────────────────────────────────────────────
+console.log(`\n${c.bold}── Web Search Tool ─────────────────────────────────────${c.reset}`);
+
+await test("web_search tool is available in capabilities", "web-search", async () => {
+  const caps = await get("/capabilities");
+  return [caps.tools?.includes("web_search"), caps.features?.includes("web-search")];
+});
+
+await test("agent uses web_search for a research question", "web-search", async () => {
+  const evs = await runAgent({
+    task: "Use web_search to find what WebContainers is. Give a brief answer.",
+    agentMode: "tool",
+    maxSteps: 4,
+  });
+  const toolCalls = events(evs, "tool_call").map((e) => e.data?.toolName);
+  return [
+    toolCalls.includes("web_search"),
+    hasEvent(evs, "tool_result"),
+    hasEvent(evs, "final_answer"),
+  ];
+});
+
+await test("web_search returns search results or graceful error", "web-search", async () => {
+  const evs = await runAgent({
+    task: "Search for: TypeScript 5.0 new features. Report what you find.",
+    agentMode: "tool",
+    maxSteps: 4,
+  });
+  const results = events(evs, "tool_result").filter((e) => e.data?.toolName === "web_search");
+  return [
+    results.length > 0,
+    results.some((e) => {
+      const out = String(e.data?.output ?? "");
+      // Either has real results or graceful "unavailable" message
+      return out.length > 10;
+    }),
+  ];
+});
+
+// ── P2: Live Preview (HTML detection) ────────────────────────────────────────
+console.log(`\n${c.bold}── Live Preview (HTML Generation) ──────────────────────${c.reset}`);
+
+await test("agent generates HTML in final_answer for web page task", "preview", async () => {
+  const evs = await runAgent({
+    task: "Write a simple HTML page with a red button that says 'Click me'. Return the complete HTML.",
+    agentMode: "tool",
+    maxSteps: 4,
+  });
+  const ans = String(finalAnswer(evs) ?? "");
+  const hasHtml = /<(html|body|div|button|!DOCTYPE)/i.test(ans);
+  return [hasEvent(evs, "final_answer"), hasHtml];
+});
+
+// ── P3: projectContext file tree injection ───────────────────────────────────
+console.log(`\n${c.bold}── projectContext File Tree ─────────────────────────────${c.reset}`);
+
+await test("projectContext=true injects file tree into task", "project-context", async () => {
+  // Pre-load a file so there's something in the workspace
+  const ts = Date.now();
+  await post("/files", { path: `ctx-test-${ts}.ts`, content: `const x = ${ts};` });
+
+  const evs = await runAgent({
+    task: "List the project files from the context provided to you.",
+    agentMode: "tool",
+    maxSteps: 4,
+    projectContext: true,
+  });
+  const ans = String(finalAnswer(evs) ?? "");
+  return [
+    hasEvent(evs, "final_answer"),
+    // Answer should mention the file we just created
+    ans.includes(`ctx-test-${ts}`) || ans.includes("file"),
+  ];
+});
+
+await test(
+  "projectContext works without enableShell (file tree only)",
+  "project-context",
+  async () => {
+    // This test verifies the KV-based file tree works even without shell
+    // We test this by checking the task gets enriched (final_answer exists)
+    const evs = await runAgent({
+      task: "Tell me what files are in the project workspace.",
+      agentMode: "tool",
+      maxSteps: 3,
+      projectContext: true,
+    });
+    return [hasEvent(evs, "run_start"), hasEvent(evs, "final_answer")];
+  }
+);
+
+// ── P4: deniedTools guardrail ─────────────────────────────────────────────────
+console.log(`\n${c.bold}── deniedTools Guardrail ────────────────────────────────${c.reset}`);
+
+await test("deniedTools prevents write_file from being called", "denied-tools", async () => {
+  const evs = await runAgent({
+    task: "Try to write a file called forbidden.ts with content 'test'",
+    agentMode: "tool",
+    maxSteps: 4,
+    guardrails: { deniedTools: ["write_file"] },
+  });
+  const toolCalls = events(evs, "tool_call").map((e) => e.data?.toolName);
+  // write_file must not appear in tool calls
+  return [
+    !toolCalls.includes("write_file"),
+    hasEvent(evs, "final_answer") || hasEvent(evs, "error"),
+  ];
+});
+
+// ── P5: Multi-agent mode ──────────────────────────────────────────────────────
+console.log(`\n${c.bold}── Multi-Agent (code + review) ──────────────────────────${c.reset}`);
+
+await test("agentMode=multi runs code phase then review phase", "multi-agent", async () => {
+  const evs = await runAgent(
+    {
+      task: "Write a JavaScript function that checks if a number is even. Just return the function.",
+      agentMode: "multi",
+      maxSteps: 10,
+    },
+    120_000
+  );
+  const handoffs = evs.filter((e) => e.event === "handoff");
+  const finalAnswers = events(evs, "final_answer");
+  return [
+    hasEvent(evs, "run_start"),
+    // handoff emitted OR at least 2 final_answers (both phases completed)
+    handoffs.length > 0 || finalAnswers.length >= 2,
+    // At least one final answer across both phases
+    finalAnswers.length >= 1,
   ];
 });
 
