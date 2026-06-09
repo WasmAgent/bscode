@@ -1,4 +1,5 @@
 node_modules/
+**/node_modules/
 .next/
 dist/
 .wrangler/
@@ -7,3 +8,4 @@ dist/
 *.env
 .turbo/
 apps/worker/.bscode-files/
+
