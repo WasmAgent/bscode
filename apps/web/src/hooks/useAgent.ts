@@ -17,6 +17,8 @@ export interface AgentConfig {
   modelIds?: string[];
   useOtel?: boolean;
   projectContext?: boolean;
+  /** Framework mode — when set, uses a framework-aware system prompt and auto-mounts to WebContainers */
+  framework?: "react" | "vue" | "svelte" | "vanilla" | null;
 }
 
 // Minimal shape we need from AgentEvent — avoids importing @agentkit-js/core in the browser bundle
@@ -75,6 +77,7 @@ export function useAgent(config: AgentConfig) {
         codeLanguage: config.codeLanguage ?? "js",
         useOtel: config.useOtel ?? true,
         projectContext: config.projectContext ?? false,
+        ...(config.framework ? { framework: config.framework } : {}),
         ...(config.modelIds?.length ? { modelIds: config.modelIds } : {}),
       });
     },

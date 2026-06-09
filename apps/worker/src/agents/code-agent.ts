@@ -20,7 +20,7 @@ export interface CodeAgentExtras {
 
 function createQuickJSKernel() {
   return new QuickJSKernel({
-    timeoutMs: 15_000,
+    timeoutMs: 60_000, // 60s — supports long-running algorithms and large code generation
     variant: cfVariant as unknown,
     variantLoader: newQuickJSWASMModuleFromVariant as unknown as NonNullable<
       QuickJSKernelOptions["variantLoader"]
@@ -28,9 +28,22 @@ function createQuickJSKernel() {
   } satisfies QuickJSKernelOptions);
 }
 
+const JS_SYSTEM_PROMPT = `You are an expert JavaScript coding assistant running inside a QuickJS WASM sandbox.
+
+Your job is to solve tasks by writing and executing JavaScript code step by step.
+
+Rules:
+- Always respond with a \`\`\`js code block containing the code to execute.
+- The sandbox is a pure JS runtime (no DOM, no browser APIs, no require/import).
+- For tasks that produce a final value, set: __finalAnswer__ = <value>;
+- For tasks that generate a large file or multi-step output (e.g. a game, an algorithm library),
+  build the full result as a string in JS and set __finalAnswer__ = resultString;
+- Do NOT try to use write_file, fetch, or any I/O — they are not available. Write the result as a string.
+- If the task asks for HTML/CSS/JS source code, generate it as a string and set __finalAnswer__ = htmlString;`;
+
 export function createCodeAgent(
   model: Model,
-  tools: ToolDefinition[],
+  _tools: ToolDefinition[],
   extras: CodeAgentExtras = {}
 ) {
   const lang = extras.codeLanguage ?? "js";
@@ -39,20 +52,11 @@ export function createCodeAgent(
     lang === "python"
       ? new PyodideKernel()
       : lang === "node" && extras.e2bApiKey
-        ? new RemoteSandboxKernel({ apiKey: extras.e2bApiKey, template: "base", timeoutMs: 60_000 })
+        ? new RemoteSandboxKernel({ apiKey: extras.e2bApiKey, template: "base", timeoutMs: 120_000 })
         : createQuickJSKernel();
 
-  const isPython = lang === "python";
-
-  return new CodeAgent({
-    tools,
-    model,
-    maxSteps: extras.maxSteps ?? 12,
-    planningInterval: extras.planningInterval,
-    kernel,
-    inputGuardrails: extras.inputGuardrails,
-    outputGuardrails: extras.outputGuardrails,
-    systemPrompt: isPython
+  const systemPrompt =
+    lang === "python"
       ? `You are a Python coding assistant executing code in a Pyodide WASM sandbox.
 Always respond with a \`\`\`python code block.
 Use __finalAnswer__ = <value> (or __final_answer__ = <value>) to signal the result.
@@ -61,6 +65,16 @@ Example:
 result = sum(range(10))
 __finalAnswer__ = result
 \`\`\``
-      : undefined, // Use CodeAgent default for JS (tuned for JS code generation)
+      : JS_SYSTEM_PROMPT;
+
+  return new CodeAgent({
+    tools: [], // CodeAgent executes code in a WASM kernel — it does not dispatch tool calls.
+    model,
+    maxSteps: extras.maxSteps ?? 12,
+    planningInterval: extras.planningInterval,
+    kernel,
+    inputGuardrails: extras.inputGuardrails,
+    outputGuardrails: extras.outputGuardrails,
+    systemPrompt,
   });
 }

@@ -138,6 +138,12 @@ function providerDotStyle(provider: string): CSSProperties {
   };
 }
 
+const CODE_LANGS = [
+  { id: "js" as const, label: "JS" },
+  { id: "python" as const, label: "Python" },
+  { id: "node" as const, label: "Node" },
+];
+
 export function AgentPanel({
   config,
   onChange,
@@ -146,6 +152,7 @@ export function AgentPanel({
   onSubmit,
   onAbort,
   isRunning,
+  workerUrl = "http://localhost:8788",
 }: AgentPanelProps) {
   const [dynamicModels, setDynamicModels] = useState(DEFAULT_MODELS);
   const [economyModelId, setEconomyModelId] = useState<string | undefined>(undefined);
@@ -191,19 +198,58 @@ export function AgentPanel({
             <button
               type="button"
               key={mode}
-              style={modeBtnStyle(config.agentMode === mode)}
-              onClick={() => onChange({ ...config, agentMode: mode })}
+              style={modeBtnStyle(config.agentMode === mode && !config.framework)}
+              onClick={() => onChange({ ...config, agentMode: mode, framework: null })}
             >
               {mode === "code" ? "Code + WASM" : "Tool + DAG"}
             </button>
           ))}
+          <button
+            type="button"
+            style={{
+              ...modeBtnStyle(!!config.framework),
+              borderColor: config.framework ? "#3fb950" : undefined,
+              color: config.framework ? "#3fb950" : undefined,
+              background: config.framework ? "#238636" + "22" : undefined,
+            }}
+            onClick={() =>
+              onChange({
+                ...config,
+                agentMode: "tool",
+                framework: config.framework ? null : "react",
+              })
+            }
+          >
+            Framework
+          </button>
         </div>
         <div style={{ marginTop: 6, fontSize: 11, color: "#8b949e" }}>
-          {config.agentMode === "code"
-            ? "CodeAgent writes JS, executes in QuickJS WASM sandbox"
-            : "ToolCallingAgent uses DAG scheduler for parallel tool calls"}
+          {config.framework
+            ? "ToolAgent writes project files → WebContainers runs Vite dev server"
+            : config.agentMode === "code"
+              ? "CodeAgent writes JS, executes in QuickJS WASM sandbox"
+              : "ToolCallingAgent uses DAG scheduler for parallel tool calls"}
         </div>
       </div>
+
+      {/* Framework selector — shown only in Framework mode */}
+      {config.framework && (
+        <div>
+          <div style={labelStyle}>Framework</div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {(["react", "vue", "svelte", "vanilla"] as const).map((fw) => (
+              <button
+                type="button"
+                key={fw}
+                style={{ ...modeBtnStyle(config.framework === fw), flex: "unset", padding: "5px 10px" }}
+                onClick={() => onChange({ ...config, framework: fw })}
+              >
+                {fw === "react" ? "React" : fw === "vue" ? "Vue 3" : fw === "svelte" ? "Svelte" : "Vanilla"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <div
@@ -371,18 +417,35 @@ export function AgentPanel({
       <div style={rowStyle}>
         <button
           type="button"
-          style={btnStyle(true)}
+          style={{
+            ...btnStyle(true),
+            cursor: isRunning || !task.trim() ? "not-allowed" : "pointer",
+            opacity: !task.trim() && !isRunning ? 0.5 : 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
           onClick={onSubmit}
           disabled={isRunning || !task.trim()}
+          title={isRunning ? "Agent is running…" : "Run agent (Cmd+Enter)"}
         >
-          {isRunning ? "Running…" : "Run Agent"}
+          {isRunning ? (
+            <>
+              <span style={{ display: "inline-block", animation: "spin 0.8s linear infinite" }}>⟳</span>
+              Running…
+            </>
+          ) : (
+            "▶ Run Agent"
+          )}
         </button>
         {isRunning && (
-          <button type="button" style={btnStyle(false, true)} onClick={onAbort}>
-            Stop
+          <button type="button" style={{ ...btnStyle(false, true), cursor: "pointer" }} onClick={onAbort} title="Stop agent">
+            ■ Stop
           </button>
         )}
       </div>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

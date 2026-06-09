@@ -133,6 +133,64 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
   const local = models.filter((m) => m.source === "local");
   const custom = models.filter((m) => m.source === "custom");
 
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    padding: "8px 20px",
+    border: "none",
+    borderBottom: `2px solid ${active ? "#58a6ff" : "transparent"}`,
+    background: "transparent",
+    color: active ? "#58a6ff" : "#8b949e",
+    fontSize: 12,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  });
+
+  const modelRowStyle = (selected: boolean, available: boolean): React.CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "8px 10px",
+    border: `1px solid ${selected ? "#58a6ff" : "#30363d"}`,
+    borderRadius: 5,
+    marginBottom: 4,
+    cursor: available ? "pointer" : "default",
+    background: selected ? "#1f6feb22" : "transparent",
+    opacity: available ? 1 : 0.4,
+  });
+
+  const dotStyle = (provider: string): React.CSSProperties => ({
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: PROVIDER_COLORS[provider] ?? "#8b949e",
+    flexShrink: 0,
+  });
+
+  const badgeStyle = (kind: string): React.CSSProperties => ({
+    fontSize: 9,
+    padding: "1px 5px",
+    borderRadius: 3,
+    background: kind === "primary" ? "#1f6feb" : kind === "economy" ? "#238636" : "#21262d",
+    color: "#fff",
+    textTransform: "uppercase",
+  });
+
+  const providerTagStyle = (provider: string): React.CSSProperties => ({
+    fontSize: 9,
+    color: PROVIDER_COLORS[provider] ?? "#8b949e",
+    opacity: 0.8,
+  });
+
+  const btnStyle = (primary: boolean): React.CSSProperties => ({
+    padding: "7px 14px",
+    borderRadius: 4,
+    border: "none",
+    background: primary ? "#1f6feb" : "#21262d",
+    color: "#fff",
+    fontSize: 12,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  });
+
   const s: Record<string, React.CSSProperties> = {
     overlay: {
       position: "fixed",
@@ -174,16 +232,6 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
       display: "flex",
       borderBottom: "1px solid #30363d",
     },
-    tabBtn: (active: boolean): React.CSSProperties => ({
-      padding: "8px 20px",
-      border: "none",
-      borderBottom: `2px solid ${active ? "#58a6ff" : "transparent"}`,
-      background: "transparent",
-      color: active ? "#58a6ff" : "#8b949e",
-      fontSize: 12,
-      cursor: "pointer",
-      fontFamily: "inherit",
-    }),
     body: { flex: 1, overflow: "auto", padding: "16px 20px" },
     section: { marginBottom: 16 },
     sectionLabel: {
@@ -193,39 +241,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
       letterSpacing: 1,
       marginBottom: 8,
     },
-    modelRow: (selected: boolean, available: boolean): React.CSSProperties => ({
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: "8px 10px",
-      border: `1px solid ${selected ? "#58a6ff" : "#30363d"}`,
-      borderRadius: 5,
-      marginBottom: 4,
-      cursor: available ? "pointer" : "default",
-      background: selected ? "#1f6feb22" : "transparent",
-      opacity: available ? 1 : 0.4,
-    }),
-    dot: (provider: string): React.CSSProperties => ({
-      width: 8,
-      height: 8,
-      borderRadius: "50%",
-      background: PROVIDER_COLORS[provider] ?? "#8b949e",
-      flexShrink: 0,
-    }),
     modelLabel: { flex: 1, color: "#c9d1d9", fontSize: 12 },
-    badge: (kind: string): React.CSSProperties => ({
-      fontSize: 9,
-      padding: "1px 5px",
-      borderRadius: 3,
-      background: kind === "primary" ? "#1f6feb" : kind === "economy" ? "#238636" : "#21262d",
-      color: "#fff",
-      textTransform: "uppercase",
-    }),
-    providerTag: (provider: string): React.CSSProperties => ({
-      fontSize: 9,
-      color: PROVIDER_COLORS[provider] ?? "#8b949e",
-      opacity: 0.8,
-    }),
     deleteBtn: {
       background: "none",
       border: "none",
@@ -247,16 +263,6 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
       outline: "none",
     },
     hint: { fontSize: 10, color: "#8b949e" },
-    btn: (primary: boolean): React.CSSProperties => ({
-      padding: "7px 14px",
-      borderRadius: 4,
-      border: "none",
-      background: primary ? "#1f6feb" : "#21262d",
-      color: "#fff",
-      fontSize: 12,
-      cursor: "pointer",
-      fontFamily: "inherit",
-    }),
     footer: {
       padding: "12px 20px",
       borderTop: "1px solid #30363d",
@@ -285,19 +291,19 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
       <button
         type="button"
         key={m.id}
-        style={s.modelRow(isPrimary || isEconomy, m.available)}
+        style={modelRowStyle(isPrimary || isEconomy, m.available)}
         onClick={handleClick}
       >
-        <span style={s.dot(m.provider)} />
+        <span style={dotStyle(m.provider)} />
         <span style={s.modelLabel}>{m.label}</span>
-        <span style={s.providerTag(m.provider)}>{m.provider}</span>
-        {isPrimary && <span style={s.badge("primary")}>Primary</span>}
-        {isEconomy && <span style={s.badge("economy")}>Economy</span>}
+        <span style={providerTagStyle(m.provider)}>{m.provider}</span>
+        {isPrimary && <span style={badgeStyle("primary")}>Primary</span>}
+        {isEconomy && <span style={badgeStyle("economy")}>Economy</span>}
         {m.available && !isPrimary && (
           <button
             type="button"
             style={{
-              ...s.badge("economy"),
+              ...badgeStyle("economy"),
               cursor: "pointer",
               background: "transparent",
               border: "1px solid #238636",
@@ -349,10 +355,10 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
 
         {/* Tabs */}
         <div style={s.tabs}>
-          <button type="button" style={s.tabBtn(tab === "select")} onClick={() => setTab("select")}>
+          <button type="button" style={tabBtnStyle(tab === "select")} onClick={() => setTab("select")}>
             Select Models
           </button>
-          <button type="button" style={s.tabBtn(tab === "add")} onClick={() => setTab("add")}>
+          <button type="button" style={tabBtnStyle(tab === "add")} onClick={() => setTab("add")}>
             Add Custom / Local
           </button>
         </div>
@@ -457,7 +463,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
                   ✓ Model added successfully
                 </div>
               )}
-              <button type="button" style={s.btn(true)} onClick={handleAddModel}>
+              <button type="button" style={btnStyle(true)} onClick={handleAddModel}>
                 Add Model
               </button>
             </>
@@ -470,10 +476,10 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
             🔒 API keys encrypted with AES-256-GCM · stored locally · never sent to servers
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" style={s.btn(false)} onClick={onClose}>
+            <button type="button" style={btnStyle(false)} onClick={onClose}>
               Cancel
             </button>
-            <button type="button" style={s.btn(true)} onClick={handleSave} disabled={saving}>
+            <button type="button" style={btnStyle(true)} onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Apply"}
             </button>
           </div>

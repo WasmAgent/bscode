@@ -9,7 +9,10 @@
     "dev:wrangler": "wrangler dev",
     "deploy": "wrangler deploy",
     "build": "wrangler deploy --dry-run --outdir=dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@agentkit-js/core": "workspace:*",
@@ -17,18 +20,22 @@
     "@agentkit-js/kernel-quickjs": "workspace:*",
     "@agentkit-js/kernel-remote": "workspace:*",
     "@agentkit-js/model-anthropic": "workspace:*",
-    "@agentkit-js/model-doubao": "workspace:*",
     "@agentkit-js/model-deepseek": "workspace:*",
+    "@agentkit-js/model-doubao": "workspace:*",
+    "@agentkit-js/model-openai": "workspace:*",
+    "@hono/node-server": "^2.0.4",
     "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "diff": "^9.0.0",
     "hono": "^4.6.0",
+    "pyodide": "0.29.4",
     "quickjs-emscripten-core": "0.32.0",
-    "zod": "^3.23.0",
-    "@agentkit-js/model-openai": "workspace:*"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241224.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "typescript": "^5.7.0",
+    "vitest": "^4.1.8",
     "wrangler": "^3.93.0"
   }
 }

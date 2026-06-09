@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 /**
@@ -72,7 +72,7 @@ export class FsKvStore implements KvStore {
 
   async get(key: string): Promise<string | null> {
     try {
-      return await Bun.file(this.#toPath(key)).text();
+      return await readFile(this.#toPath(key), "utf8");
     } catch {
       return null;
     }
@@ -81,7 +81,7 @@ export class FsKvStore implements KvStore {
   async put(key: string, value: string): Promise<void> {
     const p = this.#toPath(key);
     await mkdir(dirname(p), { recursive: true });
-    await Bun.write(p, value);
+    await writeFile(p, value, "utf8");
   }
 
   async list(opts: { prefix: string }): Promise<{ keys: { name: string }[] }> {

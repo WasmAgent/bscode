@@ -80,6 +80,10 @@ const errorLog: Array<{ timestampMs: number; message: string; stack?: string; tr
 function recordError(message: string, stack?: string, traceId?: string) {
   errorLog.push({ timestampMs: Date.now(), message, stack, traceId });
   if (errorLog.length > 50) errorLog.shift();
+  // Always print to stderr so it shows in bun --watch terminal output
+  const prefix = traceId ? `[${traceId.slice(0, 8)}]` : "[worker]";
+  console.error(`${prefix} ERROR: ${message}`);
+  if (stack) console.error(stack.split("\n").slice(0, 4).join("\n"));
 }
 const globalCheckpointer = new InMemoryCheckpointer();
 
@@ -95,6 +99,7 @@ export function createApp(config: AppConfig) {
     c.header("Access-Control-Allow-Origin", allowOrigin);
     c.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     c.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-Id");
+    c.header("Access-Control-Allow-Private-Network", "true");
     c.header("Access-Control-Max-Age", "86400");
     if (allowed !== "*") c.header("Vary", "Origin");
     if (c.req.method === "OPTIONS") return c.body(null, 204);
@@ -247,6 +252,22 @@ export function createApp(config: AppConfig) {
     return c.json({ files });
   });
 
+  // Bulk fetch — returns all files with their contents in one request.
+  // Used by the frontend to mount the workspace into WebContainers without N+1 fetches.
+  app.get("/files/bulk", async (c) => {
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
+    if (!kv) return c.json({ files: [] });
+    const list = await kv.list({ prefix: "file:" });
+    const files = await Promise.all(
+      list.keys.map(async (k) => {
+        const path = k.name.replace(/^file:/, "");
+        const content = await kv.get(k.name);
+        return { path, content: content ?? "" };
+      })
+    );
+    return c.json({ files });
+  });
+
   app.post("/files", async (c) => {
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const { path, content } = await c.req.json<{ path: string; content: string }>();
@@ -274,6 +295,7 @@ export function createApp(config: AppConfig) {
 
   // ── POST /run ─────────────────────────────────────────────────────────────
   app.post("/run", async (c) => {
+    // Parse and validate synchronously-readable fields first.
     let body: RunBody;
     try {
       body = await c.req.json<RunBody>();
@@ -281,8 +303,21 @@ export function createApp(config: AppConfig) {
       return c.json({ error: "Invalid JSON body" }, 400);
     }
 
+    const { task } = body;
+    if (!task || typeof task !== "string") return c.json({ error: "task is required" }, 400);
+    if (new TextEncoder().encode(task).byteLength > MAX_TASK_BYTES)
+      return c.json({ error: `task must be under ${MAX_TASK_BYTES} bytes` }, 400);
+
+    if (
+      !config.anthropicApiKey &&
+      !config.anthropicAuthToken &&
+      !config.doubaoApiKey &&
+      !config.deepseekApiKey
+    )
+      return c.json({ error: "No API key configured" }, 500);
+
+    const sessionId = c.req.header("X-Session-Id");
     const {
-      task,
       agentMode = "code",
       modelId,
       modelIds,
@@ -298,144 +333,160 @@ export function createApp(config: AppConfig) {
       useOtel = false,
     } = body;
 
-    if (!task || typeof task !== "string") return c.json({ error: "task is required" }, 400);
-    if (new TextEncoder().encode(task).byteLength > MAX_TASK_BYTES)
-      return c.json({ error: `task must be under ${MAX_TASK_BYTES} bytes` }, 400);
-
-    if (
-      !config.anthropicApiKey &&
-      !config.anthropicAuthToken &&
-      !config.doubaoApiKey &&
-      !config.deepseekApiKey
-    )
-      return c.json({ error: "No API key configured" }, 500);
-
-    // Resolve via registry (supports builtin + custom + local models, encrypted keys)
-    const store = getModelStore(config);
-    const primaryModel = await resolveModelFromRegistry(modelId, config, store);
-    if (!primaryModel)
-      return c.json(
-        { error: "Model not available — check API keys or add via /models/custom" },
-        400
-      );
-    // FallbackModel for multi-model resilience
-    const model: Model =
-      modelIds && modelIds.length > 1
-        ? new FallbackModel([primaryModel]) // single-entry fallback, extendable
-        : primaryModel;
-
     const clampedSteps = Math.min(maxSteps, MAX_STEPS_CAP);
-    const sessionId = c.req.header("X-Session-Id");
-    const filesKv = resolveFilesKv(sessionId, config);
 
-    // Optionally prepend project context
-    let finalTask = task;
-    if (projectContext) {
-      // Always: inject file tree from KV (no shell needed)
-      const fileTree = await buildProjectFileTree(filesKv);
-      const ctxParts: string[] = ["## Project Files\n" + fileTree];
-
-      // Optional: add git status + readme when shell available
-      const shell = createShellRunner(config);
-      if (shell) {
-        const [status, readme, pkg] = await Promise.all([
-          shell("git status --short 2>/dev/null || echo '(not a git repo)'"),
-          filesKv?.get("file:README.md") ?? Promise.resolve(null),
-          filesKv?.get("file:package.json") ?? Promise.resolve(null),
-        ]);
-        ctxParts.push(`Git status:\n${status}`);
-        if (readme) ctxParts.push(`README:\n${readme.slice(0, 1000)}`);
-        if (pkg) ctxParts.push(`package.json:\n${pkg.slice(0, 500)}`);
-      }
-
-      finalTask = `${ctxParts.join("\n\n")}\n\n---\n\n${task}`;
-    }
-
-    const tools = buildTools(filesKv, useMemory, config, guardrails?.deniedTools);
-    const inputGuardrails = buildInputGuardrails(guardrails);
-    const outputGuardrails = buildOutputGuardrails(guardrails);
-
-    const agentExtras = {
-      maxSteps: clampedSteps,
-      planningInterval,
-      inputGuardrails,
-      outputGuardrails,
-    };
-
-    let agentRun: AsyncGenerator<AgentEvent>;
-
-    if (enhancement === "self-consistency") {
-      const runner = new SelfConsistencyRunner({ n: 3, earlyStopThreshold: 0.67 });
-      agentRun = enhancedAgentRun(model, runner, finalTask);
-    } else if (enhancement === "reflect-refine") {
-      const runner = new ReflectRefineRunner({ maxCycles: 2 });
-      agentRun = enhancedAgentRun(model, runner, finalTask);
-    } else if (enhancement === "budget-forcing") {
-      const runner = new BudgetForcingRunner({ maxBudgetTokens: 2000 });
-      agentRun = enhancedAgentRun(model, runner, finalTask);
-    } else if (agentMode === "multi") {
-      agentRun = multiAgentRun(model, tools, finalTask, {
-        ...agentExtras,
-        codeLanguage,
-        e2bApiKey: config.e2bApiKey,
-      });
-    } else if (agentMode === "ptc") {
-      agentRun = ptcAgentRun(model, tools, finalTask, codeLanguage, config);
-    } else {
-      const agent =
-        agentMode === "tool"
-          ? createToolAgent(model, tools, agentExtras)
-          : createCodeAgent(model, tools, {
-              ...agentExtras,
-              codeLanguage,
-              e2bApiKey: config.e2bApiKey,
-            });
-
-      if (useCheckpoint) {
-        const cpId = checkpointId ?? finalTask.slice(0, 40);
-        const cpTraceId = `cp-${cpId}-${Date.now()}`;
-        const cpRun = new CheckpointableRun({ checkpointer: globalCheckpointer }, agent.assembler);
-        agentRun = cpRun.run(agent.run(finalTask, cpTraceId), finalTask, cpTraceId);
-      } else {
-        agentRun = agent.run(finalTask);
-      }
-    }
-
-    // Wrap with OtelBridge to emit model_start/model_done events
-    if (useOtel) {
-      const bridge = new OtelBridge({ exporter: new InMemorySpanExporter() });
-      agentRun = withOtel(agentRun, bridge);
-    }
-
-    // Content-addressed session cache
-    const resolvedModelId = getModelId(model);
+    // ── Session cache pre-check (fast path, avoids spawning agent) ──────────
+    // Only attempt when sessionsKv is available — resolve modelId for hash.
     const sessionsKv = sessionId
-      ? config.sessionsKv
-        ? new SessionKvStore(config.sessionsKv, sessionId)
-        : config.sessionsKv
+      ? config.sessionsKv ? new SessionKvStore(config.sessionsKv, sessionId) : config.sessionsKv
       : config.sessionsKv;
-    const kvKey = sessionsKv
-      ? await contentHash({
-          task: finalTask,
-          agentMode,
-          maxSteps: clampedSteps,
-          modelId: resolvedModelId,
-          enhancement,
-          ...(((body as Record<string,unknown>)._testRunId) ? { _r: (body as Record<string,unknown>)._testRunId } : {}),
-        })
-      : null;
 
-    if (kvKey && sessionsKv) {
+    if (sessionsKv) {
+      // Resolve model just enough to compute the cache key (no expensive init).
+      const store = getModelStore(config);
+      const primaryModelForHash = await resolveModelFromRegistry(modelId, config, store);
+      const resolvedModelId = primaryModelForHash ? getModelId(primaryModelForHash) : (modelId ?? "unknown");
+      const kvKey = await contentHash({
+        task, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement,
+        ...(((body as Record<string, unknown>)._testRunId) ? { _r: (body as Record<string, unknown>)._testRunId } : {}),
+      });
       const cached = await sessionsKv.get(kvKey);
       if (cached) return streamCachedEvents(cached);
     }
 
-    const stream = agentEventStream(agentRun, kvKey, sessionsKv);
-    return new Response(stream, {
+    // ── Live run: return SSE Response immediately, pump agent async ──────────
+    // This avoids the Bun bug where awaiting inside a Hono handler before
+    // returning a streaming Response causes Chrome fetch to get ERR_FAILED.
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+
+    (async () => {
+      // Flush headers + first byte immediately so Chrome doesn't time out.
+      await writer.write(encoder.encode(": connected\n\n"));
+
+      try {
+        const store = getModelStore(config);
+        const primaryModel = await resolveModelFromRegistry(modelId, config, store);
+        if (!primaryModel) {
+          await writer.write(
+            encoder.encode(
+              `data: ${JSON.stringify({ event: "error", data: { error: "Model not available — check API keys or add via /models/custom" } })}\n\n`
+            )
+          );
+          await writer.write(encoder.encode("data: [DONE]\n\n"));
+          await writer.close();
+          return;
+        }
+
+        const model: Model =
+          modelIds && modelIds.length > 1 ? new FallbackModel([primaryModel]) : primaryModel;
+
+        const filesKv = resolveFilesKv(sessionId, config);
+
+        let finalTask = task;
+        if (projectContext) {
+          const fileTree = await buildProjectFileTree(filesKv);
+          const ctxParts: string[] = ["## Project Files\n" + fileTree];
+          const shell = createShellRunner(config);
+          if (shell) {
+            const [status, readme, pkg] = await Promise.all([
+              shell("git status --short 2>/dev/null || echo '(not a git repo)'"),
+              filesKv?.get("file:README.md") ?? Promise.resolve(null),
+              filesKv?.get("file:package.json") ?? Promise.resolve(null),
+            ]);
+            ctxParts.push(`Git status:\n${status}`);
+            if (readme) ctxParts.push(`README:\n${readme.slice(0, 1000)}`);
+            if (pkg) ctxParts.push(`package.json:\n${pkg.slice(0, 500)}`);
+          }
+          finalTask = `${ctxParts.join("\n\n")}\n\n---\n\n${task}`;
+        }
+
+        const tools = buildTools(filesKv, useMemory, config, guardrails?.deniedTools);
+        const inputGuardrails = buildInputGuardrails(guardrails);
+        const outputGuardrails = buildOutputGuardrails(guardrails);
+        const agentExtras = { maxSteps: clampedSteps, planningInterval, inputGuardrails, outputGuardrails, framework: body.framework };
+
+        let agentRun: AsyncGenerator<AgentEvent>;
+
+        if (enhancement === "self-consistency") {
+          agentRun = enhancedAgentRun(model, new SelfConsistencyRunner({ n: 3, earlyStopThreshold: 0.67 }), finalTask);
+        } else if (enhancement === "reflect-refine") {
+          agentRun = enhancedAgentRun(model, new ReflectRefineRunner({ maxCycles: 2 }), finalTask);
+        } else if (enhancement === "budget-forcing") {
+          agentRun = enhancedAgentRun(model, new BudgetForcingRunner({ maxBudgetTokens: 2000 }), finalTask);
+        } else if (agentMode === "multi") {
+          agentRun = multiAgentRun(model, tools, finalTask, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
+        } else if (agentMode === "ptc") {
+          agentRun = ptcAgentRun(model, tools, finalTask, codeLanguage, config);
+        } else {
+          const agent =
+            agentMode === "tool"
+              ? createToolAgent(model, tools, agentExtras)
+              : createCodeAgent(model, tools, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
+
+          if (useCheckpoint) {
+            const cpId = checkpointId ?? finalTask.slice(0, 40);
+            const cpTraceId = `cp-${cpId}-${Date.now()}`;
+            const cpRun = new CheckpointableRun({ checkpointer: globalCheckpointer }, agent.assembler);
+            agentRun = cpRun.run(agent.run(finalTask, cpTraceId), finalTask, cpTraceId);
+          } else {
+            agentRun = agent.run(finalTask);
+          }
+        }
+
+        if (useOtel) {
+          const bridge = new OtelBridge({ exporter: new InMemorySpanExporter() });
+          agentRun = withOtel(agentRun, bridge);
+        }
+
+        // Compute cache key for write-back (same inputs as pre-check above)
+        const resolvedModelId = getModelId(model);
+        const kvKey = sessionsKv
+          ? await contentHash({
+              task: finalTask, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement,
+              ...(((body as Record<string, unknown>)._testRunId) ? { _r: (body as Record<string, unknown>)._testRunId } : {}),
+            })
+          : null;
+
+        // Stream live events
+        const allEvents: AgentEvent[] = [];
+        let success = false;
+        for await (const event of agentRun) {
+          await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          if (kvKey && sessionsKv && (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS))
+            allEvents.push(event);
+          if (event.event === "final_answer") success = true;
+        }
+        await writer.write(encoder.encode("data: [DONE]\n\n"));
+        if (kvKey && sessionsKv && success)
+          await sessionsKv.put(kvKey, JSON.stringify(allEvents), { expirationTtl: SESSION_TTL }).catch(console.error);
+
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error && err.stack ? err.stack.split("\n").slice(0, 4).join("\n") : undefined;
+        recordError(msg, stack);
+        await writer.write(
+          encoder.encode(`data: ${JSON.stringify({ event: "error", data: { error: msg, ...(stack ? { stack } : {}) } })}\n\n`)
+        );
+      } finally {
+        await writer.close().catch(() => {});
+      }
+    })();
+
+    const allowOrigin = (config.allowedOrigin ?? "*") === "*"
+      ? "*"
+      : (c.req.header("Origin") ?? "") === config.allowedOrigin
+        ? config.allowedOrigin!
+        : "null";
+
+    return new Response(readable, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": allowOrigin,
+        "Access-Control-Allow-Private-Network": "true",
       },
     });
   });
@@ -497,6 +548,8 @@ interface RunBody {
   checkpointId?: string;
   projectContext?: boolean;
   useOtel?: boolean;
+  /** Framework mode — activates framework-aware system prompt in ToolAgent */
+  framework?: "react" | "vue" | "svelte" | "vanilla" | null;
 }
 
 function getModelId(model: Model): string {
@@ -729,43 +782,51 @@ function agentEventStream(
   sessionsKv: KvStore | undefined
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
-  return new ReadableStream({
-    async start(controller) {
-      const allEvents: AgentEvent[] = [];
-      let success = false;
-      try {
-        for await (const event of run) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-          if (kvKey && sessionsKv) {
-            if (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS)
-              allEvents.push(event);
-          }
-          if (event.event === "final_answer") success = true;
+  // Use TransformStream so the readable side is immediately available to the
+  // Response constructor — avoids the Bun bug where an async ReadableStream
+  // start() causes Chrome to receive net::ERR_FAILED before the first byte.
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+
+  // Fire-and-forget: pump events into the writable side asynchronously.
+  (async () => {
+    const allEvents: AgentEvent[] = [];
+    let success = false;
+    // Immediately write an SSE comment to flush the HTTP headers to the client.
+    await writer.write(encoder.encode(": connected\n\n"));
+    try {
+      for await (const event of run) {
+        await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        if (kvKey && sessionsKv) {
+          if (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS)
+            allEvents.push(event);
         }
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        if (kvKey && sessionsKv && success) {
-          await sessionsKv
-            .put(kvKey, JSON.stringify(allEvents), { expirationTtl: SESSION_TTL })
-            .catch(console.error);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        const stack =
-          err instanceof Error && err.stack
-            ? err.stack.split("\n").slice(0, 4).join("\n")
-            : undefined;
-        // Record to in-memory error log for /errors endpoint
-        recordError(msg, stack);
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ event: "error", data: { error: msg, ...(stack ? { stack } : {}) } })}\n\n`
-          )
-        );
-      } finally {
-        controller.close();
+        if (event.event === "final_answer") success = true;
       }
-    },
-  });
+      await writer.write(encoder.encode("data: [DONE]\n\n"));
+      if (kvKey && sessionsKv && success) {
+        await sessionsKv
+          .put(kvKey, JSON.stringify(allEvents), { expirationTtl: SESSION_TTL })
+          .catch(console.error);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack =
+        err instanceof Error && err.stack
+          ? err.stack.split("\n").slice(0, 4).join("\n")
+          : undefined;
+      recordError(msg, stack);
+      await writer.write(
+        encoder.encode(
+          `data: ${JSON.stringify({ event: "error", data: { error: msg, ...(stack ? { stack } : {}) } })}\n\n`
+        )
+      );
+    } finally {
+      await writer.close().catch(() => {});
+    }
+  })();
+
+  return readable;
 }
 
 function streamCachedEvents(cachedJson: string): Response {
