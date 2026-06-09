@@ -33,6 +33,7 @@ export default function Home() {
   const [terminalView, setTerminalView] = useState<"messages" | "events" | "preview">("messages");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const prevIsRunning = useRef(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   const addToast = useCallback((message: string, kind: Toast["kind"] = "info") => {
@@ -113,10 +114,12 @@ export default function Home() {
   // Detect when agent finishes
   useEffect(() => {
     if (prevIsRunning.current && !isRunning) {
-      const hasError = messages.some((m) => m.role === "error");
-      if (hasError) {
+      const errorMsg = messages.find((m) => m.role === "error")?.content ?? null;
+      if (errorMsg) {
+        setLastError(errorMsg);
         addToast("Agent encountered an error", "error");
       } else if (finalAnswer) {
+        setLastError(null);
         addToast("Agent finished", "success");
       }
     }
@@ -150,6 +153,7 @@ export default function Home() {
     if (!task.trim() || isRunning) return;
     submit(task);
     setPreview(undefined);
+    setLastError(null);
     wcReset();
     setTerminalView("messages");
   }, [task, isRunning, submit, wcReset]);
