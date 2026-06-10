@@ -561,6 +561,18 @@ or {"mode":"tool","framework":null}`;
     return c.json({ path, versions: versions.map((v) => ({ version: v.version, hash: v.hash, savedAtMs: v.savedAtMs })) });
   });
 
+  // Fetch the actual content of a specific historical version. Used by the
+  // DiffViewer to show before/after content side-by-side.
+  app.get("/files/:path{.+}/versions/:version", async (c) => {
+    const path = c.req.param("path");
+    const versionNum = Number(c.req.param("version"));
+    if (Number.isNaN(versionNum)) return c.json({ error: "version must be a number" }, 400);
+    const versions = globalFileTree.getVersions(path);
+    const target = versions.find((v) => v.version === versionNum);
+    if (!target) return c.json({ error: `version ${versionNum} not found` }, 404);
+    return c.json({ path, version: target.version, content: target.content, hash: target.hash, savedAtMs: target.savedAtMs });
+  });
+
   app.post("/files/:path{.+}/rollback", async (c) => {
     const path = c.req.param("path");
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
