@@ -332,6 +332,14 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       setPreviewView("preview");
       return;
     }
+    // matplotlib / image output: data:image/png;base64,...
+    const isDataUrl = /^data:image\/(png|jpeg|gif|webp);base64,/.test(finalAnswer.trim());
+    if (isDataUrl) {
+      const imgHtml = `<html><body style="margin:0;background:#0d1117;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${finalAnswer.trim()}" style="max-width:100%;max-height:100vh;object-fit:contain"/></body></html>`;
+      setPreview((prev) => ({ ...prev, html: imgHtml }));
+      setPreviewView("preview");
+      return;
+    }
     const plain = finalAnswer.trim();
     if (plain) {
       setPreview((prev) => ({ ...prev, output: plain }));

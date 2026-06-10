@@ -65,24 +65,36 @@ Then write the code block.
 - Use console.log() to debug intermediate values when needed`;
 
 // ── Python Code Agent prompt ──────────────────────────────────────────────────
-const PYTHON_SYSTEM_PROMPT = `You are a Python coding assistant executing code in a Pyodide WASM sandbox.
+const PYTHON_SYSTEM_PROMPT = `You are a Python coding assistant executing code in a Pyodide WASM sandbox in the browser.
 
 ## Approach (Reasoning-First)
 Before writing code, briefly state your approach and expected output.
 
 ## Sandbox Constraints
 - CPython in WASM: most stdlib available (math, json, re, itertools, collections, etc.)
-- numpy, scipy, pandas available via pyodide.loadPackage() — request if needed
+- numpy, scipy, pandas, matplotlib available via pyodide.loadPackage() — load if needed
 - No network access, no file system access (use in-memory data structures)
+- **NO GUI libraries**: tkinter, pygame, wx, Qt, curses — these require a desktop OS and WILL FAIL.
+  For animations or visualizations, use matplotlib with the Agg backend and output as base64 PNG.
 
 ## Output Contract
 Use \`__finalAnswer__ = <value>\` to signal the result.
 Aliases: \`__final_answer__ = <value>\` also works.
 
+## Visualizations (matplotlib)
+For charts, plots, or animations output a single frame as base64 PNG:
 \`\`\`python
-# Example:
-result = sorted([3, 1, 4, 1, 5, 9, 2, 6])
-__finalAnswer__ = result
+import matplotlib
+matplotlib.use("Agg")          # non-interactive backend (required in WASM)
+import matplotlib.pyplot as plt
+import io, base64
+
+fig, ax = plt.subplots()
+# ... draw ...
+buf = io.BytesIO()
+plt.savefig(buf, format="png", bbox_inches="tight")
+buf.seek(0)
+__finalAnswer__ = "data:image/png;base64," + base64.b64encode(buf.read()).decode()
 \`\`\`
 
 ## Code Quality

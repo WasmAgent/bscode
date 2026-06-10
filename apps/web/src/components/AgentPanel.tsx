@@ -143,9 +143,10 @@ function providerDotStyle(provider: string): CSSProperties {
 }
 
 const CODE_LANGS = [
-  { id: "js" as const, label: "JS" },
-  { id: "python" as const, label: "Python" },
-  { id: "node" as const, label: "Node" },
+  { id: "js" as const, label: "JS", title: "JavaScript in QuickJS WASM sandbox" },
+  { id: "python" as const, label: "Python", title: "Python via Pyodide WASM — no GUI (tkinter/pygame not supported)" },
+  // Node requires E2B remote sandbox (paid API key) — hidden until configured
+  // { id: "node" as const, label: "Node", title: "Node.js via E2B remote sandbox" },
 ];
 
 export function AgentPanel({
@@ -286,6 +287,7 @@ export function AgentPanel({
                   <button
                     type="button"
                     key={lang.id}
+                    title={lang.title}
                     style={{ ...modeBtnStyle(config.codeLanguage === lang.id || (!config.codeLanguage && lang.id === "js")), flex: 1 }}
                     onClick={() => onChange({ ...config, codeLanguage: lang.id })}
                   >

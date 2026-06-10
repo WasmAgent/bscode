@@ -391,15 +391,15 @@ ${fields.map((f) => `      <div className="flex flex-col gap-1">
 Task: "${task.slice(0, 500)}"
 
 Categories:
-- "framework": The task asks to build a UI app, web app, website, game with frontend, or use React/Vue/Svelte/Next.js/Vite. Also choose this for games (贪吃蛇, calculator app, todo app, etc).
-- "code": The task asks to write/execute an algorithm, function, data structure, or math computation. Single-file scripts.
+- "framework": The task asks to build a UI app, web app, website, interactive animation/game with visuals, or use React/Vue/Svelte/Next.js/Vite. Choose this for games (贪吃蛇, calculator app, todo app, etc), canvas animations (fireworks, particle effects, etc), or anything that needs a live interactive visual output in the browser.
+- "code": The task asks to write/execute an algorithm, function, data structure, math computation, or data analysis. Choose this ONLY for non-visual, non-interactive scripts. If the task would normally use tkinter/pygame/GUI on desktop → use "framework" instead.
 - "tool": Everything else — file operations, multi-file projects without a framework, analysis, refactoring.
 
 If mode is "framework", also pick: "react" | "vue" | "svelte" | "vanilla"
 - react: React, Next.js, or unspecified frontend framework
 - vue: Vue.js
 - svelte: Svelte
-- vanilla: Pure JS/TS, Canvas games, HTML-only, no framework preference
+- vanilla: Pure JS/TS, Canvas games/animations, HTML-only, no framework preference
 
 Reply JSON only, no explanation:
 {"mode":"framework","framework":"react"}
