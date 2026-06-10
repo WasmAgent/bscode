@@ -49,7 +49,8 @@ Before writing any code:
 
 ## File Operation Rules
 - **Existing files**: Use patch_file (send only changed lines) — never overwrite user edits unnecessarily
-- **New files**: Use write_file with complete content
+- **New files**: Use write_file with complete content — one file per call, never batch
+- **Always provide both "path" and "content"** in every write_file call — never omit either field
 - **Verification**: After each write, read the file back to confirm correctness
 - **Dependencies**: If a package is missing from package.json, note it explicitly
 
@@ -132,6 +133,8 @@ Write ALL of these:
 - Composables in src/composables/ for shared logic
 - Each SFC ≤ 300 lines — extract components if longer
 - Scoped styles preferred (<style scoped>)
+- Write each file in ONE write_file call — never batch multiple files in one step
+- Always provide both "path" and "content" in every write_file call
 - If a module is missing, add to package.json`;
 
 // ── Svelte prompt ─────────────────────────────────────────────────────────────
@@ -157,6 +160,8 @@ Write ALL of these:
 - Svelte 5 runes: $state() for reactive, $derived() for computed, $effect() for side effects
 - TypeScript in <script> blocks
 - Scoped styles per component
+- Write each file in ONE write_file call — never batch multiple files in one step
+- Always provide both "path" and "content" in every write_file call
 - If a module is missing, add to package.json`;
 
 // ── Vanilla prompt ────────────────────────────────────────────────────────────
@@ -170,11 +175,15 @@ Data: [state model]
 Files: [list all files]
 </boltThinking>
 
-## Phase 2: Generate Files
+## Phase 2: Generate Files (write ONE file per tool call — never batch)
+Write each file in a separate write_file call in this order:
 1. **package.json** — deps: vite, typescript
 2. **vite.config.ts** — minimal TypeScript config
 3. **index.html** — semantic HTML structure with CSS variables
 4. **src/main.ts** — all TypeScript logic
+
+IMPORTANT: Call write_file ONCE per file. Do NOT call write_file multiple times for the same file.
+IMPORTANT: Always provide both "path" and "content" arguments — never omit either.
 
 ## Code Standards
 - TypeScript strict mode, no any
