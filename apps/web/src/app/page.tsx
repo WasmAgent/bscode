@@ -455,7 +455,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     const lastTurn = turns.at(-1);
     if (!lastTurn?.error) return;
     const fixTask = `请修复以下错误：\n${lastTurn.error}\n\n原始任务：${lastTurn.task}`;
-    handleSubmit(fixTask);
+    handleSubmit(fixTask, true); // skipClarify=true — fix runs immediately, no re-clarify
   }, [turns, handleSubmit]);
 
   // ── ZIP download ───────────────────────────────────────────────────────────
