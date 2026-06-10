@@ -111,7 +111,12 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
   );
 
   const submit = useCallback(
-    async (task: string, conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>) => {
+    async (
+      task: string,
+      conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>,
+      /** Pass true when the task already contains user answers — skips /clarify */
+      skipClarify = false
+    ) => {
       setRawEvents([]);
       setDetectedMode(null);
       setClarifyingQuestions(null);
@@ -148,10 +153,8 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         }
       }
 
-      // Clarification check (Lovable pattern) — only for non-trivial tool tasks
-      // Skip for framework mode (already has full spec), code mode (clear execution contract)
-      // and when user already provided extra context via @ mentions
-      if (config.autoMode && effectiveConfig.agentMode === "tool" && !task.includes("@")) {
+      // Clarification check — only once per original task, never after user has answered
+      if (!skipClarify && config.autoMode && effectiveConfig.agentMode === "tool" && !task.includes("@")) {
         try {
           const res = await fetch(`${workerUrl}/clarify`, {
             method: "POST",

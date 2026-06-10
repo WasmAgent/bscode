@@ -314,7 +314,8 @@ Project files:
 ${fileSummary}
 
 Please fix the error. Use patch_file or write_file to correct the broken files.`;
-          handleSubmit(fixTask);
+          // skipClarify=true — fix tasks always run immediately, no re-clarify
+          handleSubmit(fixTask, true);
         })
         .catch(() => addToast("Could not auto-fix: failed to fetch files", "error"));
     }
@@ -339,10 +340,14 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   }, [finalAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Submit ─────────────────────────────────────────────────────────────────
+  /** Keep the last submitted task text so skip button can reference it */
+  const lastSubmittedTask = useRef("");
+
   const handleSubmit = useCallback(
-    async (taskText: string) => {
+    async (taskText: string, skipClarify = false) => {
       const text = taskText.trim();
       if (!text || isRunning || classifying) return;
+      lastSubmittedTask.current = text;
       setInputText("");
       setClarifyAnswers({});
       setPreview(undefined);
@@ -352,8 +357,6 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
 
       // ── @ file reference resolution ─────────────────────────────────────────
-      // Parse @filename mentions in task, fetch their contents, inject inline.
-      // e.g. "Fix the bug in @src/App.tsx" → appends file content to task.
       let resolvedText = text;
       const atMentions = [...text.matchAll(/@([\w./\-]+\.\w+)/g)].map((m) => m[1]);
       if (atMentions.length > 0) {
@@ -380,7 +383,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         ...prev,
         {
           id,
-          task: text, // show original text in UI, not the injected version
+          task: text,
           detectedMode: null,
           timestamp: Date.now(),
           agentText: "",
@@ -395,7 +398,6 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       ]);
       resetAll();
 
-      // Build conversation history from completed turns (max last 5)
       const history = turns
         .filter((t) => t.status === "done" && t.finalAnswer)
         .slice(-5)
@@ -404,7 +406,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           { role: "assistant", content: t.finalAnswer! },
         ]);
 
-      submit(resolvedText, history.length > 0 ? history : undefined);
+      submit(resolvedText, history.length > 0 ? history : undefined, skipClarify);
     },
     [isRunning, classifying, submit, resetAll, wcReset, turns]
   );
@@ -658,9 +660,10 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                 }
                 onFix={turn.status === "error" ? () => {
                   const fixTask = `修复错误：${turn.error}\n\n原始任务：${turn.task}`;
-                  handleSubmit(fixTask);
+                  // skipClarify=true — fix tasks always run immediately, no re-clarify
+          handleSubmit(fixTask, true);
                 } : undefined}
-                onRetry={() => handleSubmit(turn.task)}
+                onRetry={() => handleSubmit(turn.task, true)}
               />
             ))}
             <div ref={chatBottomRef} />
@@ -680,14 +683,17 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
 
               const submitWithAnswers = () => {
                 const answerSuffix = clarifyingQuestions
-                  .map((q, i) => `${q.text}: ${clarifyAnswers[i] ?? ""}`)
+                  .map((q, i) => `${q.text}: ${(clarifyAnswers[i] ?? "").replace(/^other:/, "")}`)
                   .join("\n");
-                const enrichedTask = inputText.trim()
-                  ? `${inputText.trim()}\n\n${answerSuffix}`
+                // Build enriched task: original task + Q&A answers
+                const baseTask = lastSubmittedTask.current || inputText.trim();
+                const enrichedTask = baseTask
+                  ? `${baseTask}\n\n${answerSuffix}`
                   : answerSuffix;
                 dismissClarify();
                 setClarifyAnswers({});
-                handleSubmit(enrichedTask);
+                // skipClarify=true so this doesn't trigger another clarify round
+                handleSubmit(enrichedTask, true);
               };
 
               return (
@@ -696,7 +702,12 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     <span>💬 {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "几个问题帮我更好地理解需求：" : "A few questions before I start:"}</span>
                     <button
                       type="button"
-                      onClick={() => { dismissClarify(); setClarifyAnswers({}); handleSubmit(inputText); }}
+                      onClick={() => {
+                      dismissClarify();
+                      setClarifyAnswers({});
+                      // Use the original task (before inputText was cleared), skipClarify=true
+                      handleSubmit(lastSubmittedTask.current || inputText, true);
+                    }}
                       style={{ background: "none", border: "none", color: "#8b949e", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
                     >
                       {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "跳过，直接运行 →" : "Skip, run anyway →"}
