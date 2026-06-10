@@ -93,9 +93,26 @@ function recordError(message: string, stack?: string, traceId?: string) {
 }
 const globalCheckpointer = new InMemoryCheckpointer();
 
-// Per-request FileTreeManager (reset on each /run, shared across file ops within a run).
-// Tracks file hashes for conflict detection and semantic relevance scoring.
-const globalFileTree = new FileTreeManager();
+// Per-session FileTreeManager — keyed by X-Session-Id header so two
+// browsers (or two tabs) cannot read each other's files or version
+// history. The header is required for all /files endpoints; requests
+// without it fall back to the legacy "default" bucket for backward
+// compatibility with existing CLI flows that pre-date the header.
+const sessionFileTrees = new Map<string, FileTreeManager>();
+
+function sessionIdOf(c: { req: { header: (n: string) => string | undefined } }): string {
+  return c.req.header("X-Session-Id") ?? "default";
+}
+
+function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }): FileTreeManager {
+  const id = sessionIdOf(c);
+  let tree = sessionFileTrees.get(id);
+  if (!tree) {
+    tree = new FileTreeManager();
+    sessionFileTrees.set(id, tree);
+  }
+  return tree;
+}
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {
@@ -557,7 +574,7 @@ or {"mode":"tool","framework":null}`;
   // ── File version history (v0.dev checkpoint pattern) ─────────────────────
   app.get("/files/:path{.+}/versions", async (c) => {
     const path = c.req.param("path");
-    const versions = globalFileTree.getVersions(path);
+    const versions = fileTreeFor(c).getVersions(path);
     return c.json({ path, versions: versions.map((v) => ({ version: v.version, hash: v.hash, savedAtMs: v.savedAtMs })) });
   });
 
@@ -567,7 +584,7 @@ or {"mode":"tool","framework":null}`;
     const path = c.req.param("path");
     const versionNum = Number(c.req.param("version"));
     if (Number.isNaN(versionNum)) return c.json({ error: "version must be a number" }, 400);
-    const versions = globalFileTree.getVersions(path);
+    const versions = fileTreeFor(c).getVersions(path);
     const target = versions.find((v) => v.version === versionNum);
     if (!target) return c.json({ error: `version ${versionNum} not found` }, 404);
     return c.json({ path, version: target.version, content: target.content, hash: target.hash, savedAtMs: target.savedAtMs });
@@ -577,7 +594,7 @@ or {"mode":"tool","framework":null}`;
     const path = c.req.param("path");
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const { version } = await c.req.json<{ version: number }>();
-    const content = globalFileTree.rollback(path, version);
+    const content = fileTreeFor(c).rollback(path, version);
     if (!content) return c.json({ error: `Version ${version} not found for ${path}` }, 404);
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
     return c.json({ ok: true, path, version, chars: content.length });
@@ -589,7 +606,7 @@ or {"mode":"tool","framework":null}`;
     if (!path || content === undefined) return c.json({ error: "path and content required" }, 400);
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
     // Keep FileTreeManager in sync for conflict detection and context relevance
-    globalFileTree.recordWrite(path.replace(/^\/+/, ""), content);
+    fileTreeFor(c).recordWrite(path.replace(/^\/+/, ""), content);
     return c.json({ ok: true, path });
   });
 
@@ -606,8 +623,16 @@ or {"mode":"tool","framework":null}`;
   app.delete("/files", async (c) => {
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     if (!kv) return c.json({ error: "KV not bound" }, 503);
+    if (typeof kv.delete !== "function") {
+      // Fail loud rather than silently no-op — the caller is asking us
+      // to clear state and we must not pretend success when we can't.
+      return c.json({ error: "KV backend does not support delete" }, 501);
+    }
     const list = await kv.list({ prefix: "file:" });
-    await Promise.all(list.keys.map((k) => kv.delete?.(k.name)));
+    await Promise.all(list.keys.map((k) => kv.delete!(k.name)));
+    // Also reset the in-memory file tree (and version history) for this
+    // session — otherwise stale versions linger after a workspace wipe.
+    sessionFileTrees.delete(sessionIdOf(c));
     return c.json({ ok: true, cleared: list.keys.length });
   });
 
@@ -615,7 +640,13 @@ or {"mode":"tool","framework":null}`;
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const path = c.req.param("path");
     if (!kv) return c.json({ error: "KV not bound" }, 503);
-    await kv.delete?.(`file:${path}`);
+    if (typeof kv.delete !== "function") {
+      return c.json({ error: "KV backend does not support delete" }, 501);
+    }
+    await kv.delete(`file:${path}`);
+    // Drop the in-memory entry + its version history so a follow-up
+    // GET /files/:path/versions doesn't return phantom versions.
+    fileTreeFor(c).remove(path);
     return c.json({ ok: true, path });
   });
 
@@ -712,16 +743,17 @@ or {"mode":"tool","framework":null}`;
 
         let finalTask = task;
         if (projectContext) {
-          // Use FileTreeManager for richer project context (includes file hashes for conflict detection)
-          const fileTree = globalFileTree.size > 0
-            ? globalFileTree.formatForPrompt(60)
+          // Use the per-session FileTreeManager (richer than KV listing — has hashes for conflict detection).
+          const sessionTree = sessionFileTrees.get(sessionId ?? "default");
+          const fileTree = sessionTree && sessionTree.size > 0
+            ? sessionTree.formatForPrompt(60)
             : await buildProjectFileTree(filesKv);
           const ctxParts: string[] = ["## Project Files\n" + fileTree];
 
           // Relevance filtering: include content of files that match task keywords
           // (avoids sending the full workspace to the model for large projects)
           if (filesKv) {
-            const relevantFiles = await getRelevantFileContents(filesKv, task, 5);
+            const relevantFiles = await getRelevantFileContents(filesKv, task, 5, sessionId);
             if (relevantFiles.length > 0) {
               ctxParts.push(
                 "## Relevant File Contents\n" +
@@ -1315,10 +1347,19 @@ function streamCachedEvents(cachedJson: string): Response {
 async function getRelevantFileContents(
   kv: KvStore,
   task: string,
-  maxFiles = 5
+  maxFiles = 5,
+  sessionId: string | undefined = undefined
 ): Promise<{ path: string; content: string }[]> {
-  // Hydrate FileTreeManager from KV if it's empty or stale
-  if (globalFileTree.size === 0) {
+  // Resolve a per-session FileTreeManager — falls back to "default"
+  // for legacy callers that don't propagate the session id (e.g. CLI).
+  const id = sessionId ?? "default";
+  let tree = sessionFileTrees.get(id);
+  if (!tree) {
+    tree = new FileTreeManager();
+    sessionFileTrees.set(id, tree);
+  }
+  // Hydrate from KV if it's empty
+  if (tree.size === 0) {
     const list = await kv.list({ prefix: "file:" });
     const entries = await Promise.all(
       list.keys
@@ -1330,11 +1371,11 @@ async function getRelevantFileContents(
           return content !== null ? { path, content } : null;
         })
     );
-    globalFileTree.hydrate(entries.filter(Boolean) as { path: string; content: string }[]);
+    tree.hydrate(entries.filter(Boolean) as { path: string; content: string }[]);
   }
 
   // Use FileTreeManager's semantic scoring (path + content keywords + recency)
-  const scored = globalFileTree.getRelevantFiles(task, maxFiles, 2000);
+  const scored = tree.getRelevantFiles(task, maxFiles, 2000);
   return scored.map((f) => ({ path: f.path, content: f.content }));
 }
 

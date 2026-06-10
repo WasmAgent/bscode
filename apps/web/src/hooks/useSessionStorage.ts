@@ -51,7 +51,11 @@ async function loadSession<TTurn>(id: string): Promise<PersistedSession<TTurn> |
   try {
     const raw = (await get(sessionKey(id))) as PersistedSession<TTurn> | undefined;
     return raw ?? null;
-  } catch {
+  } catch (err) {
+    // IndexedDB can fail in private mode, when storage is full, or when the
+    // tab loses access to its origin. Surface the error so the UI can show
+    // a banner; we still return null so the rest of the app continues.
+    console.warn(`[useSessionStorage] loadSession(${id}) failed:`, err);
     return null;
   }
 }
@@ -81,7 +85,8 @@ async function listAll(): Promise<SessionMeta[]> {
     return records
       .filter((r): r is SessionMeta => r !== null)
       .sort((a, b) => b.updatedAt - a.updatedAt);
-  } catch {
+  } catch (err) {
+    console.warn("[useSessionStorage] listAll failed:", err);
     return [];
   }
 }

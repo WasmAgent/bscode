@@ -33,6 +33,12 @@ export interface UseUndoOptions {
   capacity?: number;
   /** When true, intercepts Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z. Default: true. */
   bindKeyboard?: boolean;
+  /**
+   * Called when an undo() or redo() handler throws. The hook keeps the
+   * entry on the stack (so the user can try again), but the failure is
+   * otherwise silent unless this callback is wired up.
+   */
+  onError?: (kind: "undo" | "redo", entry: UndoEntry, err: unknown) => void;
 }
 
 export interface UseUndoReturn {
@@ -56,6 +62,13 @@ const nextId = () => `undo-${Date.now()}-${++_entryCounter}`;
 export function useUndo(opts: UseUndoOptions = {}): UseUndoReturn {
   const capacity = Math.max(1, opts.capacity ?? 50);
   const bindKeyboard = opts.bindKeyboard ?? true;
+  const onError =
+    opts.onError ??
+    ((kind, entry, err) => {
+      // Default: log to console so failures aren't silently dropped.
+      // Apps that want a toast / banner should pass their own onError.
+      console.warn(`[useUndo] ${kind} failed for "${entry.description}":`, err);
+    });
 
   const undoRef = useRef<UndoEntry[]>([]);
   const redoRef = useRef<UndoEntry[]>([]);
@@ -92,13 +105,14 @@ export function useUndo(opts: UseUndoOptions = {}): UseUndoReturn {
         redoRef.current.push(entry);
         if (redoRef.current.length > capacity) redoRef.current.shift();
       }
-    } catch {
-      // re-push on failure
+    } catch (err) {
+      // re-push on failure and surface the error so the UI can react
       undoRef.current.push(entry);
+      onError("undo", entry, err);
     }
     bump();
     return entry;
-  }, [capacity]);
+  }, [capacity, onError]);
 
   const redo = useCallback(async () => {
     const entry = redoRef.current.pop();
@@ -110,12 +124,13 @@ export function useUndo(opts: UseUndoOptions = {}): UseUndoReturn {
       if (entry.redo) await entry.redo();
       undoRef.current.push(entry);
       if (undoRef.current.length > capacity) undoRef.current.shift();
-    } catch {
+    } catch (err) {
       redoRef.current.push(entry);
+      onError("redo", entry, err);
     }
     bump();
     return entry;
-  }, [capacity]);
+  }, [capacity, onError]);
 
   const clear = useCallback(() => {
     undoRef.current = [];
