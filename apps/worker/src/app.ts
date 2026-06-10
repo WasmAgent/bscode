@@ -285,6 +285,80 @@ Max 2 questions. Ask only what's truly needed to avoid the wrong implementation.
     }
   });
 
+  // ── Generate from schema — Glide data-schema-first UI generation ─────────
+  // Accepts a JSON schema and returns a React component that renders a form/view
+  // for that schema, with field types mapped to appropriate UI components.
+  app.post("/generate-from-schema", async (c) => {
+    const { schema, framework = "react", componentName = "DataForm" } =
+      await c.req.json<{ schema: Record<string, unknown>; framework?: string; componentName?: string }>();
+    if (!schema) return c.json({ error: "schema required" }, 400);
+
+    // Type-to-component mapping (Glide pattern)
+    const typeMap: Record<string, { component: string; props: string }> = {
+      string:  { component: "Input",    props: 'type="text"' },
+      number:  { component: "Input",    props: 'type="number"' },
+      integer: { component: "Input",    props: 'type="number" step="1"' },
+      boolean: { component: "input",    props: 'type="checkbox"' },
+      array:   { component: "Textarea", props: 'placeholder="JSON array"' },
+      object:  { component: "Textarea", props: 'placeholder="JSON object"' },
+    };
+
+    // Heuristic: detect image/date/email by field name
+    const nameHints: Record<string, { component: string; props: string }> = {
+      image: { component: "img",   props: 'alt={field} className="w-32 h-32 object-cover"' },
+      img:   { component: "img",   props: 'alt={field} className="w-32 h-32 object-cover"' },
+      photo: { component: "img",   props: 'alt={field} className="w-32 h-32 object-cover"' },
+      date:  { component: "Input", props: 'type="date"' },
+      time:  { component: "Input", props: 'type="time"' },
+      email: { component: "Input", props: 'type="email"' },
+      phone: { component: "Input", props: 'type="tel"' },
+      url:   { component: "Input", props: 'type="url"' },
+      color: { component: "Input", props: 'type="color"' },
+      password: { component: "Input", props: 'type="password"' },
+    };
+
+    const properties = (schema.properties ?? {}) as Record<string, { type?: string; description?: string }>;
+    const required = new Set<string>((schema.required as string[]) ?? []);
+
+    const fields = Object.entries(properties).map(([name, def]) => {
+      const lower = name.toLowerCase();
+      const hint = Object.entries(nameHints).find(([k]) => lower.includes(k))?.[1];
+      const mapped = hint ?? typeMap[def.type ?? "string"] ?? typeMap.string;
+      return { name, ...mapped, required: required.has(name), description: def.description };
+    });
+
+    // Generate React component (framework=react default)
+    const componentCode = framework === "react" ? `
+import { useState } from "react";
+
+interface ${componentName}Data {
+${fields.map((f) => `  ${f.name}${f.required ? "" : "?"}: ${f.component === "input" ? "boolean" : "string"};`).join("\n")}
+}
+
+export function ${componentName}({ onSubmit }: { onSubmit?: (data: ${componentName}Data) => void }) {
+  const [data, setData] = useState<${componentName}Data>({
+${fields.map((f) => `    ${f.name}: ${f.component === "input" ? "false" : '""'},`).join("\n")}
+  });
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit?.(data); }} className="space-y-4 p-4">
+${fields.map((f) => `      <div className="flex flex-col gap-1">
+        <label htmlFor="${f.name}" className="text-sm font-medium">${f.name}${f.required ? " *" : ""}</label>
+        ${f.component === "Textarea"
+          ? `<textarea id="${f.name}" ${f.props} value={data.${f.name} as string} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.value}))} className="border rounded p-2" />`
+          : f.component === "img"
+          ? `{data.${f.name} && <${f.component} src={data.${f.name} as string} ${f.props} />}`
+          : `<${f.component === "Input" ? "input" : f.component} id="${f.name}" ${f.props} ${f.component === "input" ? `checked={data.${f.name} as boolean} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.checked}))` : `value={data.${f.name} as string} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.value}))`} className="border rounded p-2" />`}
+      </div>`).join("\n")}
+      <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">Submit</button>
+    </form>
+  );
+}
+`.trim() : `// Framework "${framework}" not yet supported for schema generation.`;
+
+    return c.json({ ok: true, framework, componentName, code: componentCode, fields: fields.length });
+  });
+
   // ── Task classifier — detects agent mode from task description ────────────
   // Uses Claude Haiku for fast, cheap classification (typically < 500ms).
   // Returns { mode, framework } so the frontend can auto-configure before running.
@@ -458,6 +532,23 @@ or {"mode":"tool","framework":null}`;
       )
     );
     return c.json({ ok: true, count: files.length, paths: files.map((f) => f.path) });
+  });
+
+  // ── File version history (v0.dev checkpoint pattern) ─────────────────────
+  app.get("/files/:path{.+}/versions", async (c) => {
+    const path = c.req.param("path");
+    const versions = globalFileTree.getVersions(path);
+    return c.json({ path, versions: versions.map((v) => ({ version: v.version, hash: v.hash, savedAtMs: v.savedAtMs })) });
+  });
+
+  app.post("/files/:path{.+}/rollback", async (c) => {
+    const path = c.req.param("path");
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
+    const { version } = await c.req.json<{ version: number }>();
+    const content = globalFileTree.rollback(path, version);
+    if (!content) return c.json({ error: `Version ${version} not found for ${path}` }, 404);
+    if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
+    return c.json({ ok: true, path, version, chars: content.length });
   });
 
   app.post("/files", async (c) => {

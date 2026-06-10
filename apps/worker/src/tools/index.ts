@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "@agentkit-js/core";
+import { globalFileLock } from "@agentkit-js/core";
 import { applyPatch } from "diff";
 import { z } from "zod";
 import type { KvStore } from "./platform.js";
@@ -96,6 +97,17 @@ export function createWriteFileTool(
     readOnly: false,
     idempotent: false,
     forward: async ({ path, content }) => {
+      // bolt.new file-lock check: block writes to protected files
+      try {
+        const warning = globalFileLock.assertWritable(path);
+        if (warning) {
+          // "warn" level — proceed but surface the warning
+          console.warn(`[write_file] ${warning}`);
+        }
+      } catch (lockErr) {
+        return `Error: ${lockErr instanceof Error ? lockErr.message : String(lockErr)}`;
+      }
+
       if (!kv) return `OK (KV not bound — write to ${path} simulated)`;
       await kv.put(normalizeKey(path), content);
       return `OK: written ${content.length} chars to ${path}`;
@@ -119,6 +131,12 @@ export function createPatchFileTool(
     readOnly: false,
     idempotent: false,
     forward: async ({ path, patch }) => {
+      try {
+        const warning = globalFileLock.assertWritable(path);
+        if (warning) console.warn(`[patch_file] ${warning}`);
+      } catch (lockErr) {
+        return `Error: ${lockErr instanceof Error ? lockErr.message : String(lockErr)}`;
+      }
       if (!kv) return `OK (KV not bound — patch to ${path} simulated)`;
       const original = await kv.get(normalizeKey(path));
       if (original === null) return `Error: File not found: ${path}`;
@@ -145,6 +163,12 @@ export function createDeleteFileTool(
     readOnly: false,
     idempotent: false,
     forward: async ({ path }) => {
+      try {
+        const warning = globalFileLock.assertWritable(path);
+        if (warning) console.warn(`[delete_file] ${warning}`);
+      } catch (lockErr) {
+        return `Error: ${lockErr instanceof Error ? lockErr.message : String(lockErr)}`;
+      }
       if (!kv) return `OK (KV not bound — delete ${path} simulated)`;
       const key = normalizeKey(path);
       const existing = await kv.get(key);

@@ -12,6 +12,12 @@ export interface UseWebContainerReturn {
   buildError: string | null;
   /** Mount a FileSystemTree and start the dev server */
   runProject: (files: FileSystemTree) => Promise<void>;
+  /**
+   * Hot-update individual files in a running WC without full restart.
+   * If package.json is among the changed files, triggers npm install + dev server restart.
+   * bolt.new DevServer restart detection pattern.
+   */
+  hotUpdate: (changedFiles: { path: string; content: string }[]) => Promise<void>;
   /** Tear down the current project (kill processes, unmount) */
   reset: () => void;
 }
@@ -138,6 +144,56 @@ export function useWebContainer(): UseWebContainerReturn {
     [reset, appendLine]
   );
 
+  /**
+   * Hot-update files in a running WebContainer.
+   * bolt.new restart detection: if package.json changed → npm install + restart dev server.
+   * For other files → write directly, Vite HMR handles the reload.
+   */
+  const hotUpdate = useCallback(
+    async (changedFiles: { path: string; content: string }[]) => {
+      const wc = wcInstance;
+      if (!wc || status === "idle") return;
+
+      const pkgChanged = changedFiles.some((f) => f.path === "package.json");
+
+      for (const { path, content } of changedFiles) {
+        // Write file into WC filesystem
+        const parts = path.split("/");
+        const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
+        try {
+          await wc.fs.mkdir(dir, { recursive: true });
+        } catch { /* dir exists */ }
+        await wc.fs.writeFile(path, content);
+        appendLine(`[wc] Updated ${path}`);
+      }
+
+      if (pkgChanged) {
+        // bolt.new pattern: package.json changed → re-install deps + restart
+        appendLine("[wc] package.json changed — running npm install…");
+        setStatus("installing");
+        devProcessRef.current?.kill();
+        devProcessRef.current = null;
+
+        const installProc = await wc.spawn("npm", ["install"]);
+        installProc.output.pipeTo(new WritableStream({ write: (chunk) => appendLine(chunk) }));
+        const exitCode = await installProc.exit;
+
+        if (exitCode !== 0) {
+          appendLine("[wc] npm install failed");
+          setStatus("error");
+          return;
+        }
+
+        appendLine("[wc] Restarting dev server…");
+        setStatus("starting");
+        const devProc = await wc.spawn("npm", ["run", "dev"]);
+        devProcessRef.current = devProc;
+        devProc.output.pipeTo(new WritableStream({ write: (chunk) => appendLine(chunk) }));
+      }
+    },
+    [status, appendLine]
+  );
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -146,7 +202,7 @@ export function useWebContainer(): UseWebContainerReturn {
     };
   }, []);
 
-  return { status, previewUrl, terminalLines, buildError, runProject, reset };
+  return { status, previewUrl, terminalLines, buildError, runProject, hotUpdate, reset };
 }
 
 /** Convert flat {path, content}[] to a FileSystemTree for WebContainers mount() */
