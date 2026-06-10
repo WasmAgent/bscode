@@ -138,10 +138,9 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
           // Build updated config based on classification
           const agentMode = result.mode === "framework" ? "tool" : result.mode;
           const framework = result.mode === "framework" ? result.framework : null;
-          // Framework mode needs more steps to write all project files
-          const maxSteps = result.mode === "framework"
-            ? Math.max(config.maxSteps, 20)
-            : config.maxSteps;
+          // Framework mode: cap at 15 steps (4-8 files + planning overhead).
+          // Too many steps → retry loops on errors; too few → truncated projects.
+          const maxSteps = result.mode === "framework" ? 15 : config.maxSteps;
           effectiveConfig = { ...config, agentMode, framework, maxSteps };
 
           // Notify parent so UI reflects the auto-detected mode
@@ -179,6 +178,13 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
       }
       setClarifyingQuestions(null);
 
+      // Always include noProgress for framework/tool mode to stop retry loops
+      const stopConditions = effectiveConfig.stopConditions?.length
+        ? effectiveConfig.stopConditions
+        : effectiveConfig.agentMode === "tool" || effectiveConfig.framework
+          ? ["noProgress"]
+          : undefined;
+
       run({
         task,
         agentMode: effectiveConfig.agentMode,
@@ -192,7 +198,7 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         systemPrefixTtl: effectiveConfig.systemPrefixTtl ?? "1h",
         ...(effectiveConfig.framework ? { framework: effectiveConfig.framework } : {}),
         ...(effectiveConfig.modelIds?.length ? { modelIds: effectiveConfig.modelIds } : {}),
-        ...(effectiveConfig.stopConditions?.length ? { stopConditions: effectiveConfig.stopConditions } : {}),
+        ...(stopConditions?.length ? { stopConditions } : {}),
         ...(effectiveConfig.enhancementPolicy ? { enhancementPolicy: effectiveConfig.enhancementPolicy } : {}),
         ...(effectiveConfig.scheduler ? { scheduler: effectiveConfig.scheduler } : {}),
         ...(effectiveConfig.maxBudgetTokens ? { maxBudgetTokens: effectiveConfig.maxBudgetTokens } : {}),
