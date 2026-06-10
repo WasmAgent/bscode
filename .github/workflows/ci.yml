@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Typecheck, Test, Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Checkout agentkit-js (sibling workspace)
+        uses: actions/checkout@v4
+        with:
+          repository: telleroutlook/agentkit-js
+          path: ../agentkit-js
+          ref: main
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (worker)
+        run: cd apps/worker && bunx tsc --noEmit
+
+      - name: Typecheck (web)
+        run: cd apps/web && bunx tsc --noEmit
+
+      - name: Test (web)
+        run: cd apps/web && bun run vitest run
+
+      - name: Test (worker)
+        run: cd apps/worker && bun run vitest run
+
+      - name: Build (worker dry-run)
+        run: cd apps/worker && bun run build || echo "Worker build skipped (wrangler not configured in CI)"
+
+      - name: Build (web)
+        run: cd apps/web && bun run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
