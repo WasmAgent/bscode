@@ -17,6 +17,7 @@
     "@terrastruct/d2": "^0.1.33",
     "@webcontainer/api": "^1.6.4",
     "docx": "^9.7.1",
+    "idb-keyval": "^6.2.5",
     "jszip": "^3.10.1",
     "next": "^15.3.0",
     "react": "^19.0.0",
@@ -25,9 +26,12 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^29.1.1",
     "typescript": "^5.7.0",
     "vitest": "^4.1.8"
   }
