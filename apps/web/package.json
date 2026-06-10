@@ -12,6 +12,7 @@
   "dependencies": {
     "@agentkit-js/react": "workspace:*",
     "@agentkit-js/ui-cards": "workspace:*",
+    "@agentkit-js/ui-cards-react": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
     "@terrastruct/d2": "^0.1.33",
     "@webcontainer/api": "^1.6.4",

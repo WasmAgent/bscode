@@ -15,6 +15,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@agentkit-js/agent-prompts": "workspace:*",
     "@agentkit-js/core": "workspace:*",
     "@agentkit-js/kernel-pyodide": "workspace:*",
     "@agentkit-js/kernel-quickjs": "workspace:*",

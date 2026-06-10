@@ -9,7 +9,7 @@ import { useImport } from "@/hooks/useImport";
 import { toFileSystemTree, useWebContainer } from "@/hooks/useWebContainer";
 import { parseCardBlocks } from "@agentkit-js/ui-cards";
 import type { CardBlock } from "@agentkit-js/ui-cards";
-import { autoUpgradeCards } from "@/lib/autoUpgradeCards";
+import { upgradeCardSyntax } from "@agentkit-js/ui-cards";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1040,7 +1040,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
 
   // Parse cards out of the final answer
   // Auto-upgrade: wrap bare D2/Markdown content in card fences if AI missed it
-  const upgradedText = displayText ? autoUpgradeCards(displayText) : null;
+  const upgradedText = displayText ? upgradeCardSyntax(displayText) : null;
   const parsedAnswer = upgradedText ? parseCardBlocks(upgradedText) : null;
   const hasCards = parsedAnswer && parsedAnswer.cards.length > 0;
 

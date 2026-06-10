@@ -2,8 +2,7 @@
 import type { AgentMessage } from "@agentkit-js/react";
 import type { CardBlock } from "@agentkit-js/ui-cards";
 import { useEffect, useRef, useCallback } from "react";
-import { ChatMessage } from "@/components/cards";
-import { CardRenderer } from "@/components/cards";
+import { ChatMessage, CardRenderer } from "@agentkit-js/ui-cards-react";
 
 interface AgentEventMinimal {
   event: string;
