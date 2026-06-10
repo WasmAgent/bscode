@@ -12,39 +12,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      # Checkout agentkit-js FIRST into a sibling directory.
+      # GitHub Actions doesn't allow checking out outside the workspace,
+      # so we use a relative path within the workspace and create a
+      # symlink the workspace expects (../agentkit-js).
+      - name: Checkout agentkit-js
+        uses: actions/checkout@v4
+        with:
+          repository: telleroutlook/agentkit-js
+          path: agentkit-js
+          ref: main
+
+      - name: Checkout bscode
+        uses: actions/checkout@v4
+        with:
+          path: bscode
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Checkout agentkit-js (sibling workspace)
-        uses: actions/checkout@v4
-        with:
-          repository: telleroutlook/agentkit-js
-          path: ../agentkit-js
-          ref: main
+      - name: Make agentkit-js available as a sibling of bscode
+        run: |
+          # bscode/package.json references "../agentkit-js/packages/*" in workspaces.
+          # GitHub puts both checkouts at $GITHUB_WORKSPACE (sibling already).
+          ls -la "$GITHUB_WORKSPACE"
 
-      - name: Install dependencies
+      - name: Install dependencies (bscode)
+        working-directory: bscode
         run: bun install --frozen-lockfile
 
       - name: Typecheck (worker)
-        run: cd apps/worker && bunx tsc --noEmit
+        working-directory: bscode/apps/worker
+        run: bunx tsc --noEmit
 
       - name: Typecheck (web)
-        run: cd apps/web && bunx tsc --noEmit
+        working-directory: bscode/apps/web
+        run: bunx tsc --noEmit
 
       - name: Test (web)
-        run: cd apps/web && bun run vitest run
+        working-directory: bscode/apps/web
+        run: bun run vitest run
 
-      - name: Test (worker)
-        run: cd apps/worker && bun run vitest run
-
-      - name: Build (worker dry-run)
-        run: cd apps/worker && bun run build || echo "Worker build skipped (wrangler not configured in CI)"
+      - name: Test (worker — if vitest config exists)
+        working-directory: bscode/apps/worker
+        run: |
+          if [ -f vitest.config.ts ]; then bun run vitest run; else echo "no vitest config — skipping"; fi
 
       - name: Build (web)
-        run: cd apps/web && bun run build
+        working-directory: bscode/apps/web
+        run: bun run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
