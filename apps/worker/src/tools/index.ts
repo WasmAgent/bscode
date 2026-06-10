@@ -2,7 +2,7 @@ import type { ToolDefinition } from "@agentkit-js/core";
 import { globalFileLock } from "@agentkit-js/core";
 import { applyPatch } from "diff";
 import { z } from "zod";
-import type { KvStore } from "./platform.js";
+import type { KvStore } from "../types.js";
 
 // ── Re-export type so callers can use KvStore directly ────────────────────────
 export type { KvStore };

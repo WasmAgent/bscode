@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["bun-types"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/platform.ts",
+    "src/platform.test.ts",
+    "src/server.node.ts",
+    "src/tools/shell.ts",
+    "src/tools/index.ts"
+  ]
+}

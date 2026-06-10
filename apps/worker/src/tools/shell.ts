@@ -1,6 +1,6 @@
 import type { ToolDefinition } from "@agentkit-js/core";
 import { z } from "zod";
-import type { AppConfig } from "./platform.js";
+import type { AppConfig } from "../types.js";
 
 /**
  * Creates a real shell runner using Bun.spawn.

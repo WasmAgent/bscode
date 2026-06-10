@@ -1,17 +1,8 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { AppConfig, KvStore } from "./types.js";
 
-/**
- * Platform-agnostic KV store interface.
- * Cloudflare Workers: backed by KVNamespace.
- * Node.js dev server: backed by MemKvStore or FsKvStore.
- */
-export interface KvStore {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
-  list(opts: { prefix: string }): Promise<{ keys: { name: string }[] }>;
-  delete?(key: string): Promise<void>;
-}
+export type { AppConfig, KvStore };
 
 /** Wraps a Cloudflare KVNamespace as a KvStore. */
 export function kvFromNamespace(ns: KVNamespace): KvStore {
@@ -90,14 +81,14 @@ export class FsKvStore implements KvStore {
     const keys: { name: string }[] = [];
 
     async function walk(dir: string) {
-      let entries: Awaited<ReturnType<typeof readdir>>;
+      let entries: { name: string | Buffer; isDirectory(): boolean }[];
       try {
-        entries = await readdir(dir, { withFileTypes: true });
+        entries = await readdir(dir, { withFileTypes: true }) as { name: string | Buffer; isDirectory(): boolean }[];
       } catch {
         return;
       }
       for (const e of entries) {
-        const full = join(dir, e.name);
+        const full = join(dir, String(e.name));
         if (e.isDirectory()) {
           await walk(full);
         } else {
@@ -126,26 +117,6 @@ export class FsKvStore implements KvStore {
       // ignore if already gone
     }
   }
-}
-
-/** Config passed to createApp() — platform-independent. */
-export interface AppConfig {
-  // Model credentials
-  anthropicApiKey?: string;
-  anthropicBaseUrl?: string;
-  anthropicAuthToken?: string;
-  doubaoApiKey?: string;
-  deepseekApiKey?: string;
-  e2bApiKey?: string;
-  // Auth
-  clientToken?: string;
-  allowedOrigin?: string;
-  // Storage
-  filesKv?: KvStore;
-  sessionsKv?: KvStore;
-  // Shell (Bun local dev only)
-  enableShell?: boolean;
-  workdir?: string;
 }
 
 /** Session-namespaced KV store — prefixes all keys with session:{id}: */

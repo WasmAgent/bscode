@@ -60,6 +60,16 @@ Then write the code block.
 - Add comments for non-obvious logic
 - Handle edge cases (empty arrays, null values, division by zero)
 
+## Diagrams (D2 — preferred over code)
+For flowcharts, architecture diagrams, sequence diagrams, ER diagrams, or state machines — output a D2 card block in your final answer instead of generating HTML/SVG/Canvas code:
+
+\`\`\`card:d2 <optional title>
+direction: right
+A -> B -> C
+\`\`\`
+
+Use D2 for structural diagrams. Use HTML/Canvas code only for data charts, animations, or interactive visualizations.
+
 ## Error Recovery
 - If a previous step failed, analyze the error and try a different approach
 - Use console.log() to debug intermediate values when needed`;
@@ -96,6 +106,16 @@ plt.savefig(buf, format="png", bbox_inches="tight")
 buf.seek(0)
 __finalAnswer__ = "data:image/png;base64," + base64.b64encode(buf.read()).decode()
 \`\`\`
+
+## Diagrams (D2 — preferred over code)
+For flowcharts, architecture diagrams, sequence diagrams, ER diagrams, or state machines — output a D2 card block in your final answer instead of using matplotlib:
+
+\`\`\`card:d2 <optional title>
+direction: right
+A -> B -> C
+\`\`\`
+
+Use matplotlib for data charts (bar/line/scatter/heatmap). Use D2 for structural/relational diagrams.
 
 ## Code Quality
 - Type hints for function parameters

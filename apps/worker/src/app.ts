@@ -1,4 +1,4 @@
-import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@agentkit-js/core";
+import type { AgentEvent, Model, ModelMessage, Scorer, ToolDefinition } from "@agentkit-js/core";
 import {
   FileTreeManager,
 } from "@agentkit-js/core";
@@ -17,6 +17,7 @@ import {
   maxInputLength,
   MessageAssembler,
   OtelBridge,
+  ParallelForkJoinRunner,
   ProgrammaticOrchestrator,
   ReflectRefineRunner,
   runEval,
@@ -247,25 +248,33 @@ Rules:
       config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
     );
 
-    const prompt = `You are assessing whether a coding task needs clarification before execution.
-IMPORTANT: Reply in the SAME LANGUAGE as the task. If the task is in Chinese, your questions and options must be in Chinese.
+    const prompt = `You are deciding whether a coding task needs clarification before execution.
+IMPORTANT: Reply in the SAME LANGUAGE as the task (Chinese task → Chinese questions).
 
 Task: "${task.slice(0, 600)}"
 ${context ? `Context: "${context.slice(0, 200)}"` : ""}
 
-Determine if this task is AMBIGUOUS in ways that would cause the wrong output.
-Clear tasks (do NOT ask): "sort this array", "add a button", "fix bug in line 10", "create a React todo app"
-Ambiguous tasks (ask): "build a dashboard" (which data?), "make it better" (better how?), "add authentication" (which method?)
+DEFAULT: Do NOT ask. Only ask when the task is so vague that executing it would very likely produce the WRONG output.
 
-For each question, provide 2-4 short option labels the user can click, PLUS allow free text.
-Reply JSON only, matching the task language:
+NEVER ask when the task:
+- Names specific technology/format (React, D2, Markdown, SQL, REST…)
+- Has a clear deliverable (draw X, implement Y, fix Z, explain W)
+- Is a standard well-known operation (sort array, add button, create todo app, draw flowchart, explain code)
+- Contains enough specifics to make a reasonable choice (e.g. "画一个系统架构图（前端→API→数据库）" is fully specified)
+
+ONLY ask when:
+- The scope is completely undefined ("make it better", "build a dashboard" with NO other info, "add authentication" with zero context)
+- Two completely different valid interpretations exist AND the wrong choice wastes significant effort
+- Max 2 questions. Options: 2-4 short labels (2-5 words each)
+
+When in doubt → do NOT ask.
+
+Reply JSON only:
 {"needsClarification": false}
 OR
 {"needsClarification": true, "questions": [
-  {"text": "question text", "options": ["Option A", "Option B", "Option C"]}
-]}
-
-Max 2 questions. Options should be short (2-5 words each). Ask only what is truly needed.`;
+  {"text": "question text", "options": ["Option A", "Option B"]}
+]}`;
 
     try {
       let text = "";
@@ -653,7 +662,7 @@ or {"mode":"tool","framework":null}`;
       const resolvedModelId = primaryModelForHash ? getModelId(primaryModelForHash) : (modelId ?? "unknown");
       const kvKey = await contentHash({
         task, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement,
-        ...(((body as Record<string, unknown>)._testRunId) ? { _r: (body as Record<string, unknown>)._testRunId } : {}),
+        ...((((body as unknown) as Record<string, unknown>)._testRunId) ? { _r: ((body as unknown) as Record<string, unknown>)._testRunId } : {}),
       });
       const cached = await sessionsKv.get(kvKey);
       if (cached) return streamCachedEvents(cached);
@@ -778,7 +787,7 @@ or {"mode":"tool","framework":null}`;
           const maxCycles = policy?.reflectRefine?.maxCycles ?? 2;
           agentRun = enhancedAgentRun(model, new ReflectRefineRunner({ maxCycles }), finalTask);
         } else if (useBudgetForcing) {
-          agentRun = enhancedAgentRun(model, new BudgetForcingRunner({ maxBudgetTokens: 2000 }), finalTask);
+          agentRun = enhancedAgentRun(model, new BudgetForcingRunner({ maxWaitRounds: 2 }), finalTask);
         } else if (useParallelFork) {
           const { ParallelForkJoinRunner } = await import("@agentkit-js/core");
           const branches = policy?.parallelForkJoin?.branches ?? 3;
@@ -786,7 +795,7 @@ or {"mode":"tool","framework":null}`;
           const aggregation = policy?.parallelForkJoin?.aggregation ?? "summary";
           agentRun = enhancedAgentRun(model, new ParallelForkJoinRunner({ branches, concurrency, aggregation }), finalTask);
         } else if (agentMode === "multi") {
-          agentRun = multiAgentRun(model, tools, finalTask, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
+          agentRun = multiAgentRun(model, tools, finalTask, { maxSteps: agentExtras.maxSteps });
         } else if (agentMode === "ptc") {
           agentRun = ptcAgentRun(model, tools, finalTask, codeLanguage, config);
         } else {
@@ -837,7 +846,7 @@ or {"mode":"tool","framework":null}`;
         const kvKey = sessionsKv
           ? await contentHash({
               task: finalTask, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement,
-              ...(((body as Record<string, unknown>)._testRunId) ? { _r: (body as Record<string, unknown>)._testRunId } : {}),
+              ...((((body as unknown) as Record<string, unknown>)._testRunId) ? { _r: ((body as unknown) as Record<string, unknown>)._testRunId } : {}),
             })
           : null;
 
@@ -904,7 +913,7 @@ or {"mode":"tool","framework":null}`;
         ? createCodeAgent(model, tools, { maxSteps })
         : createToolAgent(model, tools, { maxSteps });
 
-    const scorerMap: Record<string, ReturnType<typeof exactMatch>> = {
+    const scorerMap: Record<string, Scorer> = {
       exactMatch: exactMatch,
       toolCallAccuracy: toolCallAccuracy,
       trajectoryValidity: trajectoryValidity,
@@ -1085,7 +1094,7 @@ function buildOutputGuardrails(guardrails?: RunBody["guardrails"]) {
 
 async function* enhancedAgentRun(
   model: Model,
-  runner: SelfConsistencyRunner | ReflectRefineRunner | BudgetForcingRunner,
+  runner: SelfConsistencyRunner | ReflectRefineRunner | BudgetForcingRunner | ParallelForkJoinRunner,
   task: string
 ): AsyncGenerator<AgentEvent> {
   const traceId = `enhanced-${Date.now()}`;

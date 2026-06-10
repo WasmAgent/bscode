@@ -1,6 +1,9 @@
 "use client";
 import type { AgentMessage } from "@agentkit-js/react";
-import { useEffect, useRef } from "react";
+import type { CardBlock } from "@agentkit-js/ui-cards";
+import { useEffect, useRef, useCallback } from "react";
+import { ChatMessage } from "@/components/cards";
+import { CardRenderer } from "@/components/cards";
 
 interface AgentEventMinimal {
   event: string;
@@ -46,6 +49,8 @@ export interface PreviewContent {
   logs?: string[];
   /** Error message from execution */
   error?: string;
+  /** A card block selected from the conversation to display full-size */
+  card?: CardBlock;
 }
 
 interface TerminalProps {
@@ -66,6 +71,14 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, rawEvents]);
+
+  // D2 renderer — fresh instance per call to avoid Worker message ordering issues
+  const renderD2 = useCallback(async (content: string): Promise<string> => {
+    const { D2 } = await import("@terrastruct/d2");
+    const d2 = new D2();
+    const result = await d2.compile(content);
+    return d2.render(result.diagram, { ...result.renderOptions, noXMLTag: true, pad: 32 });
+  }, []);
 
   const mono: React.CSSProperties = {
     fontFamily: "JetBrains Mono, monospace",
@@ -101,6 +114,36 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
   // ── Preview tab ───────────────────────────────────────────────────────────
   if (viewMode === "preview") {
     const allLines = [...(wcLines ?? []), ...(preview?.logs ?? [])];
+
+    // Card selected from conversation → render full-size
+    if (preview?.card) {
+      return (
+        <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#f8fafc" }}>
+          <div style={{ background: "#161b22", borderBottom: "1px solid #30363d", padding: "4px 12px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <span style={{ ...mono, fontSize: 10, color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.8 }}>Card Preview</span>
+            <span style={{ ...mono, fontSize: 10, color: "#58a6ff" }}>card:{preview.card.type}{preview.card.meta ? ` — ${preview.card.meta}` : ""}</span>
+          </div>
+          {/* flex: 1 + overflow: hidden lets the card fill remaining height */}
+          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <CardRenderer
+              card={preview.card}
+              onRenderD2={renderD2}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                margin: 0,
+                borderRadius: 0,
+                border: "none",
+                boxShadow: "none",
+                height: "100%",
+              }}
+              fillHeight
+            />
+          </div>
+        </div>
+      );
+    }
 
     // Nothing to show yet — but WebContainers may be running (show its terminal)
     if (!preview?.html && !preview?.url && !preview?.output && !preview?.error) {
@@ -221,9 +264,19 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
           <div style={empty}>Output will appear here after running the agent.</div>
         )}
         {messages.map((msg) => (
-          <div key={msg.id} style={{ marginBottom: 2, wordBreak: "break-word", whiteSpace: "pre-wrap", color: msgColor(msg.role) }}>
-            <span style={{ color: "#8b949e" }}>{msgPrefix(msg.role, msg.toolName)}</span>{" "}
-            {msg.content}
+          <div key={msg.id} style={{ marginBottom: 8 }}>
+            {/* Tool and error messages stay in terminal style */}
+            {(msg.role === "tool" || msg.role === "error") ? (
+              <div style={{ wordBreak: "break-word", whiteSpace: "pre-wrap", color: msgColor(msg.role), fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
+                <span style={{ color: "#8b949e" }}>{msgPrefix(msg.role, msg.toolName)}</span>{" "}
+                {msg.content}
+              </div>
+            ) : (
+              /* Assistant messages: render in a light container so card components display correctly */
+              <div style={{ background: "#ffffff", borderRadius: 6, padding: "2px 0", overflow: "hidden" }}>
+                <ChatMessage message={msg} onRenderD2={renderD2} />
+              </div>
+            )}
           </div>
         ))}
         {/* v0.dev pattern: streaming artifacts shown as they're written */}

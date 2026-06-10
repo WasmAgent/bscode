@@ -62,8 +62,8 @@ async function getOrCreateEncKey(store: KvStore): Promise<CryptoKey> {
   const newKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
     "encrypt",
     "decrypt",
-  ]);
-  const exported = await crypto.subtle.exportKey("raw", newKey);
+  ]) as CryptoKey;
+  const exported = await crypto.subtle.exportKey("raw", newKey) as ArrayBuffer;
   const b64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
   await store.put(STORE_KEY_KV, b64);
   encKey = newKey;

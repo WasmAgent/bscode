@@ -7,6 +7,9 @@ import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgen
 import { useGitHub } from "@/hooks/useGitHub";
 import { useImport } from "@/hooks/useImport";
 import { toFileSystemTree, useWebContainer } from "@/hooks/useWebContainer";
+import { parseCardBlocks } from "@agentkit-js/ui-cards";
+import type { CardBlock } from "@agentkit-js/ui-cards";
+import { autoUpgradeCards } from "@/lib/autoUpgradeCards";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -99,6 +102,8 @@ export default function Home() {
   /** User's answers to each clarifying question (index → answer string) */
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<number, string>>({});
   const [preview, setPreview] = useState<PreviewContent | undefined>(undefined);
+  /** Currently selected card from conversation — shown full-size in preview */
+  const [selectedCard, setSelectedCard] = useState<CardBlock | null>(null);
   const [previewView, setPreviewView] = useState<"messages" | "events" | "preview">("preview");
   /** Streaming artifacts collected from artifact_delta events (v0.dev progressive rendering) */
   const [streamingArtifacts, setStreamingArtifacts] = useState<
@@ -359,6 +364,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       setInputText("");
       setClarifyAnswers({});
       setPreview(undefined);
+      setSelectedCard(null);
       setStreamingArtifacts(new Map());
       wcReset();
 
@@ -672,10 +678,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                 }
                 onFix={turn.status === "error" ? () => {
                   const fixTask = `修复错误：${turn.error}\n\n原始任务：${turn.task}`;
-                  // skipClarify=true — fix tasks always run immediately, no re-clarify
-          handleSubmit(fixTask, true);
+                  handleSubmit(fixTask, true);
                 } : undefined}
                 onRetry={() => handleSubmit(turn.task, true)}
+                onPreviewCard={(card) => {
+                  setSelectedCard(card);
+                  setPreviewView("preview");
+                }}
               />
             ))}
             <div ref={chatBottomRef} />
@@ -989,7 +998,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               rawEvents={rawEvents}
               isRunning={isRunning}
               viewMode={previewView}
-              preview={preview}
+              preview={selectedCard ? { ...preview, card: selectedCard } : preview}
               wcLines={wcLines}
               streamingArtifacts={streamingArtifacts.size > 0 ? streamingArtifacts : undefined}
             />
@@ -1019,15 +1028,22 @@ interface TurnBlockProps {
   streamingText?: string;
   onFix?: () => void;
   onRetry: () => void;
+  /** Called when user clicks a card tile — sends it to the preview panel */
+  onPreviewCard: (card: CardBlock) => void;
 }
 
-function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockProps) {
+function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCard }: TurnBlockProps) {
   const label = modeLabel(turn.detectedMode);
   const thinkingText = isActive ? streamingText : turn.agentText;
   const displayText = turn.status === "done" && turn.finalAnswer ? turn.finalAnswer : null;
   const [thinkingCollapsed, setThinkingCollapsed] = useState(turn.thinkingCollapsed);
 
-  // Sync collapse state when turn finishes
+  // Parse cards out of the final answer
+  // Auto-upgrade: wrap bare D2/Markdown content in card fences if AI missed it
+  const upgradedText = displayText ? autoUpgradeCards(displayText) : null;
+  const parsedAnswer = upgradedText ? parseCardBlocks(upgradedText) : null;
+  const hasCards = parsedAnswer && parsedAnswer.cards.length > 0;
+
   useEffect(() => {
     if (turn.thinkingCollapsed) setThinkingCollapsed(true);
   }, [turn.thinkingCollapsed]);
@@ -1168,13 +1184,75 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockP
               {turn.error}
             </div>
           ) : displayText ? (
-            <div style={{
-              background: "#161b22", border: "1px solid #30363d", borderRadius: 6,
-              padding: "10px 12px", fontSize: 12, color: "#c9d1d9", lineHeight: 1.7,
-              whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
-              maxHeight: 300, overflowY: "auto",
-            }}>
-              {displayText}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {hasCards ? (
+                // Cards found: render each segment as a tile (card) or plain text
+                parsedAnswer!.segments.map((seg, i) => {
+                  if (seg.kind === "card") {
+                    const cardTypeLabel: Record<string, string> = { d2: "🔷 D2 Diagram", markdown: "📄 Markdown" };
+                    const label = cardTypeLabel[seg.card.type] ?? `📎 ${seg.card.type}`;
+                    return (
+                      <button
+                        key={seg.card.id}
+                        type="button"
+                        onClick={() => onPreviewCard(seg.card)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          background: "#161b22",
+                          border: "1px solid #30363d",
+                          borderRadius: 8,
+                          padding: "10px 14px",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "border-color 0.15s",
+                          width: "100%",
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#58a6ff"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#30363d"; }}
+                      >
+                        <span style={{ fontSize: 22, flexShrink: 0 }}>
+                          {seg.card.type === "d2" ? "🔷" : seg.card.type === "markdown" ? "📄" : "📎"}
+                        </span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#c9d1d9", fontFamily: "inherit" }}>
+                            {seg.card.meta ?? label}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#8b949e", fontFamily: "JetBrains Mono, monospace" }}>
+                            card:{seg.card.type} · {seg.card.content.split("\n").length} lines · 点击查看
+                          </div>
+                        </div>
+                        <span style={{ marginLeft: "auto", fontSize: 16, color: "#58a6ff", flexShrink: 0 }}>›</span>
+                      </button>
+                    );
+                  }
+                  // Plain text segments (non-empty)
+                  const text = seg.content.trim();
+                  if (!text) return null;
+                  return (
+                    <div
+                      key={`text-${i}`}
+                      style={{
+                        fontSize: 12, color: "#c9d1d9", lineHeight: 1.7,
+                        whiteSpace: "pre-wrap", wordBreak: "break-word",
+                      }}
+                    >
+                      {text}
+                    </div>
+                  );
+                })
+              ) : (
+                // No cards — plain text display
+                <div style={{
+                  background: "#161b22", border: "1px solid #30363d", borderRadius: 6,
+                  padding: "10px 12px", fontSize: 12, color: "#c9d1d9", lineHeight: 1.7,
+                  whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
+                  maxHeight: 300, overflowY: "auto",
+                }}>
+                  {upgradedText}
+                </div>
+              )}
             </div>
           ) : isActive && !thinkingText ? (
             <div style={{ color: "#8b949e", fontSize: 12 }}>
