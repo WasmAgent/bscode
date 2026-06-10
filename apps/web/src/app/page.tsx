@@ -23,6 +23,8 @@ interface ConversationTurn {
   timestamp: number;
   /** Accumulated agent output for this turn */
   agentText: string;
+  /** Structured plan from <boltThinking> tags (shown before files are written) */
+  planText: string | null;
   /** Tool calls/results summary lines */
   toolLines: string[];
   finalAnswer: string | null;
@@ -96,6 +98,10 @@ export default function Home() {
   const [inputText, setInputText] = useState("");
   const [preview, setPreview] = useState<PreviewContent | undefined>(undefined);
   const [previewView, setPreviewView] = useState<"messages" | "events" | "preview">("preview");
+  /** Streaming artifacts collected from artifact_delta events (v0.dev progressive rendering) */
+  const [streamingArtifacts, setStreamingArtifacts] = useState<
+    Map<string, { path?: string; content: string; done: boolean }>
+  >(new Map());
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -136,6 +142,14 @@ export default function Home() {
   useEffect(() => {
     if (!currentTurnId.current) return;
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const rawText = lastAssistant?.content ?? "";
+
+    // Extract <boltThinking> plan block (bolt.new pattern) — show as plan preview
+    const planMatch = /<boltThinking>([\s\S]*?)<\/boltThinking>/i.exec(rawText);
+    const planText = planMatch ? planMatch[1].trim() : null;
+    // Strip the boltThinking block from displayed agent text
+    const agentText = rawText.replace(/<boltThinking>[\s\S]*?<\/boltThinking>/gi, "").trim();
+
     const toolLines = messages
       .filter((m) => m.role === "tool")
       .map((m) => m.content);
@@ -145,7 +159,8 @@ export default function Home() {
         t.id === currentTurnId.current
           ? {
               ...t,
-              agentText: lastAssistant?.content ?? t.agentText,
+              agentText: agentText || t.agentText,
+              planText: planText ?? t.planText,
               toolLines,
               error: errorMsg,
               status: isRunning ? "running" : errorMsg ? "error" : t.status,
@@ -214,6 +229,32 @@ export default function Home() {
       .filter(Boolean) as string[];
     if (kernelResults.length > 0) {
       setPreview((prev) => ({ ...prev, logs: kernelResults }));
+    }
+
+    // Progressive artifact streaming (v0.dev pattern) — collect artifact_delta events
+    for (const ev of rawEvents) {
+      const d = ev.data as Record<string, unknown>;
+      if (ev.event === "artifact_stream_start") {
+        const id = String(d.artifactId ?? "");
+        setStreamingArtifacts((prev) =>
+          new Map(prev).set(id, { path: d.path as string | undefined, content: "", done: false })
+        );
+      } else if (ev.event === "artifact_delta") {
+        const id = String(d.artifactId ?? "");
+        const delta = String(d.delta ?? "");
+        setStreamingArtifacts((prev) => {
+          const existing = prev.get(id);
+          if (!existing) return prev;
+          return new Map(prev).set(id, { ...existing, content: existing.content + delta });
+        });
+      } else if (ev.event === "artifact_stream_end") {
+        const id = String(d.artifactId ?? "");
+        setStreamingArtifacts((prev) => {
+          const existing = prev.get(id);
+          if (!existing) return prev;
+          return new Map(prev).set(id, { ...existing, done: true });
+        });
+      }
     }
   }, [rawEvents]);
 
@@ -302,6 +343,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       if (!text || isRunning || classifying) return;
       setInputText("");
       setPreview(undefined);
+      setStreamingArtifacts(new Map());
       wcReset();
 
       const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
@@ -339,6 +381,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           detectedMode: null,
           timestamp: Date.now(),
           agentText: "",
+          planText: null,
           toolLines: [],
           writtenFiles: [],
           thinkingCollapsed: false,
@@ -822,6 +865,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               viewMode={previewView}
               preview={preview}
               wcLines={wcLines}
+              streamingArtifacts={streamingArtifacts.size > 0 ? streamingArtifacts : undefined}
             />
           </div>
         </div>
@@ -901,6 +945,34 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry }: TurnBlockP
           {isActive ? "⟳" : turn.status === "error" ? "✗" : "✓"}
         </div>
         <div style={{ flex: 1 }}>
+          {/* Plan section — bolt.new <boltThinking> pattern: show plan before files are written */}
+          {turn.planText && (
+            <div style={{ marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={() => setThinkingCollapsed((c) => !c)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  background: "none", border: "none", padding: "2px 0",
+                  color: "#58a6ff", fontSize: 10, cursor: "pointer",
+                  fontFamily: "JetBrains Mono, monospace",
+                }}
+              >
+                <span style={{ transform: thinkingCollapsed && !isActive ? "rotate(-90deg)" : "rotate(0)", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
+                📋 Plan
+              </button>
+              {(!thinkingCollapsed || isActive) && (
+                <div style={{
+                  background: "#0d1b2a", border: "1px solid #1f6feb33", borderRadius: 5,
+                  padding: "8px 10px", fontSize: 11, color: "#8b949e", lineHeight: 1.7,
+                  whiteSpace: "pre-wrap", wordBreak: "break-word" as const, marginTop: 4,
+                }}>
+                  {turn.planText}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* File write progress — shown during framework-mode runs */}
           {isActive && turn.writtenFiles.length > 0 && (
             <div style={{ marginBottom: 8, background: "#0d1117", border: "1px solid #30363d", borderRadius: 5, padding: "6px 10px" }}>

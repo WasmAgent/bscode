@@ -1,5 +1,8 @@
 import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@agentkit-js/core";
 import {
+  FileTreeManager,
+} from "@agentkit-js/core";
+import {
   BudgetForcingRunner,
   CheckpointableRun,
   classifierGuardrail,
@@ -88,6 +91,10 @@ function recordError(message: string, stack?: string, traceId?: string) {
   if (stack) console.error(stack.split("\n").slice(0, 4).join("\n"));
 }
 const globalCheckpointer = new InMemoryCheckpointer();
+
+// Per-request FileTreeManager (reset on each /run, shared across file ops within a run).
+// Tracks file hashes for conflict detection and semantic relevance scoring.
+const globalFileTree = new FileTreeManager();
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {
@@ -458,6 +465,8 @@ or {"mode":"tool","framework":null}`;
     const { path, content } = await c.req.json<{ path: string; content: string }>();
     if (!path || content === undefined) return c.json({ error: "path and content required" }, 400);
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
+    // Keep FileTreeManager in sync for conflict detection and context relevance
+    globalFileTree.recordWrite(path.replace(/^\/+/, ""), content);
     return c.json({ ok: true, path });
   });
 
@@ -571,7 +580,10 @@ or {"mode":"tool","framework":null}`;
 
         let finalTask = task;
         if (projectContext) {
-          const fileTree = await buildProjectFileTree(filesKv);
+          // Use FileTreeManager for richer project context (includes file hashes for conflict detection)
+          const fileTree = globalFileTree.size > 0
+            ? globalFileTree.formatForPrompt(60)
+            : await buildProjectFileTree(filesKv);
           const ctxParts: string[] = ["## Project Files\n" + fileTree];
 
           // Relevance filtering: include content of files that match task keywords
@@ -1173,30 +1185,25 @@ async function getRelevantFileContents(
   task: string,
   maxFiles = 5
 ): Promise<{ path: string; content: string }[]> {
-  const list = await kv.list({ prefix: "file:" });
-  const taskWords = task.toLowerCase().match(/\b\w{3,}\b/g) ?? [];
-  if (taskWords.length === 0) return [];
-
-  const scored: Array<{ path: string; score: number }> = [];
-  for (const key of list.keys) {
-    const path = key.name.replace(/^file:/, "");
-    // Skip binary-ish or very short paths, meta keys, session-namespaced files
-    if (path.startsWith("session:") || path.startsWith("meta:")) continue;
-    const pathScore = taskWords.filter((w) => path.toLowerCase().includes(w)).length;
-    if (pathScore > 0) scored.push({ path, score: pathScore });
+  // Hydrate FileTreeManager from KV if it's empty or stale
+  if (globalFileTree.size === 0) {
+    const list = await kv.list({ prefix: "file:" });
+    const entries = await Promise.all(
+      list.keys
+        .filter((k) => !k.name.startsWith("file:session:") && !k.name.startsWith("file:meta:"))
+        .slice(0, 200) // cap at 200 files
+        .map(async (k) => {
+          const path = k.name.replace(/^file:/, "");
+          const content = await kv.get(k.name);
+          return content !== null ? { path, content } : null;
+        })
+    );
+    globalFileTree.hydrate(entries.filter(Boolean) as { path: string; content: string }[]);
   }
 
-  // Sort by relevance, take top N
-  scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, maxFiles);
-
-  const results = await Promise.all(
-    top.map(async ({ path }) => {
-      const content = (await kv.get(`file:${path}`)) ?? "";
-      return { path, content };
-    })
-  );
-  return results.filter((r) => r.content.length > 0);
+  // Use FileTreeManager's semantic scoring (path + content keywords + recency)
+  const scored = globalFileTree.getRelevantFiles(task, maxFiles, 2000);
+  return scored.map((f) => ({ path: f.path, content: f.content }));
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

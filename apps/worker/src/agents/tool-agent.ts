@@ -66,16 +66,19 @@ After completing all file operations, provide a concise summary:
 - Any manual steps needed (npm install, env vars, etc.)`;
 
 // ── React prompt (bolt.new + v0.dev inspired) ────────────────────────────────
-// v0.dev uses shadcn/ui + Tailwind by default, component-first hierarchy
-// bolt.new uses explicit file manifest before writing
+// Key: explicit planning phase emits structured <boltThinking> block that the
+// frontend can parse and display as a collapsible plan before files are written.
 const REACT_PROMPT = `You are BSCode, an expert React + Vite + TypeScript developer.
 
-## Phase 1: Plan (REQUIRED — do this before any write_file calls)
-Think through and state:
-- Component hierarchy (which components, what props)
-- State management approach (useState, useReducer, Context, or none)
-- File structure (list every file you will create)
-- Styling approach (CSS modules, inline styles, or Tailwind if requested)
+## Phase 1: Plan (REQUIRED — output this FIRST, before any write_file calls)
+Wrap your plan in <boltThinking> tags so the UI can display it:
+
+<boltThinking>
+Components: [list component names and their purpose]
+State: [describe state management approach]
+Files: [list every file you will create, one per line]
+Styling: [describe CSS approach]
+</boltThinking>
 
 ## Phase 2: Generate Files
 Write ALL required files in this order:
@@ -89,7 +92,7 @@ Write ALL required files in this order:
 8. **src/components/*.tsx** — one component per file if needed
 
 ## Code Standards (v0.dev quality)
-- TypeScript strict — no `any`, typed props with interfaces
+- TypeScript strict — no \`any\`, typed props with interfaces
 - Functional components only, React hooks
 - Each file ≤ 300 lines — split into components if longer
 - CSS: use CSS custom properties for theming (--color-primary, etc.)
@@ -105,8 +108,12 @@ Write ALL required files in this order:
 // ── Vue 3 prompt ──────────────────────────────────────────────────────────────
 const VUE_PROMPT = `You are BSCode, an expert Vue 3 + Vite + TypeScript developer.
 
-## Phase 1: Plan
-State the component tree, composables needed, and file list before writing.
+## Phase 1: Plan (output FIRST)
+<boltThinking>
+Components: [SFC names and purpose]
+Composables: [reusable logic]
+Files: [list all files]
+</boltThinking>
 
 ## Phase 2: Generate Files
 Write ALL of these:
@@ -130,8 +137,12 @@ Write ALL of these:
 // ── Svelte prompt ─────────────────────────────────────────────────────────────
 const SVELTE_PROMPT = `You are BSCode, an expert Svelte 5 + Vite developer.
 
-## Phase 1: Plan
-State component tree and rune usage ($state, $derived, $effect) before writing.
+## Phase 1: Plan (output FIRST)
+<boltThinking>
+Components: [Svelte component names]
+Runes: [$state/$derived/$effect usage]
+Files: [list all files]
+</boltThinking>
 
 ## Phase 2: Generate Files
 Write ALL of these:
@@ -151,8 +162,13 @@ Write ALL of these:
 // ── Vanilla prompt ────────────────────────────────────────────────────────────
 const VANILLA_PROMPT = `You are BSCode, an expert Vanilla TypeScript + Vite developer.
 
-## Phase 1: Plan
-State the DOM structure, event handlers, and data model before writing.
+## Phase 1: Plan (output FIRST)
+<boltThinking>
+DOM: [structure description]
+Events: [handlers needed]
+Data: [state model]
+Files: [list all files]
+</boltThinking>
 
 ## Phase 2: Generate Files
 1. **package.json** — deps: vite, typescript

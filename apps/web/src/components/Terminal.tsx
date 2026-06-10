@@ -56,9 +56,11 @@ interface TerminalProps {
   preview?: PreviewContent;
   /** Live WebContainers terminal output lines */
   wcLines?: string[];
+  /** Streaming artifacts being written (from artifact_delta events) */
+  streamingArtifacts?: Map<string, { path?: string; content: string; done: boolean }>;
 }
 
-export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wcLines }: TerminalProps) {
+export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wcLines, streamingArtifacts }: TerminalProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -210,9 +212,12 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
 
   // ── Messages tab ──────────────────────────────────────────────────────────
   if (viewMode === "messages") {
+    const artifacts = streamingArtifacts
+      ? Array.from(streamingArtifacts.entries()).filter(([, a]) => a.content.length > 0)
+      : [];
     return (
       <div style={container}>
-        {messages.length === 0 && (
+        {messages.length === 0 && artifacts.length === 0 && (
           <div style={empty}>Output will appear here after running the agent.</div>
         )}
         {messages.map((msg) => (
@@ -221,7 +226,28 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
             {msg.content}
           </div>
         ))}
-        {isRunning && <span style={cursor} />}
+        {/* v0.dev pattern: streaming artifacts shown as they're written */}
+        {artifacts.map(([id, artifact]) => (
+          <div key={id} style={{ marginBottom: 8, marginTop: 4 }}>
+            <div style={{ fontSize: 10, color: "#58a6ff", marginBottom: 3, display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ color: "#30363d" }}>──</span>
+              {artifact.path ?? "file"}
+              {!artifact.done && <span style={{ color: "#e3b341", animation: "pulse 1s infinite" }}>● writing</span>}
+              {artifact.done && <span style={{ color: "#3fb950" }}>✓ done</span>}
+            </div>
+            <div style={{
+              background: "#0d1117", border: "1px solid #21262d", borderRadius: 4,
+              padding: "6px 10px", fontSize: 11, color: "#c9d1d9",
+              whiteSpace: "pre-wrap", wordBreak: "break-word",
+              maxHeight: 150, overflowY: "auto",
+              fontFamily: "JetBrains Mono, monospace",
+            }}>
+              {artifact.content.slice(0, 600)}{artifact.content.length > 600 ? "…" : ""}
+              {!artifact.done && <span style={{ display: "inline-block", width: 6, height: 12, background: "#58a6ff", animation: "blink 1s step-end infinite", verticalAlign: "text-bottom", marginLeft: 2 }} />}
+            </div>
+          </div>
+        ))}
+        {isRunning && artifacts.length === 0 && <span style={cursor} />}
         <div ref={bottomRef} />
       </div>
     );
