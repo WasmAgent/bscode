@@ -151,8 +151,8 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
             <iframe
               title="bscode-wc-preview"
               src={preview.url}
-              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
-              allow="cross-origin-isolated"
+              style={{ width: "100%", height: "100%", border: "none", display: "block", pointerEvents: "auto" }}
+              allow="cross-origin-isolated; pointer-lock *; clipboard-read *; clipboard-write *"
             />
           </div>
         </div>
