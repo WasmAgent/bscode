@@ -38,10 +38,20 @@ jobs:
           # bscode/package.json references "../agentkit-js/packages/*" in workspaces.
           # GitHub puts both checkouts at $GITHUB_WORKSPACE (sibling already).
           ls -la "$GITHUB_WORKSPACE"
+          echo "--- agentkit-js packages ---"
+          ls -la "$GITHUB_WORKSPACE/agentkit-js/packages" || echo "MISSING"
+
+      - name: Install dependencies (agentkit-js — build deps first)
+        working-directory: agentkit-js
+        run: bun install --frozen-lockfile
+
+      - name: Build agentkit-js packages (so dist/ exists for typecheck)
+        working-directory: agentkit-js
+        run: bun run build
 
       - name: Install dependencies (bscode)
         working-directory: bscode
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Typecheck (worker)
         working-directory: bscode/apps/worker
