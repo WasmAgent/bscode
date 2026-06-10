@@ -96,6 +96,8 @@ export default function Home() {
   const currentTurnId = useRef<string | null>(null);
 
   const [inputText, setInputText] = useState("");
+  /** User's answers to each clarifying question (index → answer string) */
+  const [clarifyAnswers, setClarifyAnswers] = useState<Record<number, string>>({});
   const [preview, setPreview] = useState<PreviewContent | undefined>(undefined);
   const [previewView, setPreviewView] = useState<"messages" | "events" | "preview">("preview");
   /** Streaming artifacts collected from artifact_delta events (v0.dev progressive rendering) */
@@ -342,6 +344,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       const text = taskText.trim();
       if (!text || isRunning || classifying) return;
       setInputText("");
+      setClarifyAnswers({});
       setPreview(undefined);
       setStreamingArtifacts(new Map());
       wcReset();
@@ -670,36 +673,136 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             background: "#0d1117",
             flexShrink: 0,
           }}>
-            {/* Clarifying questions banner (Lovable pattern) */}
-            {clarifyingQuestions && clarifyingQuestions.length > 0 && !isRunning && (
-              <div style={{
-                marginBottom: 10,
-                background: "#0d1b2a",
-                border: "1px solid #1f6feb66",
-                borderRadius: 8,
-                padding: "10px 14px",
-              }}>
-                <div style={{ fontSize: 11, color: "#58a6ff", fontWeight: 700, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-                  <span>💬 A few questions before I start:</span>
+            {/* Clarifying questions — Claude Code style: options + free text + auto-continue */}
+            {clarifyingQuestions && clarifyingQuestions.length > 0 && !isRunning && (() => {
+              // Check if all questions have been answered
+              const allAnswered = clarifyingQuestions.every((_, i) => (clarifyAnswers[i] ?? "").trim());
+
+              const submitWithAnswers = () => {
+                const answerSuffix = clarifyingQuestions
+                  .map((q, i) => `${q.text}: ${clarifyAnswers[i] ?? ""}`)
+                  .join("\n");
+                const enrichedTask = inputText.trim()
+                  ? `${inputText.trim()}\n\n${answerSuffix}`
+                  : answerSuffix;
+                dismissClarify();
+                setClarifyAnswers({});
+                handleSubmit(enrichedTask);
+              };
+
+              return (
+                <div style={{ marginBottom: 10, background: "#0d1b2a", border: "1px solid #1f6feb55", borderRadius: 8, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 11, color: "#58a6ff", fontWeight: 700, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>💬 {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "几个问题帮我更好地理解需求：" : "A few questions before I start:"}</span>
+                    <button
+                      type="button"
+                      onClick={() => { dismissClarify(); setClarifyAnswers({}); handleSubmit(inputText); }}
+                      style={{ background: "none", border: "none", color: "#8b949e", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "跳过，直接运行 →" : "Skip, run anyway →"}
+                    </button>
+                  </div>
+
+                  {clarifyingQuestions.map((q, qi) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: ordered questions
+                    <div key={qi} style={{ marginBottom: qi < clarifyingQuestions.length - 1 ? 12 : 8 }}>
+                      <div style={{ fontSize: 12, color: "#c9d1d9", marginBottom: 6, fontWeight: 500 }}>
+                        {qi + 1}. {q.text}
+                      </div>
+
+                      {/* Option buttons */}
+                      {q.options.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                          {q.options.map((opt, oi) => {
+                            const selected = clarifyAnswers[qi] === opt;
+                            return (
+                              // biome-ignore lint/suspicious/noArrayIndexKey: ordered options
+                              <button
+                                key={oi}
+                                type="button"
+                                onClick={() => setClarifyAnswers((prev) => ({ ...prev, [qi]: selected ? "" : opt }))}
+                                style={{
+                                  padding: "5px 12px",
+                                  borderRadius: 20,
+                                  border: `1px solid ${selected ? "#58a6ff" : "#30363d"}`,
+                                  background: selected ? "#1f6feb22" : "transparent",
+                                  color: selected ? "#58a6ff" : "#8b949e",
+                                  fontSize: 11,
+                                  cursor: "pointer",
+                                  fontFamily: "inherit",
+                                  transition: "all 0.1s",
+                                }}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                          {/* "Other" option to show free text */}
+                          <button
+                            type="button"
+                            onClick={() => setClarifyAnswers((prev) => ({ ...prev, [qi]: prev[qi] && !q.options.includes(prev[qi]) ? "" : "other:" }))}
+                            style={{
+                              padding: "5px 12px",
+                              borderRadius: 20,
+                              border: `1px solid ${clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : "#30363d"}`,
+                              background: clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#1f6feb22" : "transparent",
+                              color: clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : "#8b949e",
+                              fontSize: 11,
+                              cursor: "pointer",
+                              fontFamily: "inherit",
+                            }}
+                          >{/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "其他…" : "Other…"}</button>
+                        </div>
+                      )}
+
+                      {/* Free text — shown when "其他" selected or no options */}
+                      {(q.options.length === 0 || (clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]))) && (
+                        <input
+                          type="text"
+                          placeholder={/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "请输入..." : "Type your answer..."}
+                          value={clarifyAnswers[qi]?.replace(/^other:/, "") ?? ""}
+                          onChange={(e) => setClarifyAnswers((prev) => ({ ...prev, [qi]: e.target.value || "other:" }))}
+                          onKeyDown={(e) => { if (e.key === "Enter" && allAnswered) submitWithAnswers(); }}
+                          style={{
+                            width: "100%",
+                            background: "#161b22",
+                            border: "1px solid #30363d",
+                            borderRadius: 6,
+                            color: "#c9d1d9",
+                            fontSize: 12,
+                            padding: "6px 10px",
+                            fontFamily: "inherit",
+                            outline: "none",
+                          }}
+                          // biome-ignore lint/a11y/noAutofocus: intentional focus for UX
+                          autoFocus={qi === 0}
+                        />
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Submit button — enabled when all answered */}
                   <button
                     type="button"
-                    onClick={() => { dismissClarify(); handleSubmit(inputText); }}
-                    style={{ background: "none", border: "none", color: "#8b949e", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
-                  >
-                    Skip, run anyway →
-                  </button>
+                    onClick={submitWithAnswers}
+                    disabled={!allAnswered}
+                    style={{
+                      marginTop: 4,
+                      padding: "7px 16px",
+                      borderRadius: 6,
+                      border: "none",
+                      background: allAnswered ? "#1f6feb" : "#21262d",
+                      color: allAnswered ? "#fff" : "#8b949e",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: allAnswered ? "pointer" : "default",
+                      fontFamily: "inherit",
+                      transition: "background 0.15s",
+                    }}
+                  >{/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "确认并运行 ▶" : "Submit & Run ▶"}</button>
                 </div>
-                {clarifyingQuestions.map((q, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: ordered questions
-                  <div key={i} style={{ fontSize: 12, color: "#c9d1d9", marginBottom: i < clarifyingQuestions.length - 1 ? 4 : 0, lineHeight: 1.5 }}>
-                    {i + 1}. {q}
-                  </div>
-                ))}
-                <div style={{ marginTop: 8, fontSize: 10, color: "#484f58" }}>
-                  Add your answers to the task description below, then Run.
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Fix error banner */}
             {lastTurnError && !isRunning && (

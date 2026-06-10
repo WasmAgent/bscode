@@ -50,6 +50,13 @@ export interface ClassifyResult {
   framework: "react" | "vue" | "svelte" | "vanilla" | null;
 }
 
+/** A clarifying question with optional multiple-choice options (Claude Code style) */
+export interface ClarifyQuestion {
+  text: string;
+  /** Pre-defined options the user can click; empty = free text only */
+  options: string[];
+}
+
 // Minimal shape we need from AgentEvent — avoids importing @agentkit-js/core in the browser bundle
 interface AgentEventMinimal {
   event: string;
@@ -69,7 +76,7 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
   const [classifying, setClassifying] = useState(false);
   const [detectedMode, setDetectedMode] = useState<ClassifyResult | null>(null);
   /** Clarifying questions for the current task (null = no clarification needed) */
-  const [clarifyingQuestions, setClarifyingQuestions] = useState<string[] | null>(null);
+  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarifyQuestion[] | null>(null);
   const statsRef = useRef(tokenStats);
 
   const onEvent = useCallback((ev: AgentEventMinimal) => {
@@ -151,9 +158,16 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ task: task.slice(0, 600) }),
           });
-          const result = await res.json() as { needsClarification: boolean; questions?: string[] };
+          const result = await res.json() as {
+            needsClarification: boolean;
+            questions?: Array<{ text: string; options: string[] } | string>;
+          };
           if (result.needsClarification && result.questions?.length) {
-            setClarifyingQuestions(result.questions);
+            // Normalise to ClarifyQuestion[]
+            const qs: ClarifyQuestion[] = result.questions.map((q) =>
+              typeof q === "string" ? { text: q, options: [] } : { text: q.text, options: q.options ?? [] }
+            );
+            setClarifyingQuestions(qs);
             return; // pause — let user answer before running
           }
         } catch {

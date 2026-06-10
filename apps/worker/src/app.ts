@@ -248,37 +248,48 @@ Rules:
     );
 
     const prompt = `You are assessing whether a coding task needs clarification before execution.
+IMPORTANT: Reply in the SAME LANGUAGE as the task. If the task is in Chinese, your questions and options must be in Chinese.
 
 Task: "${task.slice(0, 600)}"
 ${context ? `Context: "${context.slice(0, 200)}"` : ""}
 
 Determine if this task is AMBIGUOUS in ways that would cause the wrong output.
-Ambiguity examples: unclear data source, unknown UI style preference, missing business logic, conflicting requirements.
+Clear tasks (do NOT ask): "sort this array", "add a button", "fix bug in line 10", "create a React todo app"
+Ambiguous tasks (ask): "build a dashboard" (which data?), "make it better" (better how?), "add authentication" (which method?)
 
-Clear tasks (do NOT ask): "sort this array", "add a button", "fix the bug in line 10", "create a React todo app"
-Ambiguous tasks (ask once): "build a dashboard" (which data?), "make it better" (better how?), "add authentication" (which method?)
-
-Reply with JSON only:
+For each question, provide 2-4 short option labels the user can click, PLUS allow free text.
+Reply JSON only, matching the task language:
 {"needsClarification": false}
 OR
-{"needsClarification": true, "questions": ["question 1", "question 2"]}
+{"needsClarification": true, "questions": [
+  {"text": "question text", "options": ["Option A", "Option B", "Option C"]}
+]}
 
-Max 2 questions. Ask only what's truly needed to avoid the wrong implementation.`;
+Max 2 questions. Options should be short (2-5 words each). Ask only what is truly needed.`;
 
     try {
       let text = "";
       for await (const ev of model.generate(
         [{ role: "user", content: prompt }],
-        { stream: true, maxTokens: 150 }
+        { stream: true, maxTokens: 300 }
       )) {
         if (ev.type === "text_delta" && ev.delta) text += ev.delta;
       }
       const jsonMatch = /\{[\s\S]*\}/.exec(text.trim());
       if (!jsonMatch) return c.json({ needsClarification: false, questions: [] });
-      const result = JSON.parse(jsonMatch[0]) as { needsClarification: boolean; questions?: string[] };
+      const result = JSON.parse(jsonMatch[0]) as {
+        needsClarification: boolean;
+        questions?: Array<{ text: string; options: string[] } | string>;
+      };
+      // Normalise — handle both old string format and new {text, options} format
+      const questions = (result.questions ?? []).slice(0, 2).map((q) =>
+        typeof q === "string"
+          ? { text: q, options: [] }
+          : { text: q.text, options: (q.options ?? []).slice(0, 4) }
+      );
       return c.json({
         needsClarification: result.needsClarification ?? false,
-        questions: result.questions?.slice(0, 2) ?? [],
+        questions,
       });
     } catch {
       return c.json({ needsClarification: false, questions: [] });
