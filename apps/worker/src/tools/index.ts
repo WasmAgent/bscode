@@ -7,6 +7,9 @@ import type { KvStore } from "./platform.js";
 // ── Re-export type so callers can use KvStore directly ────────────────────────
 export type { KvStore };
 
+// Lock Wrangler dev secrets — specific to BSCode worker deployment
+globalFileLock.lock(".dev.vars", "hard", "Wrangler dev secrets — never overwrite");
+
 // ── File tools ────────────────────────────────────────────────────────────────
 
 export function createReadFileTool(
