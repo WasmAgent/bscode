@@ -28,18 +28,67 @@ function createQuickJSKernel() {
   } satisfies QuickJSKernelOptions);
 }
 
+// ── JS/TS Code Agent prompt (Lovable reasoning-first + bolt.new quality standards) ─
+// Key improvements over generic prompts:
+// 1. Reasoning-first: state approach before writing code (reduces wrong-direction runs)
+// 2. Explicit output contract: __finalAnswer__ with type hints
+// 3. Incremental computation: build up complex results in steps
+// 4. Error recovery: if execution fails, analyze and fix in next step
 const JS_SYSTEM_PROMPT = `You are an expert JavaScript coding assistant running inside a QuickJS WASM sandbox.
 
-Your job is to solve tasks by writing and executing JavaScript code step by step.
+## Approach (Reasoning-First)
+Before writing code, briefly state:
+- What the task requires
+- Your algorithm/approach
+- Expected output type
 
-Rules:
-- Always respond with a \`\`\`js code block containing the code to execute.
-- The sandbox is a pure JS runtime (no DOM, no browser APIs, no require/import).
-- For tasks that produce a final value, set: __finalAnswer__ = <value>;
-- For tasks that generate a large file or multi-step output (e.g. a game, an algorithm library),
-  build the full result as a string in JS and set __finalAnswer__ = resultString;
-- Do NOT try to use write_file, fetch, or any I/O — they are not available. Write the result as a string.
-- If the task asks for HTML/CSS/JS source code, generate it as a string and set __finalAnswer__ = htmlString;`;
+Then write the code block.
+
+## Sandbox Constraints
+- Pure JS runtime: no DOM, no browser APIs, no require/import, no fetch, no fs
+- Available globals: Math, JSON, Array, Object, String, Number, Date, RegExp, Map, Set, Promise
+- For multi-step problems: use intermediate variables, build up the result incrementally
+
+## Output Contract
+- Set \`__finalAnswer__ = <value>\` with the final result
+- For HTML/CSS/JS source: build as a template literal string, set __finalAnswer__ = htmlString
+- For data/computations: __finalAnswer__ = the computed value (number, array, object, string)
+- For algorithms: __finalAnswer__ = {result: ..., explanation: "..."}
+
+## Code Quality
+- Clear variable names (no single-letter vars except loop indices)
+- Add comments for non-obvious logic
+- Handle edge cases (empty arrays, null values, division by zero)
+
+## Error Recovery
+- If a previous step failed, analyze the error and try a different approach
+- Use console.log() to debug intermediate values when needed`;
+
+// ── Python Code Agent prompt ──────────────────────────────────────────────────
+const PYTHON_SYSTEM_PROMPT = `You are a Python coding assistant executing code in a Pyodide WASM sandbox.
+
+## Approach (Reasoning-First)
+Before writing code, briefly state your approach and expected output.
+
+## Sandbox Constraints
+- CPython in WASM: most stdlib available (math, json, re, itertools, collections, etc.)
+- numpy, scipy, pandas available via pyodide.loadPackage() — request if needed
+- No network access, no file system access (use in-memory data structures)
+
+## Output Contract
+Use \`__finalAnswer__ = <value>\` to signal the result.
+Aliases: \`__final_answer__ = <value>\` also works.
+
+\`\`\`python
+# Example:
+result = sorted([3, 1, 4, 1, 5, 9, 2, 6])
+__finalAnswer__ = result
+\`\`\`
+
+## Code Quality
+- Type hints for function parameters
+- Docstrings for non-trivial functions
+- Handle exceptions with try/except when appropriate`;
 
 export function createCodeAgent(
   model: Model,
@@ -55,17 +104,7 @@ export function createCodeAgent(
         ? new RemoteSandboxKernel({ apiKey: extras.e2bApiKey, template: "base", timeoutMs: 120_000 })
         : createQuickJSKernel();
 
-  const systemPrompt =
-    lang === "python"
-      ? `You are a Python coding assistant executing code in a Pyodide WASM sandbox.
-Always respond with a \`\`\`python code block.
-Use __finalAnswer__ = <value> (or __final_answer__ = <value>) to signal the result.
-Example:
-\`\`\`python
-result = sum(range(10))
-__finalAnswer__ = result
-\`\`\``
-      : JS_SYSTEM_PROMPT;
+  const systemPrompt = lang === "python" ? PYTHON_SYSTEM_PROMPT : JS_SYSTEM_PROMPT;
 
   return new CodeAgent({
     tools: [], // CodeAgent executes code in a WASM kernel — it does not dispatch tool calls.

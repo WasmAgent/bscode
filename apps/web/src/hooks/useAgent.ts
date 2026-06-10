@@ -68,6 +68,8 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
   const [rawEvents, setRawEvents] = useState<AgentEventMinimal[]>([]);
   const [classifying, setClassifying] = useState(false);
   const [detectedMode, setDetectedMode] = useState<ClassifyResult | null>(null);
+  /** Clarifying questions for the current task (null = no clarification needed) */
+  const [clarifyingQuestions, setClarifyingQuestions] = useState<string[] | null>(null);
   const statsRef = useRef(tokenStats);
 
   const onEvent = useCallback((ev: AgentEventMinimal) => {
@@ -105,6 +107,7 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
     async (task: string, conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>) => {
       setRawEvents([]);
       setDetectedMode(null);
+      setClarifyingQuestions(null);
 
       let effectiveConfig = config;
 
@@ -138,6 +141,27 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         }
       }
 
+      // Clarification check (Lovable pattern) — only for non-trivial tool tasks
+      // Skip for framework mode (already has full spec), code mode (clear execution contract)
+      // and when user already provided extra context via @ mentions
+      if (config.autoMode && effectiveConfig.agentMode === "tool" && !task.includes("@")) {
+        try {
+          const res = await fetch(`${workerUrl}/clarify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ task: task.slice(0, 600) }),
+          });
+          const result = await res.json() as { needsClarification: boolean; questions?: string[] };
+          if (result.needsClarification && result.questions?.length) {
+            setClarifyingQuestions(result.questions);
+            return; // pause — let user answer before running
+          }
+        } catch {
+          // clarify failed silently — proceed
+        }
+      }
+      setClarifyingQuestions(null);
+
       run({
         task,
         agentMode: effectiveConfig.agentMode,
@@ -167,8 +191,12 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
     reset();
     setRawEvents([]);
     setDetectedMode(null);
+    setClarifyingQuestions(null);
     setTokenStats({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, calls: 0 });
   }, [reset]);
+
+  /** Dismiss clarifying questions and proceed with the run as-is */
+  const dismissClarify = useCallback(() => setClarifyingQuestions(null), []);
 
   return {
     messages,
@@ -176,6 +204,8 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
     isRunning,
     classifying,
     detectedMode,
+    clarifyingQuestions,
+    dismissClarify,
     finalAnswer,
     rawEvents,
     tokenStats,

@@ -111,7 +111,7 @@ export default function Home() {
 
   const {
     messages, isRunning, rawEvents, tokenStats, finalAnswer,
-    submit, abort, resetAll, classifying, detectedMode,
+    submit, abort, resetAll, classifying, detectedMode, clarifyingQuestions, dismissClarify,
   } = useAgent(config, (update) => setConfig((prev) => ({ ...prev, ...update })));
 
   const { user, pushing, login: githubLogin, pushToGitHub } = useGitHub();
@@ -627,6 +627,37 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             background: "#0d1117",
             flexShrink: 0,
           }}>
+            {/* Clarifying questions banner (Lovable pattern) */}
+            {clarifyingQuestions && clarifyingQuestions.length > 0 && !isRunning && (
+              <div style={{
+                marginBottom: 10,
+                background: "#0d1b2a",
+                border: "1px solid #1f6feb66",
+                borderRadius: 8,
+                padding: "10px 14px",
+              }}>
+                <div style={{ fontSize: 11, color: "#58a6ff", fontWeight: 700, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+                  <span>💬 A few questions before I start:</span>
+                  <button
+                    type="button"
+                    onClick={() => { dismissClarify(); handleSubmit(inputText); }}
+                    style={{ background: "none", border: "none", color: "#8b949e", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    Skip, run anyway →
+                  </button>
+                </div>
+                {clarifyingQuestions.map((q, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: ordered questions
+                  <div key={i} style={{ fontSize: 12, color: "#c9d1d9", marginBottom: i < clarifyingQuestions.length - 1 ? 4 : 0, lineHeight: 1.5 }}>
+                    {i + 1}. {q}
+                  </div>
+                ))}
+                <div style={{ marginTop: 8, fontSize: 10, color: "#484f58" }}>
+                  Add your answers to the task description below, then Run.
+                </div>
+              </div>
+            )}
+
             {/* Fix error banner */}
             {lastTurnError && !isRunning && (
               <div style={{

@@ -224,6 +224,60 @@ Rules:
     }
   });
 
+  // ── Clarify — detect ambiguity and generate clarifying questions (Lovable pattern) ──
+  // Returns { needsClarification: boolean, questions: string[] } so the frontend
+  // can ask the user before burning tokens on a potentially wrong execution.
+  app.post("/clarify", async (c) => {
+    const { task, context } = await c.req.json<{ task: string; context?: string }>();
+    if (!task) return c.json({ error: "task required" }, 400);
+
+    const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
+    if (!apiKey) return c.json({ needsClarification: false, questions: [] });
+
+    const { AnthropicModel } = await import("@agentkit-js/model-anthropic");
+    const model = new AnthropicModel(
+      "claude-haiku-4-5-20251001",
+      config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
+    );
+
+    const prompt = `You are assessing whether a coding task needs clarification before execution.
+
+Task: "${task.slice(0, 600)}"
+${context ? `Context: "${context.slice(0, 200)}"` : ""}
+
+Determine if this task is AMBIGUOUS in ways that would cause the wrong output.
+Ambiguity examples: unclear data source, unknown UI style preference, missing business logic, conflicting requirements.
+
+Clear tasks (do NOT ask): "sort this array", "add a button", "fix the bug in line 10", "create a React todo app"
+Ambiguous tasks (ask once): "build a dashboard" (which data?), "make it better" (better how?), "add authentication" (which method?)
+
+Reply with JSON only:
+{"needsClarification": false}
+OR
+{"needsClarification": true, "questions": ["question 1", "question 2"]}
+
+Max 2 questions. Ask only what's truly needed to avoid the wrong implementation.`;
+
+    try {
+      let text = "";
+      for await (const ev of model.generate(
+        [{ role: "user", content: prompt }],
+        { stream: true, maxTokens: 150 }
+      )) {
+        if (ev.type === "text_delta" && ev.delta) text += ev.delta;
+      }
+      const jsonMatch = /\{[\s\S]*\}/.exec(text.trim());
+      if (!jsonMatch) return c.json({ needsClarification: false, questions: [] });
+      const result = JSON.parse(jsonMatch[0]) as { needsClarification: boolean; questions?: string[] };
+      return c.json({
+        needsClarification: result.needsClarification ?? false,
+        questions: result.questions?.slice(0, 2) ?? [],
+      });
+    } catch {
+      return c.json({ needsClarification: false, questions: [] });
+    }
+  });
+
   // ── Task classifier — detects agent mode from task description ────────────
   // Uses Claude Haiku for fast, cheap classification (typically < 500ms).
   // Returns { mode, framework } so the frontend can auto-configure before running.
@@ -579,6 +633,7 @@ or {"mode":"tool","framework":null}`;
           chunkSizeSteps: body.chunkSizeSteps,
           systemPrefixTtl: body.systemPrefixTtl,
           scheduler: body.scheduler,
+          outputSchemaRetries: body.outputSchemaRetries,
         };
 
         let agentRun: AsyncGenerator<AgentEvent>;
@@ -795,6 +850,16 @@ interface RunBody {
   // ── Auto-compact (new) ────────────────────────────────────────────────────────
   /** Auto-compact history when context exceeds this many tokens (default: off) */
   autoCompactThreshold?: number;
+
+  // ── Structured output schema (v0/Lovable pattern) ─────────────────────────────
+  /**
+   * Zod schema descriptor for structured output validation.
+   * When set, ToolCallingAgent validates final_answer against this schema and
+   * retries up to outputSchemaRetries times on mismatch.
+   * Pass as a JSON Schema object: {"type":"object","properties":{"name":{"type":"string"}}}
+   */
+  outputJsonSchema?: Record<string, unknown>;
+  outputSchemaRetries?: number;
 }
 
 function getModelId(model: Model): string {

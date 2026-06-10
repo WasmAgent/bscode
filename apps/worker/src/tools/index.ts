@@ -185,7 +185,7 @@ export function createRunCommandTool(
   return {
     name: "run_command",
     description: shellRunner
-      ? "Execute a shell command. Returns stdout/stderr output."
+      ? "Execute a shell command. Returns stdout/stderr output. Avoid destructive commands (rm -rf, drop table, etc.)."
       : "Simulate running a shell command (real shell unavailable in edge runtime).",
     inputSchema: z.object({
       command: z.string().describe("Shell command, e.g. npm test or git status"),
@@ -195,7 +195,36 @@ export function createRunCommandTool(
     readOnly: false,
     idempotent: false,
     forward: async ({ command, code }) => {
-      if (shellRunner) return shellRunner(command);
+      if (shellRunner) {
+        // Pre-execution validation (bolt.diy pattern): rewrite predictably-failing commands
+        let safeCommand = command;
+        // Add -f to rm to avoid "No such file" errors
+        if (/^rm\s+(?!.*-[rf])/.test(safeCommand)) {
+          safeCommand = safeCommand.replace(/^rm\s+/, "rm -f ");
+        }
+        // Add -p to mkdir to avoid "already exists" errors
+        if (/^mkdir\s+(?!.*-p)/.test(safeCommand)) {
+          safeCommand = safeCommand.replace(/^mkdir\s+/, "mkdir -p ");
+        }
+        // Block truly destructive commands
+        const blocked = /rm\s+-rf\s+\/\b|DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*;?\s*$/i.test(safeCommand);
+        if (blocked) return "Error: Command blocked (destructive operation requires explicit confirmation)";
+
+        const output = await shellRunner(safeCommand);
+
+        // Post-execution error classification (bolt.diy pattern)
+        if (/exit:[1-9]/.test(output)) {
+          if (/No such file or directory/.test(output)) return `${output}\nHint: The file/directory doesn't exist. Check the path or create it first.`;
+          if (/Permission denied/.test(output)) return `${output}\nHint: Permission denied. Try with appropriate permissions.`;
+          if (/command not found/.test(output)) {
+            const cmd = safeCommand.split(/\s+/)[0];
+            return `${output}\nHint: '${cmd}' not found. Install it or check if it's in PATH.`;
+          }
+          if (/Cannot find module|Module not found/.test(output)) return `${output}\nHint: Missing npm package. Add it to package.json and run npm install.`;
+          if (/SyntaxError|TypeError|ReferenceError/.test(output)) return `${output}\nHint: Code syntax/runtime error. Check the specific line mentioned above.`;
+        }
+        return output;
+      }
       const output: string[] = [`$ ${command}`];
       if (code) {
         try {
