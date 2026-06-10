@@ -364,6 +364,10 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
 
       const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
 
+      // Clear workspace files before each new run to prevent cross-task file contamination
+      // (framework mode writes many files; old files from prior runs cause mismatch bugs)
+      fetch(`${workerUrl}/files`, { method: "DELETE" }).catch(() => {});
+
       // ── @ file reference resolution ─────────────────────────────────────────
       let resolvedText = text;
       const atMentions = [...text.matchAll(/@([\w./\-]+\.\w+)/g)].map((m) => m[1]);

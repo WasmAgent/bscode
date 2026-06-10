@@ -581,6 +581,15 @@ or {"mode":"tool","framework":null}`;
     return c.json({ path, content });
   });
 
+  // DELETE /files — clear ALL workspace files (called before each new framework run)
+  app.delete("/files", async (c) => {
+    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
+    if (!kv) return c.json({ error: "KV not bound" }, 503);
+    const list = await kv.list({ prefix: "file:" });
+    await Promise.all(list.keys.map((k) => kv.delete?.(k.name)));
+    return c.json({ ok: true, cleared: list.keys.length });
+  });
+
   app.delete("/files/:path{.+}", async (c) => {
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const path = c.req.param("path");
