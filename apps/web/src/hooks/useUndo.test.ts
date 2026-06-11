@@ -29,7 +29,9 @@ describe("useUndo", () => {
       result.current.push({ type: "t", description: "d", undo: undoFn });
     });
 
-    let popped: (ReturnType<typeof result.current.undo> extends Promise<infer T> ? T : never) | undefined;
+    let popped:
+      | (ReturnType<typeof result.current.undo> extends Promise<infer T> ? T : never)
+      | undefined;
     await act(async () => {
       popped = (await result.current.undo()) as Awaited<ReturnType<typeof result.current.undo>>;
     });

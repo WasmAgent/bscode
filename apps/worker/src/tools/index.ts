@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { KvStore } from "../types.js";
 import type { SemanticIndexer } from "./semanticSearch.js";
 
+export type { InitAgentsMdInput } from "./agentsMd.js";
+export { createInitAgentsMdTool } from "./agentsMd.js";
 export type { CreateReadBuildResultToolOptions } from "./build-result.js";
 export { createReadBuildResultTool, formatBuildResult } from "./build-result.js";
 export type {

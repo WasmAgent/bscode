@@ -31,6 +31,12 @@ export interface ToolAgentExtras {
   scheduler?: "dag" | "parallel";
   /** Number of retries when outputSchema validation fails (default: 2) */
   outputSchemaRetries?: number;
+  /**
+   * C4 — Project-specific instructions discovered from AGENTS.md files.
+   * Appended to the framework-default system prompt as a stable suffix
+   * (kept in the prompt-cache prefix region so it doesn't blow the cache).
+   */
+  projectInstructions?: string;
 }
 
 /** Parse a stop-condition descriptor string into a StopCondition instance. */
@@ -52,7 +58,14 @@ export function createToolAgent(
   tools: ToolDefinition[],
   extras: ToolAgentExtras = {}
 ) {
-  const systemPrompt = bscodeFrameworkPrompt(extras.framework ?? "general");
+  const baseSystemPrompt = bscodeFrameworkPrompt(extras.framework ?? "general");
+  // C4 — Append AGENTS.md content as a stable suffix when present. The
+  // `\n\n---\n\n` separator keeps it visibly delimited from the framework
+  // prompt; we keep the project block AFTER the framework rules so the
+  // model treats it as overriding (later-wins bias).
+  const systemPrompt = extras.projectInstructions
+    ? `${baseSystemPrompt}\n\n---\n\n${extras.projectInstructions}`
+    : baseSystemPrompt;
 
   const stopConditions: StopCondition[] = (extras.stopConditions ?? [])
     .map(parseStopCondition)

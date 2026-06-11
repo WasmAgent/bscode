@@ -64,8 +64,16 @@ export interface JobRecord {
  * Adapter the queue invokes to actually run the job. The runner produces an
  * AsyncIterable<AgentEvent>; the queue takes care of buffering and lifecycle
  * accounting. The signal is forwarded so abort() can cancel cooperatively.
+ *
+ * `ctx.jobId` is supplied by the queue at start time so a runner that needs
+ * its own id (e.g. for derived session ids in C2 isolation) does not have
+ * to be told twice.
  */
-export type JobRunner = (spec: JobSpec, signal: AbortSignal) => AsyncIterable<AgentEvent>;
+export type JobRunner = (
+  spec: JobSpec,
+  signal: AbortSignal,
+  ctx: { jobId: string }
+) => AsyncIterable<AgentEvent>;
 
 /** Queue-wide configuration knobs. */
 export interface JobQueueOptions {
@@ -87,4 +95,20 @@ export interface JobQueueOptions {
    * tolerates either case.
    */
   waitUntil?: (promise: Promise<unknown>) => void;
+  /**
+   * C2 — Async hook invoked once per job, immediately before its runner
+   * starts producing events. Hosts use this to provision per-job state
+   * (workspace snapshots, branch forks, telemetry counters). Throwing
+   * inside the hook fails the job with the error message — the runner
+   * never runs. Called with the assigned `jobId` and the original `spec`
+   * so the host can derive a stable session id.
+   */
+  onBeforeStart?: (jobId: string, spec: JobSpec) => Promise<void> | void;
+  /**
+   * C2 — Async hook invoked once per job, AFTER the runner has finished
+   * (regardless of status). Hosts use this for cleanup or to record final
+   * diff metadata. Errors here are logged and discarded — they never
+   * mutate the job's terminal state. Receives the final job record.
+   */
+  onAfterFinish?: (record: JobRecord) => Promise<void> | void;
 }

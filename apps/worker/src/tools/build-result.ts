@@ -50,6 +50,37 @@ export function formatBuildResult(snap: BuildResultSnapshot): string {
     lines.push("--- stderr (tail) ---");
     lines.push(snap.stderr);
   }
+  if (snap.visual) {
+    // C3 — surface the visual check signals the agent should react to.
+    // We deliberately do NOT render the thumbnail data URL into the agent
+    // context — that would burn 10–50KB per call. The agent that wants the
+    // image must request it explicitly via a vision-capable downstream tool.
+    lines.push("--- visual ---");
+    if (snap.visual.rendersNonEmpty === false) {
+      lines.push("rendersNonEmpty: false (page appears blank)");
+    } else if (snap.visual.rendersNonEmpty === true) {
+      lines.push("rendersNonEmpty: true");
+    }
+    if (snap.visual.consoleErrors && snap.visual.consoleErrors.length > 0) {
+      lines.push(`consoleErrors: ${snap.visual.consoleErrors.length}`);
+      for (const e of snap.visual.consoleErrors.slice(0, 5)) {
+        lines.push(`  • ${e.message}${e.source ? ` @ ${e.source}` : ""}`);
+      }
+    }
+    if (snap.visual.uncaughtErrors && snap.visual.uncaughtErrors.length > 0) {
+      lines.push(`uncaughtErrors: ${snap.visual.uncaughtErrors.length}`);
+      for (const e of snap.visual.uncaughtErrors.slice(0, 3)) {
+        lines.push(`  • ${e.message}${e.source ? ` @ ${e.source}` : ""}`);
+      }
+    }
+    if (snap.visual.domProbes && snap.visual.domProbes.length > 0) {
+      const failing = snap.visual.domProbes.filter((p) => !p.ok);
+      lines.push(`domProbes: ${snap.visual.domProbes.length} (${failing.length} failing)`);
+      for (const p of failing.slice(0, 5)) {
+        lines.push(`  ✗ ${p.name}${p.detail ? ` — ${p.detail}` : ""}`);
+      }
+    }
+  }
   return lines.join("\n");
 }
 

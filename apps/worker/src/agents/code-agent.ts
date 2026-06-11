@@ -17,6 +17,8 @@ export interface CodeAgentExtras {
   inputGuardrails?: InputGuardrail[];
   outputGuardrails?: OutputGuardrail[];
   e2bApiKey?: string;
+  /** C4 — Project-specific instructions from AGENTS.md, appended verbatim. */
+  projectInstructions?: string;
 }
 
 function createQuickJSKernel() {
@@ -47,7 +49,10 @@ export function createCodeAgent(
           })
         : createQuickJSKernel();
 
-  const systemPrompt = bscodeCodeAgentPrompt(lang);
+  const baseSystemPrompt = bscodeCodeAgentPrompt(lang);
+  const systemPrompt = extras.projectInstructions
+    ? `${baseSystemPrompt}\n\n---\n\n${extras.projectInstructions}`
+    : baseSystemPrompt;
 
   return new CodeAgent({
     tools: [], // CodeAgent executes code in a WASM kernel — it does not dispatch tool calls.

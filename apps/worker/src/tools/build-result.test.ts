@@ -107,4 +107,71 @@ describe("formatBuildResult helper", () => {
     expect(out).not.toContain("wallTimeMs");
     expect(out).not.toContain("previewUrl");
   });
+
+  // ── C3 — visual signals in the formatted output ───────────────────────────
+
+  it("renders a visual section with consoleErrors when present", () => {
+    const out = formatBuildResult({
+      status: "success",
+      stage: "dev",
+      ranAtMs: Date.now(),
+      previewUrl: "http://localhost:3000",
+      visual: {
+        ranAtMs: Date.now(),
+        rendersNonEmpty: true,
+        consoleErrors: [
+          { message: "Warning: useEffect ran twice", source: "react.js" },
+          { message: "Failed prop type" },
+        ],
+      },
+    });
+    expect(out).toContain("--- visual ---");
+    expect(out).toContain("rendersNonEmpty: true");
+    expect(out).toContain("consoleErrors: 2");
+    expect(out).toContain("Warning: useEffect ran twice");
+  });
+
+  it("flags rendersNonEmpty:false as a blank-page signal", () => {
+    const out = formatBuildResult({
+      status: "success",
+      stage: "dev",
+      ranAtMs: Date.now(),
+      visual: { ranAtMs: Date.now(), rendersNonEmpty: false },
+    });
+    expect(out).toContain("page appears blank");
+  });
+
+  it("lists failing DOM probes with their detail message", () => {
+    const out = formatBuildResult({
+      status: "success",
+      stage: "dev",
+      ranAtMs: Date.now(),
+      visual: {
+        ranAtMs: Date.now(),
+        domProbes: [
+          { name: "h1 visible", ok: true },
+          { name: "submit button", ok: false, detail: "not in DOM" },
+        ],
+      },
+    });
+    expect(out).toMatch(/domProbes: 2 \(1 failing\)/);
+    expect(out).toContain("✗ submit button — not in DOM");
+    // Passing probes are NOT listed individually — the summary line is enough.
+    expect(out).not.toContain("✗ h1 visible");
+  });
+
+  it("never inlines the thumbnail data URL into the agent context", () => {
+    const out = formatBuildResult({
+      status: "success",
+      stage: "dev",
+      ranAtMs: Date.now(),
+      visual: {
+        ranAtMs: Date.now(),
+        rendersNonEmpty: true,
+        thumbnailDataUrl: "data:image/png;base64,AAAAAAAAAAAAAAAAAA",
+      },
+    });
+    expect(out).not.toContain("base64");
+    expect(out).not.toContain("data:image");
+  });
 });

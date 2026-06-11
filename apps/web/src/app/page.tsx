@@ -339,7 +339,7 @@ export default function Home() {
   // runtime (deps fire after render) but trips TypeScript strict mode.
   // The ref is assigned in a useEffect right after handleSubmit's definition.
   const handleSubmitRef = useRef<((task: string, skipClarify?: boolean) => Promise<void>) | null>(
-    null,
+    null
   );
 
   useEffect(() => {

@@ -14,10 +14,12 @@ import {
   InMemorySpanExporter,
   KvCheckpointer,
   MapKvBackend,
+  makeKvAgentsMdLoader,
   maxInputLength,
   OtelBridge,
   type ParallelForkJoinRunner,
   ProgrammaticOrchestrator,
+  ProjectInstructions,
   ReflectRefineRunner,
   runEval,
   SelfConsistencyRunner,
@@ -37,6 +39,14 @@ import {
   putBuildResult,
 } from "./build-results.js";
 import { JobQueue, type JobRunner, type JobSpec } from "./jobs/index.js";
+import {
+  deriveJobSessionId,
+  diffSessions,
+  discardJobSession,
+  type MergeStrategy,
+  mergeSessions,
+  snapshotSession,
+} from "./jobs/jobBranches.js";
 import {
   type CustomModelConfig,
   discoverLocalModels,
@@ -60,6 +70,7 @@ import {
 import {
   createDeleteFileTool,
   createGitHubPrTool,
+  createInitAgentsMdTool,
   createListFilesTool,
   createListFileVersionsTool,
   createPatchFileTool,
@@ -183,10 +194,31 @@ export function createApp(config: AppConfig) {
   // One queue per createApp instance. The runner self-fetches /run so the
   // queued path goes through exactly the same agent pipeline as a synchronous
   // run, eliminating the "two implementations drifted apart" failure mode.
+  //
+  // C2 — Each job runs in an isolated derived session id (parent#job-<id>)
+  // so concurrent jobs on the same parent session do not trample each other.
+  // The onBeforeStart hook snapshots parent files into the derived session
+  // before the runner starts; the per-job diff/merge endpoints below let the
+  // user review and merge the changes back when the job is done.
   const jobQueue = new JobQueue({
     concurrency: 4,
     eventTailSize: 100,
     durableKv: config.sessionsKv, // same KV used for cached run replays
+    onBeforeStart: async (jobId, spec) => {
+      if (!config.filesKv) return;
+      const parent = spec.sessionId ?? "default";
+      const derived = deriveJobSessionId(parent, jobId);
+      await snapshotSession(config.filesKv, parent, derived);
+    },
+    onAfterFinish: async (record) => {
+      // Keep the derived session and snapshot in place — the user reviews
+      // the diff via /jobs/:id/diff and explicitly merges or discards. We
+      // only auto-clean on aborted jobs (no diff worth keeping).
+      if (record.status !== "aborted" || !config.filesKv) return;
+      const parent = record.spec.sessionId ?? "default";
+      const derived = deriveJobSessionId(parent, record.id);
+      await discardJobSession(config.filesKv, derived).catch(() => undefined);
+    },
   });
 
   // ── B2 / B3 — Semantic indexer factory (per app) ─────────────────────────
@@ -678,6 +710,10 @@ or {"mode":"tool","framework":null}`;
       ...(typeof body.stderr === "string" ? { stderr: body.stderr } : {}),
       ...(typeof body.wallTimeMs === "number" ? { wallTimeMs: body.wallTimeMs } : {}),
       ...(typeof body.previewUrl === "string" ? { previewUrl: body.previewUrl } : {}),
+      // C3 — accept the optional visual check payload. The browser sends
+      // this once the dev server is reachable; we trust the shape (the
+      // VisualCheckSnapshot interface) and forward verbatim.
+      ...(body.visual && typeof body.visual === "object" ? { visual: body.visual } : {}),
     };
     await putBuildResult(sessionId, snap, config.buildResultsKv);
     return c.json({ ok: true });
@@ -701,12 +737,20 @@ or {"mode":"tool","framework":null}`;
   // The runner self-fetches /run with the supplied body. That keeps the
   // queued path bit-identical to the synchronous /run path; if /run grows
   // a feature, jobs inherit it for free.
+  //
+  // C2 — At run time we override `X-Session-Id` to the derived job session
+  // id. The parent's snapshot already lives there (onBeforeStart did the
+  // copy), so the agent reads/writes against an isolated KV view; the
+  // parent session is untouched until the user calls /jobs/:id/merge.
   function jobRunnerFor(body: Record<string, unknown>, headers: Record<string, string>): JobRunner {
-    return async function* (_spec, signal): AsyncIterable<AgentEvent> {
+    return async function* (spec, signal, ctx): AsyncIterable<AgentEvent> {
+      const parent = spec.sessionId ?? "default";
+      const derived = deriveJobSessionId(parent, ctx.jobId);
+      const runHeaders = { ...headers, "X-Session-Id": derived };
       const res = await app.fetch(
         new Request("http://localhost/run", {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...headers },
+          headers: { "Content-Type": "application/json", ...runHeaders },
           body: JSON.stringify(body),
           signal,
         })
@@ -831,6 +875,77 @@ or {"mode":"tool","framework":null}`;
     const ok = jobQueue.abort(c.req.param("id"));
     if (!ok) return c.json({ error: "job not found or already finished" }, 404);
     return c.json({ ok: true });
+  });
+
+  // ── C2 — per-job diff / merge ────────────────────────────────────────────
+  // After a parallel job finishes, the user reviews its file changes and
+  // decides whether to merge them into the parent session. /diff is read-only.
+  // /merge applies the changes; conflicts (concurrent base edits since the
+  // job started) are returned structured rather than auto-resolved.
+
+  /** GET /jobs/:id/diff — list the file changes the job made vs its snapshot. */
+  app.get("/jobs/:id/diff", async (c) => {
+    if (!config.filesKv) return c.json({ error: "files KV not bound" }, 503);
+    const job = await jobQueue.get(c.req.param("id"));
+    if (!job) return c.json({ error: "job not found" }, 404);
+    const parent = job.spec.sessionId ?? "default";
+    const derived = deriveJobSessionId(parent, job.id);
+    const changes = await diffSessions(config.filesKv, derived);
+    return c.json({ jobId: job.id, parentSessionId: parent, derivedSessionId: derived, changes });
+  });
+
+  /**
+   * POST /jobs/:id/merge — apply the job's changes to its parent session.
+   * Body: { strategy?: "fail-on-conflict" | "ours" | "theirs", discard?: boolean }
+   *
+   * On a clean merge with `discard: true` (default true) the derived session
+   * and snapshot are removed. On conflicts the derived session is kept so
+   * the user can re-run the merge with a different strategy.
+   */
+  app.post("/jobs/:id/merge", async (c) => {
+    if (!config.filesKv) return c.json({ error: "files KV not bound" }, 503);
+    const job = await jobQueue.get(c.req.param("id"));
+    if (!job) return c.json({ error: "job not found" }, 404);
+    if (job.status !== "done") {
+      return c.json({ error: `cannot merge a job in state ${job.status}` }, 409);
+    }
+    let body: { strategy?: MergeStrategy; discard?: boolean } = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      // empty body is fine — caller wants defaults.
+    }
+    const strategy = body.strategy ?? "fail-on-conflict";
+    const discard = body.discard ?? true;
+    const parent = job.spec.sessionId ?? "default";
+    const derived = deriveJobSessionId(parent, job.id);
+    const result = await mergeSessions(config.filesKv, parent, derived, strategy);
+    const cleanedUp = discard && result.conflicts.length === 0;
+    if (cleanedUp) {
+      await discardJobSession(config.filesKv, derived).catch(() => undefined);
+    }
+    return c.json({
+      jobId: job.id,
+      strategy,
+      applied: result.applied,
+      conflicts: result.conflicts,
+      cleanedUp,
+    });
+  });
+
+  /**
+   * DELETE /jobs/:id/branch — discard the per-job derived session without
+   * merging. Use after the user decides the job's output is not worth
+   * keeping; frees KV space.
+   */
+  app.delete("/jobs/:id/branch", async (c) => {
+    if (!config.filesKv) return c.json({ error: "files KV not bound" }, 503);
+    const job = await jobQueue.get(c.req.param("id"));
+    if (!job) return c.json({ error: "job not found" }, 404);
+    const parent = job.spec.sessionId ?? "default";
+    const derived = deriveJobSessionId(parent, job.id);
+    await discardJobSession(config.filesKv, derived).catch(() => undefined);
+    return c.json({ ok: true, derivedSessionId: derived });
   });
 
   // ── Error log (last 50 agent errors for debugging) ────────────────────────
@@ -1316,6 +1431,11 @@ or {"mode":"tool","framework":null}`;
           systemPrefixTtl: body.systemPrefixTtl,
           scheduler: body.scheduler,
           outputSchemaRetries: body.outputSchemaRetries,
+          // C4 — load AGENTS.md (and any nested files) from the workspace and
+          // append to the system prompt. We use the agentkit-js KV loader on
+          // a thin adapter over the per-session files KV; the resolver caches
+          // the catalogue, so the cost is one list per /run.
+          projectInstructions: filesKv ? await loadProjectInstructions(filesKv) : "",
         };
 
         let agentRun: AsyncGenerator<AgentEvent>;
@@ -1735,6 +1855,23 @@ function resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvSto
   return config.filesKv;
 }
 
+/**
+ * C4 — Load AGENTS.md project instructions from the (per-session) files KV.
+ * Returns the empty string when no AGENTS.md exists anywhere in the workspace —
+ * stable shape for the system prompt so prompt-cache keys don't drift between
+ * "has instructions" and "doesn't" runs.
+ */
+async function loadProjectInstructions(filesKv: KvStore): Promise<string> {
+  const loader = makeKvAgentsMdLoader(adaptKvStoreToBackend(filesKv));
+  const project = new ProjectInstructions({ loader });
+  // For now we always resolve at the repo root. A future refinement could
+  // pass the path of the file the agent is about to edit (when known) so
+  // nested AGENTS.md files take precedence — this requires plumbing the
+  // current edit target through /run, which is bigger than C4 needs.
+  const out = await project.forRepo();
+  return out.text;
+}
+
 /** Build a tree-style string of all files in the KV store for project context. */
 async function buildProjectFileTree(kv: KvStore | undefined): Promise<string> {
   if (!kv) return "(no files in workspace)";
@@ -1793,6 +1930,11 @@ function buildTools(
     createRenameFileTool(filesKv, indexer),
     createRunCommandTool(shellRunner),
     createWebSearchTool(),
+    // C4 — init_agents_md drafts a project AGENTS.md; needsApproval=true
+    // forces it through the planFirst HITL gate so it does not silently
+    // land on disk (research showed LLM-authored AGENTS.md degrades 5/8
+    // benchmarks when written without review).
+    createInitAgentsMdTool(filesKv),
     ...createGitTools(config),
   ];
   // B2 — read_build_result tool registered in framework mode where the

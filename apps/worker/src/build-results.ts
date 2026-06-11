@@ -56,6 +56,47 @@ export interface BuildResultSnapshot {
   ranAtMs: number;
   /** URL of the dev server when stage="dev" + status="success". */
   previewUrl?: string;
+  /**
+   * C3 — Visual verification snapshot. Populated by the browser-side
+   * `runVisualCheck()` helper after the dev server is reachable. The agent
+   * reads this through `read_build_result` and self-corrects on
+   * console errors / missing-element / wrong-render situations the way it
+   * already does for build failures.
+   *
+   * All fields are optional — visual checks are best-effort, and the
+   * channel must keep working even when only the build half reports.
+   */
+  visual?: VisualCheckSnapshot;
+}
+
+/**
+ * Visual check report — what the browser observed about the rendered preview.
+ * Kept JSON-shaped (no Blob / DataURL bytes inside) so it round-trips through
+ * KV cleanly. The agent uses these signals to decide whether to investigate
+ * the rendered UI; full image comparison is intentionally out of scope here.
+ */
+export interface VisualCheckSnapshot {
+  /** When the check ran (browser-side wall clock). */
+  ranAtMs: number;
+  /**
+   * Optional screenshot. Stored as a data URL so the channel stays JSON-only
+   * — capped to the lower-resolution 256×256 thumbnail browsers can produce
+   * cheaply. Absent on environments without canvas access.
+   */
+  thumbnailDataUrl?: string;
+  /** Console errors observed during the check window. Capped to 20 entries. */
+  consoleErrors?: Array<{ message: string; source?: string }>;
+  /** Uncaught exceptions observed during the check window. Capped to 10. */
+  uncaughtErrors?: Array<{ message: string; source?: string }>;
+  /**
+   * Lightweight DOM probes the host can run. Each probe gets a name and a
+   * boolean — the agent decides what to do with "missing" probes.
+   * Use sparingly: too many probes turn this into a UI test framework
+   * masquerading as a heuristic.
+   */
+  domProbes?: Array<{ name: string; ok: boolean; detail?: string }>;
+  /** True when the page rendered above-the-fold non-empty pixel content. */
+  rendersNonEmpty?: boolean;
 }
 
 /** Cap on stderr length. Anything longer is tail-truncated by the reader. */

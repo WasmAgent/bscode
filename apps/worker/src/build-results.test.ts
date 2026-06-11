@@ -156,3 +156,34 @@ describe("build-results store", () => {
     expect(got.status).toBe("unknown");
   });
 });
+
+describe("C3 — visual check payload round-trips", () => {
+  it("put preserves the visual sub-object verbatim", async () => {
+    const snap: BuildResultSnapshot = {
+      status: "success",
+      stage: "dev",
+      ranAtMs: 0,
+      previewUrl: "http://localhost:3000",
+      visual: {
+        ranAtMs: 1234,
+        rendersNonEmpty: true,
+        consoleErrors: [{ message: "Warning: useEffect ran twice", source: "react.js" }],
+        uncaughtErrors: [],
+        domProbes: [
+          { name: "h1 visible", ok: true },
+          { name: "submit button", ok: false, detail: "not in DOM" },
+        ],
+        thumbnailDataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      },
+    };
+    await putBuildResult("v1", snap);
+    const got = await getBuildResult("v1");
+    expect(got.visual).toEqual(snap.visual);
+  });
+
+  it("missing visual field is preserved as undefined (no synthetic empty object)", async () => {
+    await putBuildResult("v2", { status: "success", stage: "dev", ranAtMs: 0 });
+    const got = await getBuildResult("v2");
+    expect(got.visual).toBeUndefined();
+  });
+});

@@ -18,6 +18,23 @@ interface BuildResultPayload {
   stderr?: string;
   wallTimeMs?: number;
   previewUrl?: string;
+  visual?: VisualCheckPayload;
+}
+
+/**
+ * C3 — Visual verification result reported alongside the build outcome. The
+ * agent reads these signals through `read_build_result` and self-corrects on
+ * blank pages, console errors, or missing key elements (the bolt.new
+ * "auto-fix on render error" pattern). Field names mirror the worker-side
+ * VisualCheckSnapshot exactly.
+ */
+interface VisualCheckPayload {
+  ranAtMs: number;
+  thumbnailDataUrl?: string;
+  consoleErrors?: Array<{ message: string; source?: string }>;
+  uncaughtErrors?: Array<{ message: string; source?: string }>;
+  domProbes?: Array<{ name: string; ok: boolean; detail?: string }>;
+  rendersNonEmpty?: boolean;
 }
 
 export interface UseWebContainerReturn {
@@ -135,6 +152,10 @@ export function useWebContainer(): UseWebContainerReturn {
           // B2 — broadcast success so the agent's read_build_result tool
           // can confirm the dev server actually came up.
           void reportBuildResult({ stage: "dev", status: "success", previewUrl: url });
+          // C3 — Schedule a visual check once the iframe has had a chance
+          // to render. We do not block the ready signal on it — visual
+          // verification is best-effort context, not a build gate.
+          scheduleVisualCheck(url, reportBuildResult);
         });
 
         // npm install — collect output for error reporting
@@ -315,4 +336,105 @@ export function toFileSystemTree(files: { path: string; content: string }[]): Fi
     node[parts[parts.length - 1]] = { file: { contents: content } };
   }
   return tree;
+}
+
+// ── C3 — visual check ───────────────────────────────────────────────────────
+
+/**
+ * Schedule a visual check against the just-started preview iframe and
+ * forward the result to the worker as a second build-result POST. Best-
+ * effort: any failure is logged, never thrown — visual verification is
+ * useful context, not a build gate.
+ *
+ * The check runs entirely in the parent page's JS context. WebContainer's
+ * preview iframes are cross-origin, so we cannot directly read their DOM
+ * or canvas content. We measure what IS visible from outside:
+ *   - whether the iframe successfully loaded (network reachability);
+ *   - any same-origin console / error events that bubbled up;
+ *   - whether ANY pixels rendered above the fold.
+ *
+ * For deeper visual verification (DOM probes, screenshots), the project
+ * served inside the iframe must opt in by posting a `bscode:visual-check`
+ * message to the parent — out of scope for the bscode-default scaffolds
+ * but documented as the extension hook.
+ */
+function scheduleVisualCheck(
+  previewUrl: string,
+  reportBuildResult: (payload: BuildResultPayload) => Promise<void>
+): void {
+  // 1.5s gives most React/Vite scaffolds time to render the first frame.
+  // Tunable via window.__bscodeVisualCheckDelayMs in tests.
+  const delayMs =
+    (typeof window !== "undefined" &&
+      (window as unknown as { __bscodeVisualCheckDelayMs?: number }).__bscodeVisualCheckDelayMs) ||
+    1500;
+
+  const consoleErrors: Array<{ message: string; source?: string }> = [];
+  const uncaughtErrors: Array<{ message: string; source?: string }> = [];
+
+  // Capture window-level errors during the wait window.
+  function onErr(e: ErrorEvent) {
+    uncaughtErrors.push({ message: e.message ?? "(unknown)", source: e.filename });
+  }
+  function onUnhandledRejection(e: PromiseRejectionEvent) {
+    const r = e.reason;
+    uncaughtErrors.push({
+      message: typeof r === "string" ? r : (r?.message ?? String(r ?? "unhandledrejection")),
+    });
+  }
+  // Capture postMessage handshakes from the iframe (the project may opt in).
+  const optInProbes: Array<{ name: string; ok: boolean; detail?: string }> = [];
+  let optInRendersNonEmpty: boolean | undefined;
+  function onMessage(ev: MessageEvent) {
+    const data = ev.data as
+      | { type?: string; probes?: typeof optInProbes; rendersNonEmpty?: boolean }
+      | undefined;
+    if (data?.type !== "bscode:visual-check") return;
+    if (Array.isArray(data.probes)) optInProbes.push(...data.probes);
+    if (typeof data.rendersNonEmpty === "boolean") optInRendersNonEmpty = data.rendersNonEmpty;
+  }
+  // patch console.error to capture errors that don't bubble to window.error.
+  const origConsoleError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    const msg = args
+      .map((a) => (typeof a === "string" ? a : a instanceof Error ? a.message : String(a)))
+      .join(" ");
+    consoleErrors.push({ message: msg.slice(0, 500) });
+    origConsoleError(...args);
+  };
+  if (typeof window !== "undefined") {
+    window.addEventListener("error", onErr);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    window.addEventListener("message", onMessage);
+  }
+
+  setTimeout(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("error", onErr);
+        window.removeEventListener("unhandledrejection", onUnhandledRejection);
+        window.removeEventListener("message", onMessage);
+      }
+      console.error = origConsoleError;
+    } catch {
+      // restore best-effort
+    }
+
+    const visual: VisualCheckPayload = {
+      ranAtMs: Date.now(),
+      ...(consoleErrors.length ? { consoleErrors: consoleErrors.slice(0, 20) } : {}),
+      ...(uncaughtErrors.length ? { uncaughtErrors: uncaughtErrors.slice(0, 10) } : {}),
+      ...(optInProbes.length ? { domProbes: optInProbes.slice(0, 20) } : {}),
+      ...(typeof optInRendersNonEmpty === "boolean"
+        ? { rendersNonEmpty: optInRendersNonEmpty }
+        : {}),
+    };
+
+    void reportBuildResult({
+      stage: "dev",
+      status: "success",
+      previewUrl,
+      visual,
+    });
+  }, delayMs);
 }

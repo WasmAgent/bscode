@@ -58,6 +58,8 @@ export class JobQueue {
   readonly #tailSize: number;
   readonly #durableKv: JobQueueOptions["durableKv"];
   readonly #waitUntil: JobQueueOptions["waitUntil"];
+  readonly #onBeforeStart: JobQueueOptions["onBeforeStart"];
+  readonly #onAfterFinish: JobQueueOptions["onAfterFinish"];
   #running = 0;
 
   constructor(opts: JobQueueOptions = {}) {
@@ -67,6 +69,8 @@ export class JobQueue {
     this.#tailSize = Math.max(1, opts.eventTailSize ?? DEFAULT_TAIL_SIZE);
     this.#durableKv = opts.durableKv;
     this.#waitUntil = opts.waitUntil;
+    this.#onBeforeStart = opts.onBeforeStart;
+    this.#onAfterFinish = opts.onAfterFinish;
   }
 
   /**
@@ -192,7 +196,12 @@ export class JobQueue {
     state.status = "running";
     state.startedAtMs = Date.now();
     try {
-      const iterable = runner(state.spec, state.controller.signal);
+      // C2 — let the host provision per-job state (snapshot, fork, audit).
+      // A throw here fails the job before any events are emitted.
+      if (this.#onBeforeStart) {
+        await this.#onBeforeStart(state.id, state.spec);
+      }
+      const iterable = runner(state.spec, state.controller.signal, { jobId: state.id });
       for await (const ev of iterable) {
         if (state.controller.signal.aborted) {
           // Capture any answer we managed to receive before the abort.
@@ -223,6 +232,15 @@ export class JobQueue {
       state.finishedAtMs = Date.now();
       this.#running = Math.max(0, this.#running - 1);
       await this.#mirrorIfTerminal(state);
+      // C2 — host cleanup hook. Errors are logged but do NOT mutate the
+      // already-decided terminal state.
+      if (this.#onAfterFinish) {
+        try {
+          await this.#onAfterFinish(this.#snapshot(state));
+        } catch (err) {
+          console.warn("[jobs] onAfterFinish hook threw:", err);
+        }
+      }
       this.#drainSoon(runner);
     }
   }
