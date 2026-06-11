@@ -14,8 +14,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getWorkerUrl } from "@/lib/workerUrl";
 import { theme } from "@/lib/theme";
+import { getWorkerUrl } from "@/lib/workerUrl";
 
 // Reusable inline-style fragments so the JSX below stays scannable.
 const inputStyle = {
@@ -39,6 +39,13 @@ const buttonStyle = {
   fontSize: 12,
 } as const;
 
+interface JobEvent {
+  channel: string;
+  event: string;
+  data?: Record<string, unknown>;
+  timestampMs: number;
+}
+
 interface JobRecord {
   id: string;
   spec: { task: string; sessionId?: string };
@@ -49,6 +56,8 @@ interface JobRecord {
   submittedAtMs: number;
   startedAtMs?: number;
   finishedAtMs?: number;
+  /** Present on GET /jobs/:id, absent on the list endpoint. */
+  eventTail?: JobEvent[];
 }
 
 interface ListResponse {
@@ -101,7 +110,17 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  /** Set of job ids whose detail panel is currently expanded. */
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  /** id → fetched detail (eventTail). Cached per id; refreshed when reopened. */
+  const [details, setDetails] = useState<Record<string, JobRecord>>({});
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Coalesce concurrent list fetches. Rapid Refresh clicks (or Refresh racing
+   * the poll tick) used to fan out N parallel GETs against the worker; this
+   * flag drops anything that arrives while one is in flight.
+   */
+  const fetchInFlightRef = useRef(false);
   // Mirror of the latest jobs[] for the polling driver, kept up to date by
   // the same setter that updates state. Reading state from the timer
   // callback would race with React's render queue; reading from a ref is
@@ -109,6 +128,8 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
   const liveCountRef = useRef(0);
 
   const fetchJobs = useCallback(async () => {
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     try {
       const res = await fetch(`${base}/jobs?sessionId=${encodeURIComponent(sessionId)}`, {
         headers: { "X-Session-Id": sessionId },
@@ -124,8 +145,48 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      fetchInFlightRef.current = false;
     }
   }, [base, sessionId]);
+
+  /**
+   * Fetch GET /jobs/:id (eventTail + finalAnswer). Caches into `details`.
+   * Called on row-expand and on poll-tick for any expanded-and-still-live job.
+   */
+  const fetchDetail = useCallback(
+    async (id: string) => {
+      try {
+        const res = await fetch(`${base}/jobs/${encodeURIComponent(id)}`, {
+          headers: { "X-Session-Id": sessionId },
+        });
+        if (!res.ok) throw new Error(`GET /jobs/${id} ${res.status}`);
+        const body = (await res.json()) as JobRecord;
+        setDetails((prev) => ({ ...prev, [id]: body }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [base, sessionId]
+  );
+
+  const toggleExpanded = useCallback(
+    (id: string) => {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+          // Fetch on open; cache may be stale for live jobs but the next
+          // poll tick will refresh.
+          fetchDetail(id);
+        }
+        return next;
+      });
+    },
+    [fetchDetail]
+  );
 
   // Self-rescheduling poller. The effect runs ONCE per (base, sessionId) —
   // it does NOT depend on `jobs`, so a state update from the previous poll
@@ -165,6 +226,28 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
       }, POLL_INTERVAL_MS);
     }
   }, [fetchJobs]);
+
+  /** id → eventCount we last fetched detail for. Avoids reading `details`
+   * in the effect below (which would force `details` into the dep list and
+   * loop on every successful detail fetch). */
+  const detailFetchedAtCountRef = useRef<Record<string, number>>({});
+
+  // When the list refreshes, re-fetch detail for any expanded job whose
+  // event count or status has changed since we last fetched its detail.
+  // This is what makes the expanded panel show fresh events as a live job
+  // streams, and what backfills the final_answer once a job lands.
+  useEffect(() => {
+    if (expanded.size === 0) return;
+    const fetchedAt = detailFetchedAtCountRef.current;
+    for (const j of jobs) {
+      if (!expanded.has(j.id)) continue;
+      const last = fetchedAt[j.id];
+      if (last === undefined || last !== j.eventCount) {
+        fetchedAt[j.id] = j.eventCount;
+        fetchDetail(j.id);
+      }
+    }
+  }, [jobs, expanded, fetchDetail]);
 
   const submit = useCallback(async () => {
     const lines = tasks
@@ -222,11 +305,7 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
         <span style={{ color: theme.textMuted, fontSize: 12 }}>
           {stats.running} running · {stats.pending} queued · {stats.total} total
         </span>
-        <button
-          type="button"
-          onClick={fetchJobs}
-          style={{ ...buttonStyle, marginLeft: "auto" }}
-        >
+        <button type="button" onClick={fetchJobs} style={{ ...buttonStyle, marginLeft: "auto" }}>
           Refresh
         </button>
       </div>
@@ -238,6 +317,8 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
       ) : null}
 
       <textarea
+        id="jobs-tasks"
+        name="tasks"
         aria-label="Tasks (one per line)"
         placeholder="One task per line — submit batch"
         rows={3}
@@ -277,47 +358,20 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
               </td>
             </tr>
           ) : (
-            sortedJobs.map((j) => (
-              <tr key={j.id} style={{ borderBottom: `1px solid ${theme.borderDefault}` }}>
-                <td>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "1px 6px",
-                      borderRadius: 8,
-                      background: statusColor(j.status),
-                      color: "white",
-                      fontWeight: 600,
-                      fontSize: 11,
-                    }}
-                  >
-                    {j.status}
-                  </span>
-                </td>
-                <td
-                  title={j.spec.task}
-                  style={{
-                    maxWidth: 300,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {j.spec.task}
-                </td>
-                <td>{j.eventCount}</td>
-                <td title={new Date(j.submittedAtMs).toISOString()}>
-                  {relTime(j.submittedAtMs)} ago
-                </td>
-                <td>
-                  {j.status === "queued" || j.status === "running" ? (
-                    <button type="button" onClick={() => abort(j.id)} style={buttonStyle}>
-                      Abort
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-            ))
+            sortedJobs.map((j) => {
+              const isOpen = expanded.has(j.id);
+              const detail = details[j.id];
+              return (
+                <FragmentRow
+                  key={j.id}
+                  job={j}
+                  isOpen={isOpen}
+                  detail={detail}
+                  onToggle={() => toggleExpanded(j.id)}
+                  onAbort={() => abort(j.id)}
+                />
+              );
+            })
           )}
         </tbody>
       </table>
@@ -326,3 +380,180 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
 }
 
 export default JobsPanel;
+
+// ── Row + detail panel ────────────────────────────────────────────────────
+// A row is a real <tr>; opening it inserts a sibling <tr> with a colspan=5
+// detail panel showing the final answer (or error) and the most recent
+// events. This is what addresses the long-standing UX gap "I clicked done
+// but I can't see the answer" — Chrome DevTools E2E surfaced it as soon as
+// jobs ran end-to-end.
+
+interface FragmentRowProps {
+  job: JobRecord;
+  isOpen: boolean;
+  detail: JobRecord | undefined;
+  onToggle: () => void;
+  onAbort: () => void;
+}
+
+function FragmentRow({ job, isOpen, detail, onToggle, onAbort }: FragmentRowProps) {
+  const isLive = job.status === "queued" || job.status === "running";
+  // Keep table semantics intact — `aria-expanded` is only valid on
+  // treegrid rows, not on plain `<tr>`. Lighthouse caught this regression
+  // (acc 100→96, agentic 100→50). Move the toggle to a real <button> in
+  // the Task cell so keyboard + screen-reader users get a proper widget.
+  return (
+    <>
+      <tr
+        style={{
+          borderBottom: `1px solid ${theme.borderDefault}`,
+          background: isOpen ? theme.bgInput : undefined,
+        }}
+        data-testid={`jobs-row-${job.id}`}
+      >
+        <td>
+          <span
+            style={{
+              display: "inline-block",
+              padding: "1px 6px",
+              borderRadius: 8,
+              background: statusColor(job.status),
+              color: "white",
+              fontWeight: 600,
+              fontSize: 11,
+            }}
+          >
+            {job.status}
+          </span>
+        </td>
+        <td
+          title={job.spec.task}
+          style={{
+            maxWidth: 300,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={isOpen}
+            aria-controls={`jobs-detail-${job.id}`}
+            data-testid={`jobs-toggle-${job.id}`}
+            style={{
+              background: "none",
+              border: 0,
+              // Padded out to ≥ 24×24 touch target (Lighthouse target-size).
+              padding: "4px 6px",
+              margin: 0,
+              minHeight: 24,
+              color: theme.textSecondary,
+              fontFamily: "inherit",
+              fontSize: "inherit",
+              cursor: "pointer",
+              textAlign: "left",
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span style={{ marginRight: 6, color: theme.textMuted }}>{isOpen ? "▼" : "▶"}</span>
+            {job.spec.task}
+          </button>
+        </td>
+        <td>{job.eventCount}</td>
+        <td title={new Date(job.submittedAtMs).toISOString()}>{relTime(job.submittedAtMs)} ago</td>
+        <td>
+          {isLive ? (
+            <button type="button" onClick={onAbort} style={buttonStyle}>
+              Abort
+            </button>
+          ) : null}
+        </td>
+      </tr>
+      {isOpen ? (
+        <tr style={{ background: theme.bgInput }}>
+          <td colSpan={5} style={{ padding: "8px 12px" }}>
+            <JobDetail job={job} detail={detail} />
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+interface JobDetailProps {
+  job: JobRecord;
+  detail: JobRecord | undefined;
+}
+
+function JobDetail({ job, detail }: JobDetailProps) {
+  const tail = detail?.eventTail ?? [];
+  const finalAnswer =
+    detail?.finalAnswer ??
+    (tail.find((e) => e.event === "final_answer")?.data?.answer as string | undefined);
+  const errorMessage =
+    detail?.error ?? (tail.find((e) => e.event === "error")?.data?.message as string | undefined);
+
+  return (
+    <div
+      id={`jobs-detail-${job.id}`}
+      data-testid={`jobs-detail-${job.id}`}
+      style={{ fontSize: 12, color: theme.textSecondary }}
+    >
+      <div style={{ marginBottom: 4, color: theme.textMuted }}>
+        Job <code>{job.id}</code>
+      </div>
+      {finalAnswer ? (
+        <div style={{ marginBottom: 8 }}>
+          <strong style={{ color: theme.textPrimary }}>Answer:</strong>
+          <pre
+            style={{
+              marginTop: 4,
+              padding: 8,
+              background: theme.bgPanel,
+              border: `1px solid ${theme.borderDefault}`,
+              borderRadius: 4,
+              whiteSpace: "pre-wrap",
+              fontSize: 12,
+            }}
+          >
+            {finalAnswer}
+          </pre>
+        </div>
+      ) : null}
+      {errorMessage ? (
+        <div style={{ marginBottom: 8, color: theme.statusError }}>
+          <strong>Error:</strong> {errorMessage}
+        </div>
+      ) : null}
+      <details>
+        <summary style={{ cursor: "pointer", color: theme.textMuted }}>
+          Events ({tail.length})
+        </summary>
+        <ul
+          style={{ margin: "6px 0 0 0", padding: "0 0 0 16px", maxHeight: 220, overflow: "auto" }}
+        >
+          {tail.length === 0 ? (
+            <li style={{ color: theme.textDim }}>Loading events…</li>
+          ) : (
+            tail.map((e) => (
+              <li
+                // Tail is append-only and the worker stamps every event
+                // with monotonic (timestampMs, channel, event); good enough
+                // as a stable key for a read-only debug list.
+                key={`${e.timestampMs}-${e.channel}-${e.event}`}
+                style={{ marginBottom: 2 }}
+              >
+                <code style={{ color: theme.textMuted }}>{e.channel}</code>{" "}
+                <strong>{e.event}</strong>
+              </li>
+            ))
+          )}
+        </ul>
+      </details>
+    </div>
+  );
+}

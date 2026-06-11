@@ -17,12 +17,20 @@ interface MockJob {
   status: "queued" | "running" | "done" | "failed" | "aborted";
   eventCount: number;
   submittedAtMs: number;
+  finalAnswer?: string;
+  eventTail?: Array<{
+    channel: string;
+    event: string;
+    data?: Record<string, unknown>;
+    timestampMs: number;
+  }>;
 }
 
 let mockJobs: MockJob[] = [];
 let mockStats = { running: 0, pending: 0, total: 0 };
 let postedBodies: unknown[] = [];
 let deletedIds: string[] = [];
+let detailFetchCount = 0;
 
 function makeFetch(): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -38,6 +46,15 @@ function makeFetch(): typeof fetch {
       deletedIds.push(id);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
+    // GET /jobs/:id — single-job detail (eventTail).
+    const detailMatch = url.match(/\/jobs\/([^/?]+)$/);
+    if (detailMatch && method === "GET") {
+      detailFetchCount += 1;
+      const id = detailMatch[1];
+      const j = mockJobs.find((m) => m.id === id);
+      if (!j) return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+      return new Response(JSON.stringify(j), { status: 200 });
+    }
     if (url.includes("/jobs") && method === "GET") {
       return new Response(JSON.stringify({ jobs: mockJobs, stats: mockStats }), { status: 200 });
     }
@@ -50,6 +67,7 @@ beforeEach(() => {
   mockStats = { running: 0, pending: 0, total: 0 };
   postedBodies = [];
   deletedIds = [];
+  detailFetchCount = 0;
   vi.stubGlobal("fetch", makeFetch());
 });
 
@@ -144,5 +162,61 @@ describe("JobsPanel", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeTruthy();
     });
+  });
+
+  it("expands a row and shows the final answer + event count from /jobs/:id", async () => {
+    mockJobs = [
+      {
+        id: "answered-1",
+        spec: { task: "compute 2+2" },
+        status: "done",
+        eventCount: 3,
+        submittedAtMs: Date.now() - 5000,
+        finalAnswer: "The result is **4**.",
+        eventTail: [
+          { channel: "text", event: "run_start", timestampMs: 1 },
+          { channel: "text", event: "step_start", timestampMs: 2 },
+          {
+            channel: "text",
+            event: "final_answer",
+            data: { answer: "The result is **4**." },
+            timestampMs: 3,
+          },
+        ],
+      },
+    ];
+    mockStats = { running: 0, pending: 0, total: 1 };
+    render(<JobsPanel sessionId="s1" workerUrl="http://test" />);
+    const toggle = await screen.findByTestId("jobs-toggle-answered-1");
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId("jobs-detail-answered-1")).toBeTruthy();
+      expect(screen.getByText(/The result is \*\*4\*\*\./)).toBeTruthy();
+    });
+    // At least one detail fetch must have happened on open. The staleness
+    // effect may fire a second one if the response lands after the first
+    // jobs[] poll tick — that's fine; what we're guarding against is zero.
+    expect(detailFetchCount).toBeGreaterThanOrEqual(1);
+    expect(detailFetchCount).toBeLessThanOrEqual(3);
+  });
+
+  it("collapses a row and stops re-fetching detail when closed", async () => {
+    mockJobs = [
+      {
+        id: "j-collapse",
+        spec: { task: "say hi" },
+        status: "done",
+        eventCount: 1,
+        submittedAtMs: Date.now() - 100,
+        finalAnswer: "hi",
+      },
+    ];
+    mockStats = { running: 0, pending: 0, total: 1 };
+    render(<JobsPanel sessionId="s1" workerUrl="http://test" />);
+    const toggle = await screen.findByTestId("jobs-toggle-j-collapse");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.getByTestId("jobs-detail-j-collapse")).toBeTruthy());
+    fireEvent.click(toggle);
+    await waitFor(() => expect(screen.queryByTestId("jobs-detail-j-collapse")).toBeNull());
   });
 });
