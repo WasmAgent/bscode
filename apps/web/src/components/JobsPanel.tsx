@@ -58,6 +58,14 @@ interface JobRecord {
   finishedAtMs?: number;
   /** Present on GET /jobs/:id, absent on the list endpoint. */
   eventTail?: JobEvent[];
+  /** H1 — accumulated cost across the job's model calls, in USD. */
+  costUsd?: number;
+  /** H1 — total input tokens billed across all model calls. */
+  inputTokens?: number;
+  /** H1 — total output tokens billed across all model calls. */
+  outputTokens?: number;
+  /** H1 — cache-read tokens (prompt-cache hit) — proxy for hit rate. */
+  cacheReadTokens?: number;
 }
 
 interface ListResponse {
@@ -346,6 +354,7 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
             <th>Status</th>
             <th>Task</th>
             <th>Events</th>
+            <th>Cost</th>
             <th>Submitted</th>
             <th />
           </tr>
@@ -353,7 +362,7 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
         <tbody>
           {sortedJobs.length === 0 ? (
             <tr>
-              <td colSpan={5} style={{ color: theme.textDim, padding: 8 }}>
+              <td colSpan={6} style={{ color: theme.textDim, padding: 8 }}>
                 No jobs yet — paste tasks above and click Submit.
               </td>
             </tr>
@@ -464,6 +473,15 @@ function FragmentRow({ job, isOpen, detail, onToggle, onAbort }: FragmentRowProp
           </button>
         </td>
         <td>{job.eventCount}</td>
+        <td
+          title={
+            job.costUsd !== undefined
+              ? `${job.inputTokens ?? 0} in / ${job.outputTokens ?? 0} out / ${job.cacheReadTokens ?? 0} cached tokens`
+              : "no model calls yet"
+          }
+        >
+          {job.costUsd !== undefined ? `$${job.costUsd.toFixed(4)}` : "—"}
+        </td>
         <td title={new Date(job.submittedAtMs).toISOString()}>{relTime(job.submittedAtMs)} ago</td>
         <td>
           {isLive ? (
@@ -475,7 +493,7 @@ function FragmentRow({ job, isOpen, detail, onToggle, onAbort }: FragmentRowProp
       </tr>
       {isOpen ? (
         <tr style={{ background: theme.bgInput }}>
-          <td colSpan={5} style={{ padding: "8px 12px" }}>
+          <td colSpan={6} style={{ padding: "8px 12px" }}>
             <JobDetail job={job} detail={detail} />
           </td>
         </tr>

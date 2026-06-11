@@ -1,101 +1,148 @@
-# bscode
+# bscode — agentkit-js flagship template
 
-A Coding Assistant built on [agentkit-js](https://github.com/user/agentkit-js), deployed on Cloudflare Workers + Pages.
+> **Edge-native agent runtime showcase** — Cloudflare Workers + Pages, ships in 5 minutes.
+> The reference deployment for [agentkit-js](https://github.com/telleroutlook/agentkit-js).
 
-## What it does
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![agentkit-js](https://img.shields.io/badge/built%20on-agentkit--js-646cff.svg)](https://github.com/telleroutlook/agentkit-js)
 
-| Capability | How it works |
+bscode is **not** competing with Cursor, Claude Code, or Codex. It is the
+fastest way to see agentkit-js running end-to-end on a real edge runtime —
+QuickJS WASM sandbox, durable checkpoints, multi-agent fan-out, GitHub PR
+opener, visual verifier, all wired into one Workers + Next.js deployment
+that you can fork and own.
+
+If you want the **framework**, head to
+[github.com/telleroutlook/agentkit-js](https://github.com/telleroutlook/agentkit-js).
+If you want the **template**, you're in the right place.
+
+```bash
+npm install @agentkit-js/core   # the framework itself, on npm
+```
+
+---
+
+## Quick start (local, ~2 minutes)
+
+```bash
+git clone https://github.com/WasmAgent/bscode
+cd bscode
+pnpm install                                          # 1
+cp apps/worker/.dev.vars.example apps/worker/.dev.vars # 2 — fill ANTHROPIC_API_KEY
+pnpm dev:worker                                        # 3 — http://localhost:8787
+pnpm dev:web                                           # 4 — http://localhost:3000  (in another terminal)
+```
+
+That's it. KV bindings are optional — bscode silently falls back to in-memory
+storage so you can play before owning Cloudflare resources.
+
+> Need a different model? Add any of `DOUBAO_API_KEY`, `DEEPSEEK_API_KEY`,
+> `MOONSHOT_API_KEY`, etc. to `.dev.vars`. The full set lives in
+> `apps/worker/.dev.vars.example`.
+
+## Deploy to Cloudflare (~10 minutes)
+
+The "Deploy to Cloudflare" button at the top creates the Worker, Pages
+project, and KV namespaces in one shot. If you'd rather drive it manually:
+
+```bash
+# create KV namespaces (one-time)
+wrangler kv namespace create BSCODE_FILES
+wrangler kv namespace create BSCODE_SESSIONS
+wrangler kv namespace create BSCODE_CHECKPOINTS
+wrangler kv namespace create BSCODE_BUILD_RESULTS
+
+# paste each ID into apps/worker/wrangler.toml under [[kv_namespaces]]
+# then:
+wrangler secret put ANTHROPIC_API_KEY
+pnpm deploy:worker
+pnpm deploy:web
+```
+
+---
+
+## What this demonstrates
+
+Each row maps to a published agentkit-js capability — bscode just wires
+them up against the Cloudflare runtime.
+
+| bscode feature | agentkit-js it exercises |
 |---|---|
-| **Edge-isolated code execution** | CodeAgent writes JS and runs it in a QuickJS WASM sandbox on Cloudflare Workers — no container, no cold-start hit |
-| **Speculative tool fan-out** | ToolCallingAgent runs `readOnly` tools (read/list/search/semantic_search) in parallel via the agentkit DAG scheduler |
-| **Semantic codebase search** | `semantic_search` indexes every file write and ranks matches by meaning, not just substring |
-| **Durable runs** | Checkpoints persisted to Workers KV; SSE streams resume via `Last-Event-ID`; `await_human_input` survives worker recycle |
-| **Prompt-cache instrumentation** | `model_done` events expose `cacheReadTokens`; the TokenMeter shows hit rate live |
-| **Multi-model switching** | Claude Sonnet/Haiku, Doubao Seed-1.6, DeepSeek V4 selectable in the UI |
+| Edge-isolated code execution | [`@agentkit-js/kernel-quickjs`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-quickjs) — QuickJS WASM kernel, no `node:vm` |
+| Speculative tool fan-out | `ParallelForkJoinRunner` in `@agentkit-js/core` |
+| Durable checkpoints + SSE resume | [`@agentkit-js/core`](https://telleroutlook.github.io/agentkit-js/guides/durable-runtime) — `KvCheckpointer`, `EventLog`, `Last-Event-ID` |
+| Multi-agent shapes (parallel / planFirst) | `ParallelForkJoinRunner` + stateless HITL primitive in core |
+| Per-job session isolation + diff/merge | `BranchableWorkspace` in core |
+| Tiered approval policy (B4) | `needsApproval` lifecycle hook in core |
+| Visual verifier (CDP + vision judge) | [`@agentkit-js/tools-browser`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/tools-browser) — CDP session driver |
+| GitHub repo import + PR opener | Bscode-specific tools wrapping the standard tool contract |
+| Prompt-cache instrumentation | Per-call `usage` events from every model adapter |
+| AGENTS.md project conventions | Loaded into the system prompt prefix on every `/run` |
+
+The framework's [Getting started](https://telleroutlook.github.io/agentkit-js/guides/getting-started)
+and [Comparison](https://telleroutlook.github.io/agentkit-js/compare) pages
+explain the broader picture.
+
+---
+
+## Try it from the CLI
+
+No browser needed:
+
+```bash
+# Code mode — agent writes JS, executes in the QuickJS WASM sandbox
+node scripts/bscode.mjs --url http://localhost:8787 --mode code "sort [3,1,4,1,5,9]"
+
+# Tool mode — agent uses DAG-scheduled file tools
+node scripts/bscode.mjs --url http://localhost:8787 --mode tool "write a quicksort to quicksort.ts"
+
+# With raw event stream
+node scripts/bscode.mjs --url http://localhost:8787 --events "calculate 6*7"
+```
+
+Or run the end-to-end async-agent demo (G1):
+
+```bash
+node scripts/demo-async-agent.mjs   # imports a small repo → multi-agent fix → PR (dry-run)
+```
+
+---
+
+## Out of scope
+
+bscode is intentionally **not**:
+
+- **A Cursor / Claude Code competitor.** Real shell, real npm install, real
+  compilation chains are not what a WASM kernel is for. If you want that,
+  use the framework's [`@agentkit-js/kernel-remote`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-remote) tier (E2B / CF Sandbox microVMs) on top of a host that runs them.
+- **An IDE.** No file watcher, no LSP, no plugin system. The Monaco surface
+  exists to demonstrate `useAgentRun()` + `TokenMeter` in a Next.js app, not
+  to be a development environment.
+- **A long-term product roadmap.** New capabilities land in agentkit-js
+  first; bscode pulls them in as a demo. If a feature has no obvious place
+  in the *framework*, it does not belong in *bscode*.
+
+We accept PRs that improve the demo (clearer flows, better screenshots,
+honest benchmarks) and PRs that remove things that have drifted from this
+positioning. We do not accept feature additions that read as "competing
+with Cursor."
+
+---
 
 ## Architecture
 
 ```
 apps/
   worker/   Cloudflare Worker — Hono router, CodeAgent, ToolCallingAgent, KV file system
-  web/      Next.js 15 — Monaco Editor, Terminal, AgentPanel, TokenMeter
+  web/      Next.js 15 — Monaco editor, Terminal, AgentPanel, JobsPanel, TokenMeter
+scripts/    CLI test scripts (bscode.mjs, test-full.mjs, demo-async-agent.mjs)
+docs/       Per-capability deep dives (B1–C4)
 ```
 
-## Quick start
+---
 
-```bash
-# Install (from repo root)
-pnpm install
-
-# Copy env
-cp apps/worker/.dev.vars.example apps/worker/.dev.vars
-# Fill in ANTHROPIC_API_KEY (and optionally ANTHROPIC_BASE_URL, DOUBAO_API_KEY, DEEPSEEK_API_KEY)
-
-# Start Worker with Node.js (QuickJS WASM works here)
-pnpm dev:worker          # http://localhost:8788
-
-# In another terminal, start Web on :3000
-pnpm dev:web
-```
-
-## CLI testing (no browser needed)
-
-```bash
-# Code mode — agent writes JS, executes in QuickJS WASM sandbox
-node scripts/bscode.mjs --url http://localhost:8788 --mode code "sort [3,1,4,1,5,9]"
-
-# Tool mode — agent uses DAG-scheduled file tools
-node scripts/bscode.mjs --url http://localhost:8788 --mode tool "write a quicksort to quicksort.ts"
-
-# With raw event stream
-node scripts/bscode.mjs --url http://localhost:8788 --events "calculate 6*7"
-
-# Different model
-node scripts/bscode.mjs --model doubao-seed-1-6-251015 "write hello world"
-```
-
-## Deploy to Cloudflare
-
-```bash
-# Worker (also works in Cloudflare runtime)
-pnpm deploy:worker
-
-# Web (Cloudflare Pages)
-pnpm deploy:web
-
-# Local dev with Wrangler/Miniflare (CodeAgent WASM limited)
-pnpm dev:worker:cf
-```
-
-### Required and optional bindings
-
-Add these to `apps/worker/wrangler.toml` to enable the durable runtime
-features (all optional — bscode falls back to in-memory when absent):
-
-```toml
-[[kv_namespaces]]
-binding = "BSCODE_FILES"          # required for the virtual file system
-id = "..."
-
-[[kv_namespaces]]
-binding = "BSCODE_SESSIONS"        # session result caching (warm replays)
-id = "..."
-
-[[kv_namespaces]]
-binding = "BSCODE_CHECKPOINTS"     # B1 — durable agent checkpoints; without it
-id = "..."                         # paused runs do not survive worker recycle.
-
-[[kv_namespaces]]
-binding = "BSCODE_BUILD_RESULTS"   # B2 — browser-reported install/build/test
-id = "..."                         # outcomes; without it the snapshot is in-memory
-                                   # only (fine for single-recycle conversations).
-```
-
-The `create_github_pr` tool is registered automatically when `BSCODE_FILES`
-is bound. Tokens come from the per-call tool input (preferred) or — if you
-choose — a worker-level `GITHUB_TOKEN` env var wired through `AppConfig.githubToken`.
-
-### Tools the agent can call
+## Tools the agent can call
 
 | Tool | Read-only | Notes |
 |---|:---:|---|
@@ -105,44 +152,42 @@ choose — a worker-level `GITHUB_TOKEN` env var wired through `AppConfig.github
 | `write_file`, `patch_file`, `delete_file`, `rename_file` | ❌ | Auto-update semantic index + version history |
 | `revert_file` | ❌ | B4 — roll a file back to any prior version |
 | `run_command` | ❌ | Node/Bun only; blocked on edge |
-| `read_build_result` | ✅ | B2 — agent reads browser-side WebContainer install/build/test outcomes (framework mode only) |
+| `read_build_result` | ✅ | B2 — agent reads browser-side WebContainer install/build/test outcomes |
 | `web_search`, `git_status`/`git_diff`/`git_log`/`git_commit` | mixed | Standard tools |
-| `create_github_pr` | ❌ | B3 — branch + commit + PR via REST. **HITL-gated** (`needsApproval: true`) |
+| `create_github_pr` | ❌ | B3 — branch + commit + PR via REST. **HITL-gated** |
+| `visual_verify`, `visual_interact` | mixed | C3 — CDP screenshot + vision judge against preview URL |
+| `init_agents_md` | ✅ | C4 — drafts AGENTS.md; `needsApproval: true` |
+
+---
 
 ## Quality
 
-Verified metrics — every claim above is backed by an executable test or
-benchmark, not a marketing line.
-
 | Metric | Verified by | Current value |
 |---|---|---|
-| **Backend test suite** | `apps/worker` vitest | **199 tests, 100% pass** |
-| **Frontend test suite** | `apps/web` vitest | **25 tests, 100% pass** |
-| **Cross-instance checkpoint resume (B1 ①)** | `apps/worker/src/app.test.ts` | snapshot saved by app instance A is loadable by a brand-new instance B sharing the same KV; HITL `pendingHumanInput` survives across three instances (pause / resume / continue) |
-| **SSE `Last-Event-ID` resume (C1)** | `apps/worker/src/app.test.ts` (6 tests) + `packages/react/src/useAgentRun.test.ts` (4 tests) | live `/run` stream tags every frame with a monotonic `id:`; reconnect with `resumeTraceId` body field + `Last-Event-ID` header replays only the missing tail and **never** spawns a second agent (proven by mock factory call count); EventLog purged on success; `--resume-after N` CLI flag demos the round-trip |
-| **Per-job session isolation (C2)** | `apps/worker/src/jobs/jobBranches.test.ts` (15 tests) + `app.test.ts` (5 e2e) | each /jobs entry runs in a derived `parent#job-<id>` session id with its parent files snapshotted on submit; `/jobs/:id/diff` reports per-job changes vs the snapshot; `/jobs/:id/merge` applies them only when no concurrent base edit happened, otherwise returns structured `{path, reason: "both-modified" | "modified-vs-deleted" | "deleted-vs-modified"}` conflicts and refuses to silently overwrite the parent |
-| **Project AGENTS.md instructions (C4)** | `apps/worker/src/app.test.ts` (5 tests) | repo-root and nested AGENTS.md files are loaded into the agent's system prompt with broadest→nearest order (LLM "later-wins" bias); empty workspace produces empty text; `init_agents_md` tool is `needsApproval: true` so its draft cannot bypass the planFirst HITL gate |
-| **Visual verification channel (C3 — complete)** | `apps/worker/src/visualVerifier.test.ts` (9 tests) + `visionJudge.test.ts` (8 tests) + `tools/visual.test.ts` (6 tests + DoD e2e) + `build-results.test.ts` (3 tests for source/verdict/pageTitle round-trip) | Two paths populate `BuildResultSnapshot.visual` against the same shape: (a) the browser-side passive observer in `useWebContainer` (parent-page event bus, opt-in postMessage probes); (b) the new worker-side **CDP visual verifier** (`@agentkit-js/tools-browser`) that drives a Chrome DevTools session against the preview URL to capture real screenshots, run agent-supplied selector/textContains probes, read console events, and ask a vision-capable model whether the render matches the agent's stated intent. Two new tools wire into framework mode: `visual_verify` (read-only, no approval) and `visual_interact` (write-class, `needsApproval=true`). Both degrade to a structured "no endpoint configured" snapshot when `BSCODE_CDP_WS` is unset — the agent loop never crashes on the optional path. Thumbnail data URLs are NEVER inlined into agent context (size discipline). DoD e2e: deliberate render bug → agent reads `read_build_result` → sees `rendersNonEmpty:false` + verdict `matchesIntent:false` + console error → writes the fix → re-verify shows `matchesIntent:true`, all without human prompting. |
-| **Build-result reverse channel (B2)** | `apps/worker/src/build-results.test.ts`, `tools/build-result.test.ts`, `app.test.ts` | 18 unit + 5 route tests cover memory/KV mirror, stderr truncation (≤2000 chars), session isolation via `X-Session-Id`, and graceful fallback on KV outage |
-| **Parallel job queue (B1)** | `apps/worker/src/jobs/queue.test.ts`, `app.test.ts`, `apps/web/src/components/JobsPanel.test.tsx` | 10 queue + 8 route + 5 dashboard tests cover concurrency cap, KV durable mirror across recycle, cooperative abort via `AbortSignal`, batch validation (max 20 per request), newest-first list ordering, and dashboard submit/abort flow |
-| **GitHub repo import (B3)** | `apps/worker/src/tools/githubImport.test.ts`, `app.test.ts` | 8 importer + 4 route tests cover default-branch resolution, extension/path filtering, base64 decoding, oversize/binary skipping, partial-tree propagation, per-file fetch error counters, and the 502 bubble path |
-| **Tiered approval policy (B4)** | `apps/worker/src/policies/approvalPolicy.test.ts` | 12 tests cover default verdict, first-rule-wins ordering, prefix matching, op filtering, size gating, audit `explain()`, and each preset (`permissive` / `balanced` / `strict`) |
-| **Multi-agent shapes (B1+B4)** | `apps/worker/src/agents/multi-agent.test.ts`, `app.test.ts` | 6 unit + 2 route tests cover the new `parallel` (fork-join via `ParallelForkJoinRunner`) and `planFirst` (planner → `await_human_input` → executor) modes plus the resume path that loads a snapshot and runs `runPlanFirstExecution`. The old serial Phase1+Phase2 layout was removed entirely. |
-| **`semantic_search` Top-3 recall vs grep (B2 ①)** | `apps/worker/src/tools/semanticSearch.eval.test.ts` | **70%** (semantic) vs **0%** (grep) on a 50-file synthetic project with paraphrased queries |
-| **Lighthouse desktop snapshot** | `chrome-devtools-mcp` audit | **Accessibility 100 · Best Practices 100 · SEO 100 · Agentic Browsing 100** (24/24 audits passing) |
-| **Cost-display accuracy** | `apps/web/src/components/TokenMeter.tsx` | sums per-call `estimatedUsd` from the worker (computed with the actual model's pricing); no longer mis-bills Haiku/Opus runs as Sonnet |
-| **A11y / dark-mode contrast** | `apps/web/src/lib/theme.ts` | every UI colour goes through one named token; secondary text raised from `#8b949e` → `#d0d7de` (AAA on `#161b22`) |
+| Backend test suite | `apps/worker` vitest | **199 tests, 100% pass** |
+| Frontend test suite | `apps/web` vitest | **25 tests, 100% pass** |
+| Lighthouse desktop | `chrome-devtools-mcp` audit | **Accessibility 100 · Best Practices 100 · SEO 100 · Agentic Browsing 100** |
+
+The pre-restructure commits in this repo include extensive per-capability
+verification tables for B1, B2, B3, B4, C1, C2, C3, C4 — see the
+`docs/` directory.
+
+---
 
 ## Documentation
 
 | Topic | Doc |
 |---|---|
-| **B1** Parallel job queue (Codex-cloud-style) | [docs/B1-job-queue.md](docs/B1-job-queue.md) — design + API; example: [docs/B1-example-three-prs.md](docs/B1-example-three-prs.md) |
-| **B2** Closed validation loop (build-result reverse channel) | [docs/B2-validation-loop.md](docs/B2-validation-loop.md) — design + ASCII flow; example: [docs/B2-example-typo-recovery.md](docs/B2-example-typo-recovery.md) |
-| **B3** GitHub repo import + true embedding | [docs/B3-github-import.md](docs/B3-github-import.md) — endpoint + auth + `EMBEDDING_*` env wiring; example: [docs/B3-example-import-and-pr.md](docs/B3-example-import-and-pr.md) |
-| **B4** Tiered approval policy | [docs/B4-approval-policy.md](docs/B4-approval-policy.md) — rules, presets, audit `explain()`; example: [docs/B4-example-gated-edits.md](docs/B4-example-gated-edits.md) |
-| **B1+B4** Multi-agent shapes (parallel / planFirst) | [docs/multi-agent-modes.md](docs/multi-agent-modes.md) — the Phase1+Phase2 serial layout was removed; this doc shows the two replacements |
-| **C1** SSE `Last-Event-ID` resume | [docs/C1-sse-resume.md](docs/C1-sse-resume.md) — wire-level protocol (request/response headers, body fields), end-to-end resume flow, and the `--resume-after N` CLI demo |
-| **C2** Per-job session isolation + diff/merge | The job queue now runs each entry under `parent#job-<id>`. `POST /jobs/:id/merge` accepts `{strategy: "fail-on-conflict" \| "ours" \| "theirs"}`; `GET /jobs/:id/diff` and `DELETE /jobs/:id/branch` round out the lifecycle. Tests at `apps/worker/src/jobs/jobBranches.test.ts` and the C2 describe block in `app.test.ts`. |
-| **C3** Visual verification (`BuildResultSnapshot.visual` — complete) | Two complementary paths: (a) the browser `useWebContainer` hook schedules a passive 1.5 s observer after `server-ready` (parent-page console errors + opt-in `bscode:visual-check` postMessage probes); (b) the new worker-side **CDP visual verifier** (`@agentkit-js/tools-browser`) drives a Chrome DevTools session against the preview URL — real screenshot, real DOM probes (selector / textContains), real console events, plus a vision-capable model judging whether the render matches the agent's stated intent. Two new tools land in framework mode: `visual_verify` (read-only) and `visual_interact` (gated by approval policy). Both degrade gracefully when `BSCODE_CDP_WS` is unset. Thumbnail data URLs are kept out of agent context to preserve token budget. The agent loop reads structured signals via `read_build_result` and self-corrects without human prompting. |
-| **C4** Project AGENTS.md (Codex/Cursor/Copilot/Gemini convention) | The worker now resolves `AGENTS.md` (root + nested) on every `/run` and appends it to the system prompt prefix. The `init_agents_md` tool drafts new files; `needsApproval: true` ensures they go through the planFirst HITL gate before landing on disk. |
+| **B1** Parallel job queue | [docs/B1-job-queue.md](docs/B1-job-queue.md) |
+| **B2** Closed validation loop | [docs/B2-validation-loop.md](docs/B2-validation-loop.md) |
+| **B3** GitHub repo import | [docs/B3-github-import.md](docs/B3-github-import.md) |
+| **B4** Tiered approval policy | [docs/B4-approval-policy.md](docs/B4-approval-policy.md) |
+| **B1+B4** Multi-agent shapes | [docs/multi-agent-modes.md](docs/multi-agent-modes.md) |
+| **C1** SSE Last-Event-ID resume | [docs/C1-sse-resume.md](docs/C1-sse-resume.md) |
+| **Async-agent end-to-end demo** | [scripts/demo-async-agent.mjs](scripts/demo-async-agent.mjs) |
+
+---
+
+## License
+
+[Apache-2.0](./LICENSE) — © bscode contributors.

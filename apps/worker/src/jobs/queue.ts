@@ -39,6 +39,12 @@ interface JobState {
   seq: number;
   startedAtMs?: number;
   finishedAtMs?: number;
+  /** H1 — accumulated cost + tokens from `model_done` events. */
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  hasModelStats: boolean;
 }
 
 const DEFAULT_CONCURRENCY = 4;
@@ -90,6 +96,11 @@ export class JobQueue {
       eventTail: [],
       submittedAtMs: Date.now(),
       seq: monotonicCounter,
+      costUsd: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      hasModelStats: false,
     };
     this.#jobs.set(id, state);
     this.#pending.push(id);
@@ -218,6 +229,27 @@ export class JobQueue {
           const answer = (ev.data as { answer?: unknown })?.answer;
           if (typeof answer === "string") state.finalAnswer = answer;
         }
+        // H1 — accumulate per-call cost + tokens. The worker's model adapters
+        // emit { estimatedUsd, inputTokens, outputTokens, cacheReadTokens }
+        // on every model call; we sum here so the dashboard does not have
+        // to walk the eventTail.
+        if (ev.event === "model_done") {
+          const d = ev.data as
+            | {
+                estimatedUsd?: number;
+                inputTokens?: number;
+                outputTokens?: number;
+                cacheReadTokens?: number;
+              }
+            | undefined;
+          if (d) {
+            if (typeof d.estimatedUsd === "number") state.costUsd += d.estimatedUsd;
+            if (typeof d.inputTokens === "number") state.inputTokens += d.inputTokens;
+            if (typeof d.outputTokens === "number") state.outputTokens += d.outputTokens;
+            if (typeof d.cacheReadTokens === "number") state.cacheReadTokens += d.cacheReadTokens;
+            state.hasModelStats = true;
+          }
+        }
       }
       if (state.controller.signal.aborted) {
         state.status = "aborted";
@@ -270,6 +302,17 @@ export class JobQueue {
       submittedAtMs: state.submittedAtMs,
       ...(state.startedAtMs !== undefined ? { startedAtMs: state.startedAtMs } : {}),
       ...(state.finishedAtMs !== undefined ? { finishedAtMs: state.finishedAtMs } : {}),
+      // H1 — only emit cost/token fields when at least one model_done
+      // event contributed; otherwise stay clean (a job that ran a trivial
+      // tool-only flow shouldn't surface "0.0000 USD" in the dashboard).
+      ...(state.hasModelStats
+        ? {
+            costUsd: state.costUsd,
+            inputTokens: state.inputTokens,
+            outputTokens: state.outputTokens,
+            cacheReadTokens: state.cacheReadTokens,
+          }
+        : {}),
     };
   }
 

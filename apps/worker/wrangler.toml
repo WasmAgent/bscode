@@ -3,30 +3,50 @@ main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+# ============================================================================
+# Local development works with NO bindings — bscode falls back to in-memory.
+# For a real Cloudflare deploy, uncomment the [[kv_namespaces]] blocks below
+# and run the matching `wrangler kv namespace create` commands first.
+# Full walk-through: ../../README.md#deploy-to-cloudflare
+# ============================================================================
+
 [vars]
 AGENTKIT_LOG_LEVEL = "info"
 BSCODE_ALLOWED_ORIGIN = "*"
 
-# B3 follow-up — OpenAI-API-shape embedding endpoint. Uncomment AND set
-# the three matching secrets to swap the default TF-IDF embedder for a
-# real-vector one (text-embedding-3-small from OpenAI by default; any
-# OpenAI-compatible server — TEI, Ollama, vLLM — works the same way).
-# When any of the three is missing the worker silently falls back to TF-IDF.
-# Set the API key as a secret (never as a plaintext var):
+# Optional embedding endpoint — swaps the default TF-IDF embedder for a real
+# vector one. Works with OpenAI, TEI, Ollama, vLLM, anything OpenAI-shaped.
+# Falls back to TF-IDF when missing.
 #   wrangler secret put EMBEDDING_API_KEY
 # EMBEDDING_BASE_URL = "https://api.openai.com"
 # EMBEDDING_MODEL    = "text-embedding-3-small"
 
-# Virtual file system for the coding assistant
-# Create with: wrangler kv namespace create BSCODE_FILES
+# --- KV namespaces (uncomment + paste IDs from `wrangler kv namespace create`) ---
+
+# Virtual file system the coding assistant edits.
+#   wrangler kv namespace create BSCODE_FILES
 # [[kv_namespaces]]
 # binding = "BSCODE_FILES"
 # id = "YOUR_KV_ID_HERE"
 
-# Session/prompt-cache result caching
-# Create with: wrangler kv namespace create BSCODE_SESSIONS
+# Session/prompt-cache result caching (warm replays across cold starts).
+#   wrangler kv namespace create BSCODE_SESSIONS
 # [[kv_namespaces]]
 # binding = "BSCODE_SESSIONS"
+# id = "YOUR_KV_ID_HERE"
+
+# B1 — durable agent checkpoints. Without this, paused runs do not survive
+# worker recycle.
+#   wrangler kv namespace create BSCODE_CHECKPOINTS
+# [[kv_namespaces]]
+# binding = "BSCODE_CHECKPOINTS"
+# id = "YOUR_KV_ID_HERE"
+
+# B2 — browser-reported install/build/test outcomes. Without this the
+# snapshot is in-memory only (fine for single-recycle conversations).
+#   wrangler kv namespace create BSCODE_BUILD_RESULTS
+# [[kv_namespaces]]
+# binding = "BSCODE_BUILD_RESULTS"
 # id = "YOUR_KV_ID_HERE"
 
 [dev]

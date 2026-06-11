@@ -58,6 +58,20 @@ export interface JobRecord {
   submittedAtMs: number;
   startedAtMs?: number;
   finishedAtMs?: number;
+  /**
+   * H1 — running cost summary. Sum of `estimatedUsd` from every
+   * `model_done` event observed during the job. Absent when no model_done
+   * events were seen (e.g. trivial runners in tests). Reported separately
+   * from `eventTail` so the dashboard can render a Cost column without
+   * walking events on every render.
+   */
+  costUsd?: number;
+  /** Total input tokens billed across all model calls. */
+  inputTokens?: number;
+  /** Total output tokens billed across all model calls. */
+  outputTokens?: number;
+  /** Cache-read tokens (prompt-cache hits) — proxy for cache hit rate. */
+  cacheReadTokens?: number;
 }
 
 /**
