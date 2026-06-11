@@ -597,7 +597,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   const hasPreview = !!(preview?.html || preview?.url || (preview?.logs?.length ?? 0) > 0 || preview?.output);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0d1117", ...mono }}>
+    <main style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0d1117", ...mono }}>
 
       {/* ── Toasts ── */}
       <div style={{ position: "fixed", bottom: 56, right: 16, zIndex: 9999, display: "flex", flexDirection: "column", gap: 6, pointerEvents: "none" }}>
@@ -684,6 +684,8 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         {/* Right: model + tools */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <select
+            aria-label="Model"
+            title="Select language model"
             value={config.modelId}
             onChange={(e) => setConfig((c) => ({ ...c, modelId: e.target.value }))}
             style={{ background: "#21262d", border: "1px solid #30363d", borderRadius: 4, color: "#c9d1d9", fontSize: 11, padding: "3px 6px", cursor: "pointer" }}
@@ -724,7 +726,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               <div style={{ color: theme.textDim, fontSize: 13, textAlign: "center", marginTop: 60 }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
                 <div>Describe a task to get started.</div>
-                <div style={{ fontSize: 11, marginTop: 6, color: "#30363d" }}>
+                <div style={{ fontSize: 11, marginTop: 6, color: theme.textDim }}>
                   e.g. "build a Vue 3 todo list" · "implement quicksort" · "create a React dashboard"
                 </div>
               </div>
@@ -1093,7 +1095,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
       `}</style>
-    </div>
+    </main>
   );
 }
 

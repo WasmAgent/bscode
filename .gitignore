@@ -9,3 +9,6 @@ dist/
 .turbo/
 apps/worker/.bscode-files/
 
+
+# Build cache
+apps/web/tsconfig.tsbuildinfo
