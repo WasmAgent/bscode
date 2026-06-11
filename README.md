@@ -128,3 +128,13 @@ benchmark, not a marketing line.
 | **Lighthouse desktop snapshot** | `chrome-devtools-mcp` audit | **Accessibility 100 · Best Practices 100 · SEO 100 · Agentic Browsing 100** (24/24 audits passing) |
 | **Cost-display accuracy** | `apps/web/src/components/TokenMeter.tsx` | sums per-call `estimatedUsd` from the worker (computed with the actual model's pricing); no longer mis-bills Haiku/Opus runs as Sonnet |
 | **A11y / dark-mode contrast** | `apps/web/src/lib/theme.ts` | every UI colour goes through one named token; secondary text raised from `#8b949e` → `#d0d7de` (AAA on `#161b22`) |
+
+## Documentation
+
+| Topic | Doc |
+|---|---|
+| **B1** Parallel job queue (Codex-cloud-style) | [docs/B1-job-queue.md](docs/B1-job-queue.md) — design + API; example: [docs/B1-example-three-prs.md](docs/B1-example-three-prs.md) |
+| **B2** Closed validation loop (build-result reverse channel) | [docs/B2-validation-loop.md](docs/B2-validation-loop.md) — design + ASCII flow; example: [docs/B2-example-typo-recovery.md](docs/B2-example-typo-recovery.md) |
+| **B3** GitHub repo import + true embedding | [docs/B3-github-import.md](docs/B3-github-import.md) — endpoint + auth + `EMBEDDING_*` env wiring; example: [docs/B3-example-import-and-pr.md](docs/B3-example-import-and-pr.md) |
+| **B4** Tiered approval policy | [docs/B4-approval-policy.md](docs/B4-approval-policy.md) — rules, presets, audit `explain()`; example: [docs/B4-example-gated-edits.md](docs/B4-example-gated-edits.md) |
+| **B1+B4** Multi-agent shapes (parallel / planFirst) | [docs/multi-agent-modes.md](docs/multi-agent-modes.md) — the Phase1+Phase2 serial layout was removed; this doc shows the two replacements |
