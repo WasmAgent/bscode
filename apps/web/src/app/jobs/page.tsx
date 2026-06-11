@@ -29,8 +29,8 @@ export default function JobsPage() {
       <header style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 18, marginBottom: 2 }}>BSCode Jobs</h1>
         <p style={{ color: "#666", fontSize: 12, margin: 0 }}>
-          Submit batches of independent tasks; the worker runs them in parallel.
-          Session: <code>{sessionId}</code>
+          Submit batches of independent tasks; the worker runs them in parallel. Session:{" "}
+          <code>{sessionId}</code>
         </p>
       </header>
       <JobsPanel sessionId={sessionId} />

@@ -16,12 +16,39 @@ import type { KvStore } from "../types.js";
 
 /** Default extensions we treat as text. Binaries are skipped. */
 const TEXT_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".json", ".md", ".mdx", ".txt", ".yaml", ".yml",
-  ".css", ".scss", ".less", ".html", ".svg",
-  ".py", ".rb", ".go", ".rs", ".java", ".kt", ".swift",
-  ".c", ".cc", ".cpp", ".h", ".hpp",
-  ".sh", ".toml", ".env", ".gitignore",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".json",
+  ".md",
+  ".mdx",
+  ".txt",
+  ".yaml",
+  ".yml",
+  ".css",
+  ".scss",
+  ".less",
+  ".html",
+  ".svg",
+  ".py",
+  ".rb",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".swift",
+  ".c",
+  ".cc",
+  ".cpp",
+  ".h",
+  ".hpp",
+  ".sh",
+  ".toml",
+  ".env",
+  ".gitignore",
 ]);
 
 /** Max bytes we'll persist per file. Anything bigger is recorded as a stub. */
@@ -96,26 +123,25 @@ export interface ImportOptions {
  */
 export async function importGithubRepo(
   input: ImportGithubInput,
-  opts: ImportOptions,
+  opts: ImportOptions
 ): Promise<ImportGithubOutput> {
   const fetchImpl = opts.fetch ?? fetch;
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "User-Agent": "bscode-importer",
   };
-  if (input.token) headers["Authorization"] = `Bearer ${input.token}`;
+  if (input.token) headers.Authorization = `Bearer ${input.token}`;
 
   // Resolve default branch if no ref was given.
   let ref = input.ref;
   if (!ref) {
-    const repoMeta = await fetchImpl(
-      `https://api.github.com/repos/${input.owner}/${input.repo}`,
-      { headers },
-    );
+    const repoMeta = await fetchImpl(`https://api.github.com/repos/${input.owner}/${input.repo}`, {
+      headers,
+    });
     if (!repoMeta.ok) {
       const body = await repoMeta.text().catch(() => "");
       throw new Error(
-        `GitHub ${repoMeta.status} on /repos/${input.owner}/${input.repo}: ${body.slice(0, 200)}`,
+        `GitHub ${repoMeta.status} on /repos/${input.owner}/${input.repo}: ${body.slice(0, 200)}`
       );
     }
     const meta = (await repoMeta.json()) as { default_branch?: string };
@@ -127,22 +153,20 @@ export async function importGithubRepo(
   const treeRes = await fetchImpl(treeUrl, { headers });
   if (!treeRes.ok) {
     const body = await treeRes.text().catch(() => "");
-    throw new Error(
-      `GitHub ${treeRes.status} on tree ${ref}: ${body.slice(0, 200)}`,
-    );
+    throw new Error(`GitHub ${treeRes.status} on tree ${ref}: ${body.slice(0, 200)}`);
   }
   const tree = (await treeRes.json()) as GhTreeResponse;
 
   // Decide which entries to fetch.
-  const allowedExt = input.textExtensions
-    ? new Set(input.textExtensions)
-    : TEXT_EXTENSIONS;
+  const allowedExt = input.textExtensions ? new Set(input.textExtensions) : TEXT_EXTENSIONS;
   const useExtFilter = input.textExtensions === undefined || input.textExtensions.length > 0;
 
   const candidates = tree.tree.filter((e) => {
     if (e.type !== "blob") return false;
     if (input.paths && input.paths.length > 0) {
-      if (!input.paths.some((p) => e.path === p || e.path.startsWith(`${p}/`) || e.path.startsWith(p))) {
+      if (
+        !input.paths.some((p) => e.path === p || e.path.startsWith(`${p}/`) || e.path.startsWith(p))
+      ) {
         return false;
       }
     }
@@ -163,7 +187,7 @@ export async function importGithubRepo(
 
   let imported = 0;
   let skipped = tree.tree.length - candidates.length;
-  if (skipped > 0) skippedReasons["filtered_by_extension_or_path"] = skipped;
+  if (skipped > 0) skippedReasons.filtered_by_extension_or_path = skipped;
   const preview: string[] = [];
 
   for (const entry of candidates) {

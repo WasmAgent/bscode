@@ -49,27 +49,54 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
         aria-label="Close settings"
         onClick={onClose}
         style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
-          border: "none", cursor: "default", zIndex: 999,
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          border: "none",
+          cursor: "default",
+          zIndex: 999,
         }}
       />
       <div
         role="dialog"
         aria-label="Settings"
         style={{
-          position: "fixed", top: 60, right: 12, width: 380, maxHeight: "calc(100vh - 80px)",
-          background: "#161b22", border: "1px solid #30363d", borderRadius: 8,
-          padding: 16, zIndex: 1000, color: "#c9d1d9",
-          fontFamily: "JetBrains Mono, monospace", fontSize: 12,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.5)", overflow: "auto",
+          position: "fixed",
+          top: 60,
+          right: 12,
+          width: 380,
+          maxHeight: "calc(100vh - 80px)",
+          background: "#161b22",
+          border: "1px solid #30363d",
+          borderRadius: 8,
+          padding: 16,
+          zIndex: 1000,
+          color: "#c9d1d9",
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 12,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          overflow: "auto",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16,
+          }}
+        >
           <h2 style={{ margin: 0, fontSize: 14, color: "#e6edf3" }}>Settings</h2>
           <button
             type="button"
             onClick={onClose}
-            style={{ background: "none", border: "none", color: theme.textMuted, cursor: "pointer", fontSize: 16 }}
+            style={{
+              background: "none",
+              border: "none",
+              color: theme.textMuted,
+              cursor: "pointer",
+              fontSize: 16,
+            }}
             title="Close"
           >
             ✕
@@ -107,14 +134,25 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
         </label>
 
         <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
-          <button type="button" onClick={onSave} style={primaryBtn}>Save</button>
+          <button type="button" onClick={onSave} style={primaryBtn}>
+            Save
+          </button>
           {savedFlash && <span style={{ color: "#3fb950" }}>Saved ✓</span>}
         </div>
 
-        <div style={{ marginTop: 18, paddingTop: 12, borderTop: "1px solid #30363d", color: theme.textMuted, lineHeight: 1.6 }}>
+        <div
+          style={{
+            marginTop: 18,
+            paddingTop: 12,
+            borderTop: "1px solid #30363d",
+            color: theme.textMuted,
+            lineHeight: 1.6,
+          }}
+        >
           <strong style={{ color: "#c9d1d9" }}>Note:</strong> API keys are configured server-side
-          via Wrangler secrets (<code style={code}>.dev.vars</code> for local dev, <code style={code}>wrangler secret put</code>
-          {" "}for prod). They are intentionally not exposed in the browser.
+          via Wrangler secrets (<code style={code}>.dev.vars</code> for local dev,{" "}
+          <code style={code}>wrangler secret put</code> for prod). They are intentionally not
+          exposed in the browser.
         </div>
       </div>
     </>
@@ -122,22 +160,47 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
 }
 
 const fieldLabel: React.CSSProperties = {
-  display: "block", marginBottom: 12, fontSize: 11,
-  color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.5,
+  display: "block",
+  marginBottom: 12,
+  fontSize: 11,
+  color: theme.textMuted,
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
 };
 const fieldInput: React.CSSProperties = {
-  display: "block", width: "100%", marginTop: 4, padding: "6px 8px",
-  background: "#0d1117", color: "#c9d1d9", border: "1px solid #30363d",
-  borderRadius: 4, fontFamily: "inherit", fontSize: 12, boxSizing: "border-box",
+  display: "block",
+  width: "100%",
+  marginTop: 4,
+  padding: "6px 8px",
+  background: "#0d1117",
+  color: "#c9d1d9",
+  border: "1px solid #30363d",
+  borderRadius: 4,
+  fontFamily: "inherit",
+  fontSize: 12,
+  boxSizing: "border-box",
 };
 const hint: React.CSSProperties = {
-  display: "block", marginTop: 4, fontSize: 10, color: theme.textDim,
-  textTransform: "none", letterSpacing: 0,
+  display: "block",
+  marginTop: 4,
+  fontSize: 10,
+  color: theme.textDim,
+  textTransform: "none",
+  letterSpacing: 0,
 };
 const primaryBtn: React.CSSProperties = {
-  background: "#238636", color: "#fff", border: "none", borderRadius: 4,
-  padding: "6px 14px", fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+  background: "#238636",
+  color: "#fff",
+  border: "none",
+  borderRadius: 4,
+  padding: "6px 14px",
+  fontSize: 12,
+  fontFamily: "inherit",
+  cursor: "pointer",
 };
 const code: React.CSSProperties = {
-  background: "#0d1117", padding: "1px 4px", borderRadius: 3, fontSize: 11,
+  background: "#0d1117",
+  padding: "1px 4px",
+  borderRadius: 3,
+  fontSize: 11,
 };

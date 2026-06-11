@@ -16,6 +16,10 @@
  *   --events               Show raw AgentEvent stream instead of pretty output
  *   --json                 Print full JSON events (implies --events)
  *   --trace                Show error stack traces
+ *   --resume-after <n>     C1 demo: drop the SSE stream after N events,
+ *                          then immediately reconnect with the persisted
+ *                          trace id + Last-Event-ID header. Proves the
+ *                          worker resumed where the client left off.
  */
 
 import { parseArgs } from "node:util";
@@ -30,6 +34,7 @@ const { values, positionals } = parseArgs({
     events: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     trace: { type: "boolean", default: false },
+    "resume-after": { type: "string" },
   },
   allowPositionals: true,
   strict: false,
@@ -48,6 +53,7 @@ const maxSteps = parseInt(values.steps, 10);
 const showRaw = values.events || values.json;
 const showTrace = values.trace;
 const showJson = values.json;
+const resumeAfter = values["resume-after"] ? parseInt(values["resume-after"], 10) : null;
 
 // ANSI colors
 const c = {
@@ -71,13 +77,95 @@ console.log(
 console.log(`${c.gray}Worker : ${c.reset}${workerUrl}\n`);
 console.log("─".repeat(60));
 
+// Token accounting
+let inputTokens = 0,
+  outputTokens = 0,
+  cacheTokens = 0,
+  calls = 0;
+let stepCount = 0;
+let finalAnswer = null;
+
+let traceId = null;
+let lastEventId = null;
+let eventsConsumed = 0;
+let resumeTriggered = false;
+
+// streamEvents — pump SSE frames from `res` into the same display +
+// accounting code we used in the original loop. Stops early if
+// `--resume-after N` is set and we have already consumed N events
+// (returns "drop"); otherwise returns "complete".
+async function streamEvents(res) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let pendingId = null;
+  for await (const chunk of res.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (line.startsWith("id: ")) {
+        pendingId = line.slice(4).trim();
+        continue;
+      }
+      if (line === "") {
+        // SSE event boundary — commit the high-water mark.
+        if (pendingId) {
+          lastEventId = pendingId;
+          pendingId = null;
+        }
+        continue;
+      }
+      if (!line.startsWith("data: ")) continue;
+      const raw = line.slice(6).trim();
+      if (raw === "[DONE]") return "complete";
+
+      let ev;
+      try {
+        ev = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+
+      if (showJson) {
+        console.log(JSON.stringify(ev, null, 2));
+      } else if (showRaw) {
+        printRawEvent(ev);
+      } else {
+        prettyPrintEvent(ev);
+      }
+
+      // Accumulate token stats
+      if (ev.event === "model_done") {
+        inputTokens += ev.data?.inputTokens ?? 0;
+        outputTokens += ev.data?.outputTokens ?? 0;
+        cacheTokens += ev.data?.cacheReadTokens ?? 0;
+        calls++;
+      }
+      if (ev.event === "step_start") stepCount = ev.data?.step ?? stepCount;
+      if (ev.event === "final_answer") finalAnswer = ev.data?.answer;
+
+      eventsConsumed++;
+      if (resumeAfter && !resumeTriggered && eventsConsumed >= resumeAfter) {
+        return "drop";
+      }
+    }
+  }
+  return "complete";
+}
+
+async function postRun(extraBody = {}, extraHeaders = {}) {
+  return fetch(`${workerUrl}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...extraHeaders },
+    body: JSON.stringify({ task, agentMode, modelId, maxSteps, ...extraBody }),
+  });
+}
+
+// First connection.
 let res;
 try {
-  res = await fetch(`${workerUrl}/run`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ task, agentMode, modelId, maxSteps }),
-  });
+  res = await postRun();
 } catch (_err) {
   console.error(`\n${c.red}Connection refused: ${workerUrl}${c.reset}`);
   console.error(`${c.dim}Make sure the worker is running: pnpm dev:worker${c.reset}\n`);
@@ -90,56 +178,36 @@ if (!res.ok) {
   process.exit(1);
 }
 
-// Token accounting
-let inputTokens = 0,
-  outputTokens = 0,
-  cacheTokens = 0,
-  calls = 0;
-let stepCount = 0;
-let finalAnswer = null;
+// Capture the trace id so we can resume against it.
+traceId = res.headers.get("X-Agentkit-Trace-Id");
 
-const decoder = new TextDecoder();
-let buffer = "";
+let outcome = await streamEvents(res);
 
-for await (const chunk of res.body) {
-  buffer += decoder.decode(chunk, { stream: true });
-  const lines = buffer.split("\n");
-  buffer = lines.pop() ?? "";
-
-  for (const line of lines) {
-    if (!line.startsWith("data: ")) continue;
-    const raw = line.slice(6).trim();
-    if (raw === "[DONE]") break;
-
-    let ev;
-    try {
-      ev = JSON.parse(raw);
-    } catch {
-      continue;
-    }
-
-    if (showJson) {
-      console.log(JSON.stringify(ev, null, 2));
-      continue;
-    }
-
-    if (showRaw) {
-      printRawEvent(ev);
-      continue;
-    }
-
-    prettyPrintEvent(ev);
-
-    // Accumulate token stats
-    if (ev.event === "model_done") {
-      inputTokens += ev.data?.inputTokens ?? 0;
-      outputTokens += ev.data?.outputTokens ?? 0;
-      cacheTokens += ev.data?.cacheReadTokens ?? 0;
-      calls++;
-    }
-    if (ev.event === "step_start") stepCount = ev.data?.step ?? stepCount;
-    if (ev.event === "final_answer") finalAnswer = ev.data?.answer;
+// C1 demo: simulate a network drop, reconnect with Last-Event-ID.
+if (outcome === "drop" && traceId) {
+  resumeTriggered = true;
+  console.log(
+    `\n${c.gray}── ${c.yellow}simulated disconnect${c.gray} after ${eventsConsumed} events (last id=${lastEventId}); reconnecting with resumeTraceId=${traceId} ──${c.reset}\n`,
+  );
+  // Fully drain/abort the previous response body to free the socket.
+  try {
+    await res.body?.cancel?.();
+  } catch {
+    /* ignore */
   }
+  const res2 = await postRun(
+    { resumeTraceId: traceId },
+    lastEventId ? { "Last-Event-ID": lastEventId } : {},
+  );
+  if (!res2.ok) {
+    const body = await res2.text();
+    console.error(`${c.red}Resume HTTP ${res2.status}:${c.reset} ${body}`);
+    process.exit(1);
+  }
+  if (res2.headers.get("X-Bscode-Resume") === "1") {
+    console.log(`${c.gray}(server accepted resume — replay-only mode)${c.reset}`);
+  }
+  outcome = await streamEvents(res2);
 }
 
 // Summary

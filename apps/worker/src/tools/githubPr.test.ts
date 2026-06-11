@@ -10,7 +10,7 @@
  *   POST /pulls
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { MemKvStore } from "../platform.js";
 import { createGitHubPrTool } from "./githubPr.js";
 
@@ -43,10 +43,9 @@ function fakeFetch() {
       return new Response(JSON.stringify({}), { status: 201 });
     }
     if (method === "POST" && url.endsWith("/pulls")) {
-      return new Response(
-        JSON.stringify({ html_url: "https://github.com/o/r/pull/42" }),
-        { status: 201 }
-      );
+      return new Response(JSON.stringify({ html_url: "https://github.com/o/r/pull/42" }), {
+        status: 201,
+      });
     }
     return new Response("not found", { status: 404 });
   }) as unknown as typeof fetch;

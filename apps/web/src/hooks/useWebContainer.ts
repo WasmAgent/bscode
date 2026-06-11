@@ -87,15 +87,17 @@ export function useWebContainer(): UseWebContainerReturn {
   const appendLine = useCallback((line: string) => {
     // Strip ANSI escape codes (cursor movement, color, etc.) and carriage returns
     const clean = line
-      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")  // ANSI CSI sequences
-      .replace(/\x1b\][^\x07]*\x07/g, "")       // OSC sequences
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escapes are control chars by definition
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "") // ANSI CSI sequences
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: OSC sequences use BEL (\x07) terminator
+      .replace(/\x1b\][^\x07]*\x07/g, "") // OSC sequences
       .replace(/\r\n/g, "\n")
-      .replace(/\r[^\n]/g, "")                   // \r without \n (spinner overwrite)
+      .replace(/\r[^\n]/g, "") // \r without \n (spinner overwrite)
       .replace(/\r$/, "")
       .split("\n")
       .map((l) => l.trimEnd())
       // Skip pure spinner characters and empty lines
-      .filter((l) => l.trim() && !/^[\\|/\-]{1,3}$/.test(l.trim()))
+      .filter((l) => l.trim() && !/^[\\|/-]{1,3}$/.test(l.trim()))
       .join("\n");
     if (!clean.trim()) return;
     setTerminalLines((prev) => [...prev.slice(-500), clean]);
@@ -230,7 +232,9 @@ export function useWebContainer(): UseWebContainerReturn {
         const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
         try {
           await wc.fs.mkdir(dir, { recursive: true });
-        } catch { /* dir exists */ }
+        } catch {
+          /* dir exists */
+        }
         await wc.fs.writeFile(path, content);
         appendLine(`[wc] Updated ${path}`);
       }
@@ -298,9 +302,7 @@ export function useWebContainer(): UseWebContainerReturn {
 }
 
 /** Convert flat {path, content}[] to a FileSystemTree for WebContainers mount() */
-export function toFileSystemTree(
-  files: { path: string; content: string }[]
-): FileSystemTree {
+export function toFileSystemTree(files: { path: string; content: string }[]): FileSystemTree {
   const tree: FileSystemTree = {};
   for (const { path, content } of files) {
     const parts = path.split("/").filter(Boolean);

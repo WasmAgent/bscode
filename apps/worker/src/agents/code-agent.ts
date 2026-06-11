@@ -40,7 +40,11 @@ export function createCodeAgent(
     lang === "python"
       ? new PyodideKernel()
       : lang === "node" && extras.e2bApiKey
-        ? new RemoteSandboxKernel({ apiKey: extras.e2bApiKey, template: "base", timeoutMs: 120_000 })
+        ? new RemoteSandboxKernel({
+            apiKey: extras.e2bApiKey,
+            template: "base",
+            timeoutMs: 120_000,
+          })
         : createQuickJSKernel();
 
   const systemPrompt = bscodeCodeAgentPrompt(lang);

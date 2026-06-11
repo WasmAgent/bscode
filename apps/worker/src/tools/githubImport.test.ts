@@ -34,12 +34,12 @@ function makeFetch(opts: {
   treeStatus?: number;
 }): typeof fetch {
   return (async (input: RequestInfo | URL) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
-      return new Response(
-        JSON.stringify({ default_branch: opts.defaultBranch ?? "main" }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ default_branch: opts.defaultBranch ?? "main" }), {
+        status: 200,
+      });
     }
     if (/\/git\/trees\//.test(url)) {
       if (opts.treeStatus && opts.treeStatus !== 200) {
@@ -63,7 +63,9 @@ function makeFetch(opts: {
         return new Response("blob not found", { status: 404 });
       }
       if (seed.encoding === "utf-8") {
-        return new Response(JSON.stringify({ ...seed, sha: "x", size: seed.content.length }), { status: 200 });
+        return new Response(JSON.stringify({ ...seed, sha: "x", size: seed.content.length }), {
+          status: 200,
+        });
       }
       return new Response(JSON.stringify(blobPayload(seed.content)), { status: 200 });
     }
@@ -86,7 +88,7 @@ describe("importGithubRepo", () => {
     });
     const result = await importGithubRepo(
       { owner: "x", repo: "y" },
-      { filesKv: kv, fetch: fetchMock },
+      { filesKv: kv, fetch: fetchMock }
     );
     expect(result.imported).toBe(2);
     expect(result.preview).toContain("src/index.ts");
@@ -108,7 +110,7 @@ describe("importGithubRepo", () => {
     });
     const result = await importGithubRepo(
       { owner: "x", repo: "y" },
-      { filesKv: kv, fetch: fetchMock },
+      { filesKv: kv, fetch: fetchMock }
     );
     expect(result.imported).toBe(1);
     expect(result.skipped).toBeGreaterThanOrEqual(1);
@@ -131,7 +133,7 @@ describe("importGithubRepo", () => {
     });
     const result = await importGithubRepo(
       { owner: "x", repo: "y", paths: ["apps/worker"] },
-      { filesKv: kv, fetch: fetchMock },
+      { filesKv: kv, fetch: fetchMock }
     );
     expect(result.imported).toBe(1);
     expect(await kv.get("file:apps/worker/src/index.ts")).toBe("x");
@@ -156,26 +158,24 @@ describe("importGithubRepo", () => {
         onFileImported: (path) => {
           seen.push(path);
         },
-      },
+      }
     );
     expect(seen.sort()).toEqual(["a.ts", "b.md"]);
   });
 
   it("uses the default_branch when no ref is supplied", async () => {
     const kv = new MemKvStore();
-    let urls: string[] = [];
+    const urls: string[] = [];
     const fetchMock = ((input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       urls.push(url);
       return makeFetch({
         defaultBranch: "develop",
         tree: [],
       })(input);
     }) as unknown as typeof fetch;
-    await importGithubRepo(
-      { owner: "x", repo: "y" },
-      { filesKv: kv, fetch: fetchMock },
-    );
+    await importGithubRepo({ owner: "x", repo: "y" }, { filesKv: kv, fetch: fetchMock });
     // The tree URL should reference the default branch we returned.
     expect(urls.some((u) => u.includes("/git/trees/develop"))).toBe(true);
   });
@@ -189,7 +189,7 @@ describe("importGithubRepo", () => {
     });
     const result = await importGithubRepo(
       { owner: "x", repo: "y" },
-      { filesKv: kv, fetch: fetchMock },
+      { filesKv: kv, fetch: fetchMock }
     );
     expect(result.truncated).toBe(true);
   });
@@ -202,7 +202,7 @@ describe("importGithubRepo", () => {
       treeStatus: 404,
     });
     await expect(
-      importGithubRepo({ owner: "x", repo: "y" }, { filesKv: kv, fetch: fetchMock }),
+      importGithubRepo({ owner: "x", repo: "y" }, { filesKv: kv, fetch: fetchMock })
     ).rejects.toThrow(/404/);
   });
 
@@ -218,9 +218,9 @@ describe("importGithubRepo", () => {
     });
     const result = await importGithubRepo(
       { owner: "x", repo: "y" },
-      { filesKv: kv, fetch: fetchMock },
+      { filesKv: kv, fetch: fetchMock }
     );
     expect(result.imported).toBe(1);
-    expect(result.skippedReasons["blob_fetch_404"]).toBe(1);
+    expect(result.skippedReasons.blob_fetch_404).toBe(1);
   });
 });

@@ -11,10 +11,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": [
-    "src/platform.ts",
-    "src/platform.test.ts",
-    "src/server.node.ts",
-    "src/tools/shell.ts"
-  ]
+  "exclude": ["src/platform.ts", "src/platform.test.ts", "src/server.node.ts", "src/tools/shell.ts"]
 }

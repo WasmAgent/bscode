@@ -65,10 +65,7 @@ export interface JobRecord {
  * AsyncIterable<AgentEvent>; the queue takes care of buffering and lifecycle
  * accounting. The signal is forwarded so abort() can cancel cooperatively.
  */
-export type JobRunner = (
-  spec: JobSpec,
-  signal: AbortSignal,
-) => AsyncIterable<AgentEvent>;
+export type JobRunner = (spec: JobSpec, signal: AbortSignal) => AsyncIterable<AgentEvent>;
 
 /** Queue-wide configuration knobs. */
 export interface JobQueueOptions {

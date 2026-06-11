@@ -43,7 +43,9 @@ export interface UseUndoOptions {
 
 export interface UseUndoReturn {
   /** Push a new entry. Drops the redo stack. */
-  push(entry: Omit<UndoEntry, "id" | "timestamp"> & Partial<Pick<UndoEntry, "id" | "timestamp">>): void;
+  push(
+    entry: Omit<UndoEntry, "id" | "timestamp"> & Partial<Pick<UndoEntry, "id" | "timestamp">>
+  ): void;
   /** Undo the most recent entry. */
   undo(): Promise<UndoEntry | null>;
   /** Redo the most-recently-undone entry. */
@@ -73,7 +75,9 @@ export function useUndo(opts: UseUndoOptions = {}): UseUndoReturn {
   const undoRef = useRef<UndoEntry[]>([]);
   const redoRef = useRef<UndoEntry[]>([]);
   const [, setVersion] = useState(0);
-  const bump = () => setVersion((v) => v + 1);
+  // useCallback so dependent hooks (push/undo/redo/clear) don't see a new
+  // identity on every render — that's what tripped useExhaustiveDependencies.
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
 
   const push = useCallback(
     (entry: Omit<UndoEntry, "id" | "timestamp"> & Partial<Pick<UndoEntry, "id" | "timestamp">>) => {
@@ -90,7 +94,7 @@ export function useUndo(opts: UseUndoOptions = {}): UseUndoReturn {
       redoRef.current = []; // new action invalidates redo
       bump();
     },
-    [capacity]
+    [capacity, bump]
   );
 
   const undo = useCallback(async () => {
@@ -112,7 +116,7 @@ export function useUndo(opts: UseUndoOptions = {}): UseUndoReturn {
     }
     bump();
     return entry;
-  }, [capacity, onError]);
+  }, [capacity, onError, bump]);
 
   const redo = useCallback(async () => {
     const entry = redoRef.current.pop();
@@ -130,13 +134,13 @@ export function useUndo(opts: UseUndoOptions = {}): UseUndoReturn {
     }
     bump();
     return entry;
-  }, [capacity, onError]);
+  }, [capacity, onError, bump]);
 
   const clear = useCallback(() => {
     undoRef.current = [];
     redoRef.current = [];
     bump();
-  }, []);
+  }, [bump]);
 
   // Keyboard binding: Cmd/Ctrl+Z (undo), Cmd/Ctrl+Shift+Z (redo).
   useEffect(() => {

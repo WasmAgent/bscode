@@ -1,23 +1,10 @@
 import type { ToolDefinition } from "@agentkit-js/core";
-import { FileTreeManager, globalFileLock } from "@agentkit-js/core";
+import { type FileTreeManager, globalFileLock } from "@agentkit-js/core";
 import { applyPatch } from "diff";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
 import type { SemanticIndexer } from "./semanticSearch.js";
 
-// ── Re-export type so callers can use KvStore directly ────────────────────────
-export type { KvStore };
-export type { SemanticIndexer } from "./semanticSearch.js";
-export {
-  createSemanticIndexer,
-  createSemanticSearchTool,
-} from "./semanticSearch.js";
-export type {
-  CreateGitHubPrToolOptions,
-  GitHubPrInput,
-  GitHubPrOutput,
-} from "./githubPr.js";
-export { createGitHubPrTool } from "./githubPr.js";
 export type { CreateReadBuildResultToolOptions } from "./build-result.js";
 export { createReadBuildResultTool, formatBuildResult } from "./build-result.js";
 export type {
@@ -26,6 +13,19 @@ export type {
   ImportOptions,
 } from "./githubImport.js";
 export { importGithubRepo } from "./githubImport.js";
+export type {
+  CreateGitHubPrToolOptions,
+  GitHubPrInput,
+  GitHubPrOutput,
+} from "./githubPr.js";
+export { createGitHubPrTool } from "./githubPr.js";
+export type { SemanticIndexer } from "./semanticSearch.js";
+export {
+  createSemanticIndexer,
+  createSemanticSearchTool,
+} from "./semanticSearch.js";
+// ── Re-export type so callers can use KvStore directly ────────────────────────
+export type { KvStore };
 
 // Lock Wrangler dev secrets — specific to BSCode worker deployment
 globalFileLock.lock(".dev.vars", "hard", "Wrangler dev secrets — never overwrite");
@@ -336,8 +336,7 @@ export function createListFileVersionsTool(
       if (versions.length === 0) return `No versions recorded for ${path}`;
       return versions
         .map(
-          (v) =>
-            `v${v.version}\t${new Date(v.savedAtMs).toISOString()}\t${v.content.length} chars`
+          (v) => `v${v.version}\t${new Date(v.savedAtMs).toISOString()}\t${v.content.length} chars`
         )
         .join("\n");
     },
@@ -372,21 +371,28 @@ export function createRunCommandTool(
           safeCommand = safeCommand.replace(/^mkdir\s+/, "mkdir -p ");
         }
         // Block truly destructive commands
-        const blocked = /rm\s+-rf\s+\/\b|DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*;?\s*$/i.test(safeCommand);
-        if (blocked) return "Error: Command blocked (destructive operation requires explicit confirmation)";
+        const blocked = /rm\s+-rf\s+\/\b|DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*;?\s*$/i.test(
+          safeCommand
+        );
+        if (blocked)
+          return "Error: Command blocked (destructive operation requires explicit confirmation)";
 
         const output = await shellRunner(safeCommand);
 
         // Post-execution error classification (bolt.diy pattern)
         if (/exit:[1-9]/.test(output)) {
-          if (/No such file or directory/.test(output)) return `${output}\nHint: The file/directory doesn't exist. Check the path or create it first.`;
-          if (/Permission denied/.test(output)) return `${output}\nHint: Permission denied. Try with appropriate permissions.`;
+          if (/No such file or directory/.test(output))
+            return `${output}\nHint: The file/directory doesn't exist. Check the path or create it first.`;
+          if (/Permission denied/.test(output))
+            return `${output}\nHint: Permission denied. Try with appropriate permissions.`;
           if (/command not found/.test(output)) {
             const cmd = safeCommand.split(/\s+/)[0];
             return `${output}\nHint: '${cmd}' not found. Install it or check if it's in PATH.`;
           }
-          if (/Cannot find module|Module not found/.test(output)) return `${output}\nHint: Missing npm package. Add it to package.json and run npm install.`;
-          if (/SyntaxError|TypeError|ReferenceError/.test(output)) return `${output}\nHint: Code syntax/runtime error. Check the specific line mentioned above.`;
+          if (/Cannot find module|Module not found/.test(output))
+            return `${output}\nHint: Missing npm package. Add it to package.json and run npm install.`;
+          if (/SyntaxError|TypeError|ReferenceError/.test(output))
+            return `${output}\nHint: Code syntax/runtime error. Check the specific line mentioned above.`;
         }
         return output;
       }

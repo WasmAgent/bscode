@@ -1,3 +1,4 @@
+export { JobQueue } from "./queue.js";
 export type {
   JobQueueOptions,
   JobRecord,
@@ -5,4 +6,3 @@ export type {
   JobSpec,
   JobStatus,
 } from "./types.js";
-export { JobQueue } from "./queue.js";

@@ -26,7 +26,8 @@ let deletedIds: string[] = [];
 
 function makeFetch(): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const method = (init?.method ?? "GET").toUpperCase();
     if (url.includes("/jobs") && method === "POST") {
       postedBodies.push(init?.body ? JSON.parse(init.body as string) : null);
@@ -38,10 +39,7 @@ function makeFetch(): typeof fetch {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
     if (url.includes("/jobs") && method === "GET") {
-      return new Response(
-        JSON.stringify({ jobs: mockJobs, stats: mockStats }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ jobs: mockJobs, stats: mockStats }), { status: 200 });
     }
     return new Response("not found", { status: 404 });
   }) as unknown as typeof fetch;
@@ -128,7 +126,10 @@ describe("JobsPanel", () => {
     const buttons = await screen.findAllByText(/Abort/i);
     // Only the running job should have an Abort button.
     expect(buttons.length).toBe(1);
-    fireEvent.click(buttons[0]!);
+    const firstButton = buttons[0];
+    expect(firstButton).toBeDefined();
+    if (!firstButton) return;
+    fireEvent.click(firstButton);
     await waitFor(() => {
       expect(deletedIds).toEqual(["running-1"]);
     });
@@ -137,8 +138,7 @@ describe("JobsPanel", () => {
   it("surfaces error on failed list fetch", async () => {
     vi.stubGlobal(
       "fetch",
-      (async () =>
-        new Response("oops", { status: 500 })) as unknown as typeof fetch,
+      (async () => new Response("oops", { status: 500 })) as unknown as typeof fetch
     );
     render(<JobsPanel sessionId="s1" workerUrl="http://test" />);
     await waitFor(() => {

@@ -38,11 +38,7 @@ describe("createSemanticIndexer (in-process default)", () => {
   it("rename moves the entry id without losing recall", async () => {
     const idx = createSemanticIndexer();
     await idx.upsert("old.ts", "checkout payment processor stripe integration");
-    await idx.rename(
-      "old.ts",
-      "new.ts",
-      "checkout payment processor stripe integration"
-    );
+    await idx.rename("old.ts", "new.ts", "checkout payment processor stripe integration");
 
     const tool = createSemanticSearchTool(idx);
     const result = await tool.forward({ query: "stripe payment", topK: 3 });

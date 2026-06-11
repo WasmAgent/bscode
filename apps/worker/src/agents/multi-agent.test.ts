@@ -182,7 +182,7 @@ describe("runPlanFirstExecution (B4 resume)", () => {
       [stubTool],
       "ship feature X",
       "1. read_file foo.ts\n2. patch_file foo.ts",
-      "yes",
+      "yes"
     )) {
       events.push(ev);
     }
@@ -203,7 +203,7 @@ describe("runPlanFirstExecution (B4 resume)", () => {
       [stubTool],
       "task",
       "1. step",
-      "please also add tests",
+      "please also add tests"
     )) {
       events.push(ev);
     }

@@ -13,10 +13,7 @@
 
 import type { ToolDefinition } from "@agentkit-js/core";
 import { z } from "zod";
-import {
-  type BuildResultSnapshot,
-  getBuildResult,
-} from "../build-results.js";
+import { type BuildResultSnapshot, getBuildResult } from "../build-results.js";
 import type { KvStore } from "../types.js";
 
 export interface CreateReadBuildResultToolOptions {
@@ -41,10 +38,7 @@ export function formatBuildResult(snap: BuildResultSnapshot): string {
     return "(no build result reported yet — wait for the browser to finish installing/building, or ask the user to run the project)";
 
   const stage = snap.stage ? ` (${snap.stage})` : "";
-  const age =
-    snap.ranAtMs > 0
-      ? ` ${Math.round((Date.now() - snap.ranAtMs) / 1000)}s ago`
-      : "";
+  const age = snap.ranAtMs > 0 ? ` ${Math.round((Date.now() - snap.ranAtMs) / 1000)}s ago` : "";
   const head = `status: ${snap.status}${stage}${age}`;
 
   const lines: string[] = [head];
@@ -60,7 +54,7 @@ export function formatBuildResult(snap: BuildResultSnapshot): string {
 }
 
 export function createReadBuildResultTool(
-  opts: CreateReadBuildResultToolOptions,
+  opts: CreateReadBuildResultToolOptions
 ): ToolDefinition<Record<string, never>, string> {
   const { sessionId, kv, read } = opts;
   return {
@@ -78,9 +72,7 @@ export function createReadBuildResultTool(
       if (!sessionId) {
         return "Error: no session id available — build result channel requires X-Session-Id header.";
       }
-      const snap = read
-        ? await read(sessionId)
-        : await getBuildResult(sessionId, kv);
+      const snap = read ? await read(sessionId) : await getBuildResult(sessionId, kv);
       return formatBuildResult(snap);
     },
   };

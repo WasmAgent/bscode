@@ -116,9 +116,10 @@ benchmark, not a marketing line.
 
 | Metric | Verified by | Current value |
 |---|---|---|
-| **Backend test suite** | `apps/worker` vitest | **162 tests, 100% pass** |
+| **Backend test suite** | `apps/worker` vitest | **168 tests, 100% pass** |
 | **Frontend test suite** | `apps/web` vitest | **25 tests, 100% pass** |
 | **Cross-instance checkpoint resume (B1 ①)** | `apps/worker/src/app.test.ts` | snapshot saved by app instance A is loadable by a brand-new instance B sharing the same KV; HITL `pendingHumanInput` survives across three instances (pause / resume / continue) |
+| **SSE `Last-Event-ID` resume (C1)** | `apps/worker/src/app.test.ts` (6 tests) + `packages/react/src/useAgentRun.test.ts` (4 tests) | live `/run` stream tags every frame with a monotonic `id:`; reconnect with `resumeTraceId` body field + `Last-Event-ID` header replays only the missing tail and **never** spawns a second agent (proven by mock factory call count); EventLog purged on success; `--resume-after N` CLI flag demos the round-trip |
 | **Build-result reverse channel (B2)** | `apps/worker/src/build-results.test.ts`, `tools/build-result.test.ts`, `app.test.ts` | 18 unit + 5 route tests cover memory/KV mirror, stderr truncation (≤2000 chars), session isolation via `X-Session-Id`, and graceful fallback on KV outage |
 | **Parallel job queue (B1)** | `apps/worker/src/jobs/queue.test.ts`, `app.test.ts`, `apps/web/src/components/JobsPanel.test.tsx` | 10 queue + 8 route + 5 dashboard tests cover concurrency cap, KV durable mirror across recycle, cooperative abort via `AbortSignal`, batch validation (max 20 per request), newest-first list ordering, and dashboard submit/abort flow |
 | **GitHub repo import (B3)** | `apps/worker/src/tools/githubImport.test.ts`, `app.test.ts` | 8 importer + 4 route tests cover default-branch resolution, extension/path filtering, base64 decoding, oversize/binary skipping, partial-tree propagation, per-file fetch error counters, and the 502 bubble path |
@@ -138,3 +139,4 @@ benchmark, not a marketing line.
 | **B3** GitHub repo import + true embedding | [docs/B3-github-import.md](docs/B3-github-import.md) — endpoint + auth + `EMBEDDING_*` env wiring; example: [docs/B3-example-import-and-pr.md](docs/B3-example-import-and-pr.md) |
 | **B4** Tiered approval policy | [docs/B4-approval-policy.md](docs/B4-approval-policy.md) — rules, presets, audit `explain()`; example: [docs/B4-example-gated-edits.md](docs/B4-example-gated-edits.md) |
 | **B1+B4** Multi-agent shapes (parallel / planFirst) | [docs/multi-agent-modes.md](docs/multi-agent-modes.md) — the Phase1+Phase2 serial layout was removed; this doc shows the two replacements |
+| **C1** SSE `Last-Event-ID` resume | [docs/C1-sse-resume.md](docs/C1-sse-resume.md) — wire-level protocol (request/response headers, body fields), end-to-end resume flow, and the `--resume-after N` CLI demo |

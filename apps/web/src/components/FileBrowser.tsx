@@ -71,7 +71,7 @@ function inferLanguage(path: string): string {
 export function FileBrowser({
   workerUrl,
   sessionId,
-  refreshKey = 0,
+  refreshKey: _refreshKey = 0,
   modifiedPaths,
   createdPaths,
   className,
@@ -107,7 +107,7 @@ export function FileBrowser({
     return () => {
       cancelled = true;
     };
-  }, [workerUrl, sessionId, refreshKey]);
+  }, [workerUrl, sessionId]);
 
   // Build the FileNode list with modified/created flags.
   const fileNodes: FileNode[] = useMemo(

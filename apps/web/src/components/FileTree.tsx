@@ -53,11 +53,10 @@ function buildTree(files: FileNode[]): TreeNode[] {
     const parts = f.path.split("/").filter(Boolean);
     let cursor = root;
     for (let i = 0; i < parts.length - 1; i++) {
-      const segment = parts[i]!;
+      const segment = parts[i];
+      if (!segment) continue;
       const fullPath = parts.slice(0, i + 1).join("/");
-      let next = cursor.children.find(
-        (c): c is DirNode => c.type === "dir" && c.name === segment
-      );
+      let next = cursor.children.find((c): c is DirNode => c.type === "dir" && c.name === segment);
       if (!next) {
         next = { type: "dir", name: segment, path: fullPath, children: [] };
         cursor.children.push(next);
@@ -140,9 +139,7 @@ function fileRow(
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {f.name}
       </span>
-      {f.created && (
-        <span style={{ ...BADGE_BASE, background: "#1f883d", color: "#fff" }}>+</span>
-      )}
+      {f.created && <span style={{ ...BADGE_BASE, background: "#1f883d", color: "#fff" }}>+</span>}
       {f.modified && !f.created && (
         <span style={{ ...BADGE_BASE, background: "#bf8700", color: "#fff" }}>M</span>
       )}

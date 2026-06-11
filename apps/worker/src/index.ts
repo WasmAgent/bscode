@@ -48,7 +48,9 @@ export default {
       filesKv: env.BSCODE_FILES ? kvFromNamespace(env.BSCODE_FILES) : undefined,
       sessionsKv: env.BSCODE_SESSIONS ? kvFromNamespace(env.BSCODE_SESSIONS) : undefined,
       checkpointsKv: env.BSCODE_CHECKPOINTS ? kvFromNamespace(env.BSCODE_CHECKPOINTS) : undefined,
-      buildResultsKv: env.BSCODE_BUILD_RESULTS ? kvFromNamespace(env.BSCODE_BUILD_RESULTS) : undefined,
+      buildResultsKv: env.BSCODE_BUILD_RESULTS
+        ? kvFromNamespace(env.BSCODE_BUILD_RESULTS)
+        : undefined,
       ...(embedding ? { embedding } : {}),
     };
     const app = createApp(config);

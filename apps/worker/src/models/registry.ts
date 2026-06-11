@@ -59,11 +59,11 @@ async function getOrCreateEncKey(store: KvStore): Promise<CryptoKey> {
   }
 
   // Generate and persist a new random 256-bit key
-  const newKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
+  const newKey = (await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
     "encrypt",
     "decrypt",
-  ]) as CryptoKey;
-  const exported = await crypto.subtle.exportKey("raw", newKey) as ArrayBuffer;
+  ])) as CryptoKey;
+  const exported = (await crypto.subtle.exportKey("raw", newKey)) as ArrayBuffer;
   const b64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
   await store.put(STORE_KEY_KV, b64);
   encKey = newKey;
@@ -351,7 +351,7 @@ export async function resolveModelFromRegistry(
   // Custom registered models (decrypted)
   const custom = await getDecryptedCustomModel(id, store);
   if (custom) {
-    const modelName = id.includes("/") ? id.split("/").pop()! : id;
+    const modelName = id.includes("/") ? (id.split("/").pop() ?? id) : id;
     return new OpenAIModel(modelName, {
       baseURL: custom.baseUrl,
       apiKey: custom.apiKey ?? "local",

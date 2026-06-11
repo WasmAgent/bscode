@@ -82,7 +82,7 @@ function kvKey(sessionId: string): string {
 export async function putBuildResult(
   sessionId: string,
   snapshot: BuildResultSnapshot,
-  kv?: KvStore | undefined,
+  kv?: KvStore | undefined
 ): Promise<void> {
   // Truncate stderr defensively so a runaway log can't blow up later reads.
   const trimmed: BuildResultSnapshot = {
@@ -117,7 +117,7 @@ export async function putBuildResult(
  */
 export async function getBuildResult(
   sessionId: string,
-  kv?: KvStore | undefined,
+  kv?: KvStore | undefined
 ): Promise<BuildResultSnapshot> {
   const cached = memoryStore.get(sessionId);
   if (cached) return cached;
@@ -140,10 +140,7 @@ export async function getBuildResult(
  * Drop a session's snapshot. Called by /reset and equivalent UI actions
  * so a fresh run never sees a stale build state from a previous task.
  */
-export async function clearBuildResult(
-  sessionId: string,
-  kv?: KvStore | undefined,
-): Promise<void> {
+export async function clearBuildResult(sessionId: string, kv?: KvStore | undefined): Promise<void> {
   memoryStore.delete(sessionId);
   if (kv?.delete) {
     try {

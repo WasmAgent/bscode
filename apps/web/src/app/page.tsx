@@ -1,18 +1,17 @@
 "use client";
+import type { CardBlock } from "@agentkit-js/ui-cards";
+import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Terminal, type PreviewContent } from "@/components/Terminal";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
-import { theme } from "@/lib/theme";
+import { type PreviewContent, Terminal } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
 import { useGitHub } from "@/hooks/useGitHub";
 import { useImport } from "@/hooks/useImport";
 import { toFileSystemTree, useWebContainer } from "@/hooks/useWebContainer";
+import { theme } from "@/lib/theme";
 import { getWorkerUrl } from "@/lib/workerUrl";
-import { parseCardBlocks } from "@agentkit-js/ui-cards";
-import type { CardBlock } from "@agentkit-js/ui-cards";
-import { upgradeCardSyntax } from "@agentkit-js/ui-cards";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -150,25 +149,41 @@ export default function Home() {
   }, []);
 
   const {
-    messages, isRunning, rawEvents, tokenStats, finalAnswer,
-    submit, abort, resetAll, classifying, detectedMode, clarifyingQuestions, dismissClarify,
+    messages,
+    isRunning,
+    rawEvents,
+    tokenStats,
+    finalAnswer,
+    submit,
+    abort,
+    resetAll,
+    classifying,
+    detectedMode,
+    clarifyingQuestions,
+    dismissClarify,
   } = useAgent(config, (update) => setConfig((prev) => ({ ...prev, ...update })));
 
   const { user, pushing, login: githubLogin, pushToGitHub } = useGitHub();
   const { importing, importFromZip, importFromDirectory, uploadFiles } = useImport();
-  const { status: wcStatus, previewUrl, terminalLines: wcLines, buildError, runProject, reset: wcReset } =
-    useWebContainer();
+  const {
+    status: wcStatus,
+    previewUrl,
+    terminalLines: wcLines,
+    buildError,
+    runProject,
+    reset: wcReset,
+  } = useWebContainer();
 
   // ── Scroll chat to bottom ──────────────────────────────────────────────────
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [turns, messages]);
+  }, []);
 
   // ── Track detectedMode onto current turn ───────────────────────────────────
   useEffect(() => {
     if (!detectedMode || !currentTurnId.current) return;
     setTurns((prev) =>
-      prev.map((t) => t.id === currentTurnId.current ? { ...t, detectedMode } : t)
+      prev.map((t) => (t.id === currentTurnId.current ? { ...t, detectedMode } : t))
     );
   }, [detectedMode]);
 
@@ -184,9 +199,7 @@ export default function Home() {
     // Strip the boltThinking block from displayed agent text
     const agentText = rawText.replace(/<boltThinking>[\s\S]*?<\/boltThinking>/gi, "").trim();
 
-    const toolLines = messages
-      .filter((m) => m.role === "tool")
-      .map((m) => m.content);
+    const toolLines = messages.filter((m) => m.role === "tool").map((m) => m.content);
     const errorMsg = messages.find((m) => m.role === "error")?.content ?? null;
     setTurns((prev) =>
       prev.map((t) =>
@@ -246,9 +259,7 @@ export default function Home() {
 
     if (writtenFiles.length > 0) {
       setTurns((prev) =>
-        prev.map((t) =>
-          t.id === currentTurnId.current ? { ...t, writtenFiles } : t
-        )
+        prev.map((t) => (t.id === currentTurnId.current ? { ...t, writtenFiles } : t))
       );
     }
 
@@ -304,7 +315,10 @@ export default function Home() {
       fetch(`${workerUrl}/files/bulk`)
         .then((r) => r.json())
         .then((data: { files: { path: string; content: string }[] }) => {
-          if (!data.files?.length) { addToast("No files written", "warn"); return; }
+          if (!data.files?.length) {
+            addToast("No files written", "warn");
+            return;
+          }
           runProject(toFileSystemTree(data.files));
         })
         .catch((err: Error) => addToast(`Mount failed: ${err.message}`, "error"));
@@ -320,6 +334,14 @@ export default function Home() {
     }
   }, [previewUrl, addToast]);
 
+  // Forward ref to handleSubmit — the auto-fix and other callback-driven
+  // effects below reference it before its declaration, which is fine at
+  // runtime (deps fire after render) but trips TypeScript strict mode.
+  // The ref is assigned in a useEffect right after handleSubmit's definition.
+  const handleSubmitRef = useRef<((task: string, skipClarify?: boolean) => Promise<void>) | null>(
+    null,
+  );
+
   useEffect(() => {
     if (wcStatus === "error" && buildError) {
       setPreview((prev) => ({ ...prev, error: "WebContainers build failed" }));
@@ -330,7 +352,10 @@ export default function Home() {
       fetch(`${workerUrl}/files/bulk`)
         .then((r) => r.json())
         .then((data: { files: { path: string; content: string }[] }) => {
-          if (!data.files?.length) { addToast("No files to fix", "warn"); return; }
+          if (!data.files?.length) {
+            addToast("No files to fix", "warn");
+            return;
+          }
           // Provide error context + file list so agent can fix precisely
           const fileSummary = data.files
             .filter((f) => /\.(ts|tsx|js|jsx|vue|svelte|json)$/.test(f.path))
@@ -347,11 +372,15 @@ ${fileSummary}
 
 Please fix the error. Use patch_file or write_file to correct the broken files.`;
           // skipClarify=true — fix tasks always run immediately, no re-clarify
-          handleSubmit(fixTask, true);
+          handleSubmitRef.current?.(fixTask, true);
         })
         .catch(() => addToast("Could not auto-fix: failed to fetch files", "error"));
     }
-  }, [wcStatus, buildError, addToast]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    wcStatus,
+    buildError,
+    addToast, // skipClarify=true — fix tasks always run immediately, no re-clarify
+  ]);
 
   // ── Final answer → preview ─────────────────────────────────────────────────
   useEffect(() => {
@@ -413,70 +442,74 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       submitInFlight.current = true;
       try {
         lastSubmittedTask.current = text;
-      setInputText("");
-      setClarifyAnswers({});
-      setPreview(undefined);
-      setSelectedCard(null);
-      setStreamingArtifacts(new Map());
-      wcReset();
+        setInputText("");
+        setClarifyAnswers({});
+        setPreview(undefined);
+        setSelectedCard(null);
+        setStreamingArtifacts(new Map());
+        wcReset();
 
-      const workerUrl = getWorkerUrl();
+        const workerUrl = getWorkerUrl();
 
-      // Clear workspace files before each new run to prevent cross-task file contamination
-      // (framework mode writes many files; old files from prior runs cause mismatch bugs)
-      fetch(`${workerUrl}/files`, { method: "DELETE" }).catch(() => {});
+        // Clear workspace files before each new run to prevent cross-task file contamination
+        // (framework mode writes many files; old files from prior runs cause mismatch bugs)
+        fetch(`${workerUrl}/files`, { method: "DELETE" }).catch(() => {});
 
-      // ── @ file reference resolution ─────────────────────────────────────────
-      let resolvedText = text;
-      const atMentions = [...text.matchAll(/@([\w./\-]+\.\w+)/g)].map((m) => m[1]);
-      if (atMentions.length > 0) {
-        const fileContents = await Promise.all(
-          atMentions.map(async (path) => {
-            try {
-              const res = await fetch(`${workerUrl}/files/${encodeURIComponent(path)}`);
-              if (!res.ok) return null;
-              const data = await res.json() as { content: string };
-              return { path, content: data.content };
-            } catch { return null; }
-          })
-        );
-        const injected = fileContents
-          .filter(Boolean)
-          .map((f) => `\n\n### @${f!.path}\n\`\`\`\n${f!.content.slice(0, 2000)}\n\`\`\``)
-          .join("");
-        if (injected) resolvedText = text + injected;
-      }
+        // ── @ file reference resolution ─────────────────────────────────────────
+        let resolvedText = text;
+        const atMentions = [...text.matchAll(/@([\w./-]+\.\w+)/g)].map((m) => m[1]);
+        if (atMentions.length > 0) {
+          const fileContents = await Promise.all(
+            atMentions.map(async (path) => {
+              try {
+                const res = await fetch(`${workerUrl}/files/${encodeURIComponent(path)}`);
+                if (!res.ok) return null;
+                const data = (await res.json()) as { content: string };
+                return { path, content: data.content };
+              } catch {
+                return null;
+              }
+            })
+          );
+          const injected = fileContents
+            .filter(Boolean)
+            .map((f) => `\n\n### @${f?.path}\n\`\`\`\n${f?.content.slice(0, 2000)}\n\`\`\``)
+            .join("");
+          if (injected) resolvedText = text + injected;
+        }
 
-      const id = `turn-${++turnId}`;
-      currentTurnId.current = id;
-      setTurns((prev) => [
-        ...prev,
-        {
-          id,
-          task: text,
-          detectedMode: null,
-          timestamp: Date.now(),
-          agentText: "",
-          planText: null,
-          toolLines: [],
-          writtenFiles: [],
-          thinkingCollapsed: false,
-          finalAnswer: null,
-          error: null,
-          status: "running",
-        },
-      ]);
-      resetAll();
-
-      const history = turns
-        .filter((t) => t.status === "done" && t.finalAnswer)
-        .slice(-5)
-        .flatMap((t): Array<{ role: "user" | "assistant"; content: string }> => [
-          { role: "user", content: t.task },
-          { role: "assistant", content: t.finalAnswer! },
+        const id = `turn-${++turnId}`;
+        currentTurnId.current = id;
+        setTurns((prev) => [
+          ...prev,
+          {
+            id,
+            task: text,
+            detectedMode: null,
+            timestamp: Date.now(),
+            agentText: "",
+            planText: null,
+            toolLines: [],
+            writtenFiles: [],
+            thinkingCollapsed: false,
+            finalAnswer: null,
+            error: null,
+            status: "running",
+          },
         ]);
+        resetAll();
 
-      submit(resolvedText, history.length > 0 ? history : undefined, skipClarify);
+        const history = turns
+          .filter((t) => t.status === "done" && t.finalAnswer)
+          .slice(-5)
+          .flatMap(
+            (t): Array<{ role: "user" | "assistant"; content: string }> => [
+              { role: "user", content: t.task },
+              { role: "assistant", content: t.finalAnswer ?? "" },
+            ]
+          );
+
+        submit(resolvedText, history.length > 0 ? history : undefined, skipClarify);
       } catch (err) {
         // Submit failed synchronously — release the guard so the user
         // can try again. Without this, a thrown error would strand the
@@ -492,6 +525,14 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     },
     [isRunning, classifying, submit, resetAll, wcReset, turns]
   );
+
+  // Bind the ref now that handleSubmit exists. This lets earlier-declared
+  // useEffects (auto-fix, etc.) call handleSubmit without TS strict mode
+  // tripping on the use-before-declaration. The ref is updated on every
+  // render so the latest closure is always reachable.
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  }, [handleSubmit]);
 
   // Release the synchronous-submit guard once React has acknowledged
   // the run started (isRunning OR classifying flips to true). After
@@ -520,13 +561,16 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           framework: config.framework,
         }),
       });
-      const data = await res.json() as { enhanced: string };
+      const data = (await res.json()) as { enhanced: string };
       if (data.enhanced && data.enhanced !== text) {
         setInputText(data.enhanced);
         addToast("Prompt enhanced ✨", "info");
       }
-    } catch { /* ignore */ }
-    finally { setEnhancing(false); }
+    } catch {
+      /* ignore */
+    } finally {
+      setEnhancing(false);
+    }
   }, [inputText, config, enhancing, addToast]);
 
   // ── One-click Fix ──────────────────────────────────────────────────────────
@@ -550,16 +594,36 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     try {
       const res = await fetch(`${workerUrl}/files/bulk`);
       const data = (await res.json()) as { files: { path: string; content: string }[] };
-      if (!data.files?.length) { addToast("No files to download", "warn"); return; }
+      if (!data.files?.length) {
+        addToast("No files to download", "warn");
+        return;
+      }
       const toSlug = (str: string) => {
         const w = str.match(/[a-zA-Z0-9]+/g) ?? [];
         if (w.length >= 2) return w.join("-").toLowerCase().slice(0, 40).replace(/-+$/, "");
-        return str.normalize("NFKD").replace(/[^\x00-\x7F]/g, " ").replace(/[^\w\s-]/g, " ")
-          .trim().replace(/\s+/g, "-").replace(/-+/g, "-").toLowerCase().slice(0, 40).replace(/^-+|-+$/, "");
+        return (
+          str
+            .normalize("NFKD")
+            // biome-ignore lint/suspicious/noControlCharactersInRegex: ASCII-range filter for non-ASCII fallback
+            .replace(/[^\x00-\x7F]/g, " ")
+            .replace(/[^\w\s-]/g, " ")
+            .trim()
+            .replace(/\s+/g, "-")
+            .replace(/-+/g, "-")
+            .toLowerCase()
+            .slice(0, 40)
+            .replace(/^-+|-+$/, "")
+        );
       };
       let name = "";
       const pkg = data.files.find((f) => f.path === "package.json");
-      if (pkg) { try { name = toSlug((JSON.parse(pkg.content) as { name?: string }).name ?? ""); } catch { /**/ } }
+      if (pkg) {
+        try {
+          name = toSlug((JSON.parse(pkg.content) as { name?: string }).name ?? "");
+        } catch {
+          /**/
+        }
+      }
       if (!name) name = toSlug(turns.at(-1)?.task ?? "");
       if (!name || name.length < 3) name = `project-${Date.now().toString(36)}`;
       const zip = new JSZip();
@@ -567,25 +631,37 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `${name}.zip`; a.click();
+      a.href = url;
+      a.download = `${name}.zip`;
+      a.click();
       URL.revokeObjectURL(url);
       addToast(`Downloaded ${data.files.length} files as ${name}.zip`, "success");
-    } catch (err) { addToast(`Download failed: ${(err as Error).message}`, "error"); }
-    finally { setIsDownloading(false); }
+    } catch (err) {
+      addToast(`Download failed: ${(err as Error).message}`, "error");
+    } finally {
+      setIsDownloading(false);
+    }
   }, [addToast, turns]);
 
   // ── Import ─────────────────────────────────────────────────────────────────
   const handleImportZip = useCallback(() => {
     const workerUrl = getWorkerUrl();
     const input = document.createElement("input");
-    input.type = "file"; input.accept = ".zip";
+    input.type = "file";
+    input.accept = ".zip";
     input.onchange = async () => {
-      const file = input.files?.[0]; if (!file) return;
+      const file = input.files?.[0];
+      if (!file) return;
       try {
         const files = await importFromZip(file);
-        if (!files.length) { addToast("ZIP contains no importable files", "warn"); return; }
+        if (!files.length) {
+          addToast("ZIP contains no importable files", "warn");
+          return;
+        }
         addToast(`Imported ${await uploadFiles(files, workerUrl)} files`, "success");
-      } catch (err) { addToast(`Import failed: ${(err as Error).message}`, "error"); }
+      } catch (err) {
+        addToast(`Import failed: ${(err as Error).message}`, "error");
+      }
     };
     input.click();
   }, [importFromZip, uploadFiles, addToast]);
@@ -594,53 +670,106 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     const workerUrl = getWorkerUrl();
     try {
       const files = await importFromDirectory();
-      if (!files.length) { addToast("No importable files found", "warn"); return; }
+      if (!files.length) {
+        addToast("No importable files found", "warn");
+        return;
+      }
       addToast(`Imported ${await uploadFiles(files, workerUrl)} files from directory`, "success");
-    } catch (err) { addToast(`Import failed: ${(err as Error).message}`, "error"); }
+    } catch (err) {
+      addToast(`Import failed: ${(err as Error).message}`, "error");
+    }
   }, [importFromDirectory, uploadFiles, addToast]);
 
   // ── GitHub ─────────────────────────────────────────────────────────────────
   const handleGitHub = useCallback(async () => {
-    if (!user) { githubLogin(); return; }
+    if (!user) {
+      githubLogin();
+      return;
+    }
     const workerUrl = getWorkerUrl();
     try {
       const r = await pushToGitHub(workerUrl);
       addToast(`Pushed: ${r.repoName}`, "success");
       window.open(r.repoUrl, "_blank");
-    } catch (err) { addToast(`GitHub: ${(err as Error).message}`, "error"); }
+    } catch (err) {
+      addToast(`GitHub: ${(err as Error).message}`, "error");
+    }
   }, [user, githubLogin, pushToGitHub, addToast]);
 
   // ── Last error ─────────────────────────────────────────────────────────────
   const lastTurnError = turns.at(-1)?.status === "error" ? turns.at(-1)?.error : null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  const hasPreview = !!(preview?.html || preview?.url || (preview?.logs?.length ?? 0) > 0 || preview?.output);
+  const hasPreview = !!(
+    preview?.html ||
+    preview?.url ||
+    (preview?.logs?.length ?? 0) > 0 ||
+    preview?.output
+  );
 
   return (
-    <main style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0d1117", ...mono }}>
-
+    <main
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        background: "#0d1117",
+        ...mono,
+      }}
+    >
       {/* ── Toasts ── */}
-      <div style={{ position: "fixed", bottom: 56, right: 16, zIndex: 9999, display: "flex", flexDirection: "column", gap: 6, pointerEvents: "none" }}>
+      <div
+        style={{
+          position: "fixed",
+          bottom: 56,
+          right: 16,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          pointerEvents: "none",
+        }}
+      >
         {toasts.map((t) => (
-          <div key={t.id} style={{
-            background: "#21262d", border: `1px solid ${TOAST_COLORS[t.kind]}44`,
-            borderLeft: `3px solid ${TOAST_COLORS[t.kind]}`, borderRadius: 4,
-            padding: "7px 12px", fontSize: 11, color: "#c9d1d9",
-            animation: "slideIn 0.15s ease", boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-          }}>{t.message}</div>
+          <div
+            key={t.id}
+            style={{
+              background: "#21262d",
+              border: `1px solid ${TOAST_COLORS[t.kind]}44`,
+              borderLeft: `3px solid ${TOAST_COLORS[t.kind]}`,
+              borderRadius: 4,
+              padding: "7px 12px",
+              fontSize: 11,
+              color: "#c9d1d9",
+              animation: "slideIn 0.15s ease",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+            }}
+          >
+            {t.message}
+          </div>
         ))}
       </div>
 
       {/* ── Top navbar ── */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        flexWrap: "wrap", rowGap: 6,
-        padding: "0 16px", minHeight: 44, background: "#161b22",
-        borderBottom: "1px solid #30363d", flexShrink: 0,
-      }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          rowGap: 6,
+          padding: "0 16px",
+          minHeight: 44,
+          background: "#161b22",
+          borderBottom: "1px solid #30363d",
+          flexShrink: 0,
+        }}
+      >
         {/* Left: logo + mode */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ color: "#58a6ff", fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>BSCode</span>
+          <span style={{ color: "#58a6ff", fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>
+            BSCode
+          </span>
           {/* Mode toggle */}
           <div style={{ display: "flex", gap: 3 }}>
             {(["code", "tool"] as const).map((mode) => (
@@ -649,9 +778,15 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                 type="button"
                 onClick={() => setConfig((c) => ({ ...c, agentMode: mode, framework: null }))}
                 style={{
-                  padding: "3px 8px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
-                  background: config.agentMode === mode && !config.framework ? "#1f6feb33" : "transparent",
-                  color: config.agentMode === mode && !config.framework ? "#58a6ff" : theme.textMuted,
+                  padding: "3px 8px",
+                  borderRadius: 3,
+                  fontSize: 10,
+                  border: "none",
+                  cursor: "pointer",
+                  background:
+                    config.agentMode === mode && !config.framework ? "#1f6feb33" : "transparent",
+                  color:
+                    config.agentMode === mode && !config.framework ? "#58a6ff" : theme.textMuted,
                   fontWeight: 600,
                 }}
               >
@@ -660,9 +795,19 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             ))}
             <button
               type="button"
-              onClick={() => setConfig((c) => ({ ...c, agentMode: "tool", framework: c.framework ? null : "react" }))}
+              onClick={() =>
+                setConfig((c) => ({
+                  ...c,
+                  agentMode: "tool",
+                  framework: c.framework ? null : "react",
+                }))
+              }
               style={{
-                padding: "3px 8px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
+                padding: "3px 8px",
+                borderRadius: 3,
+                fontSize: 10,
+                border: "none",
+                cursor: "pointer",
                 background: config.framework ? "#23863622" : "transparent",
                 color: config.framework ? "#3fb950" : theme.textMuted,
                 fontWeight: 600,
@@ -680,18 +825,37 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                   type="button"
                   onClick={() => setConfig((c) => ({ ...c, framework: fw }))}
                   style={{
-                    padding: "2px 7px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
+                    padding: "2px 7px",
+                    borderRadius: 3,
+                    fontSize: 10,
+                    border: "none",
+                    cursor: "pointer",
                     background: config.framework === fw ? "#3fb95022" : "transparent",
                     color: config.framework === fw ? "#3fb950" : theme.textMuted,
                   }}
                 >
-                  {fw === "react" ? "React" : fw === "vue" ? "Vue" : fw === "svelte" ? "Svelte" : "Vanilla"}
+                  {fw === "react"
+                    ? "React"
+                    : fw === "vue"
+                      ? "Vue"
+                      : fw === "svelte"
+                        ? "Svelte"
+                        : "Vanilla"}
                 </button>
               ))}
             </div>
           )}
           {/* Auto-detect badge */}
-          <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: 10, color: theme.textMuted }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              cursor: "pointer",
+              fontSize: 10,
+              color: theme.textMuted,
+            }}
+          >
             <input
               type="checkbox"
               checked={config.autoMode ?? true}
@@ -711,52 +875,125 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             title="Select language model"
             value={config.modelId}
             onChange={(e) => setConfig((c) => ({ ...c, modelId: e.target.value }))}
-            style={{ background: "#21262d", border: "1px solid #30363d", borderRadius: 4, color: "#c9d1d9", fontSize: 11, padding: "3px 6px", cursor: "pointer" }}
+            style={{
+              background: "#21262d",
+              border: "1px solid #30363d",
+              borderRadius: 4,
+              color: "#c9d1d9",
+              fontSize: 11,
+              padding: "3px 6px",
+              cursor: "pointer",
+            }}
           >
             <option value="claude-sonnet-4-6">Sonnet 4.6</option>
             <option value="claude-opus-4-8">Opus 4.8</option>
             <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
           </select>
-          <button type="button" onClick={handleImportDir} disabled={importing} style={iconBtn(importing ? theme.textMuted : "#c9d1d9")} title="Import from directory">⬆ Dir</button>
-          <button type="button" onClick={handleImportZip} disabled={importing} style={iconBtn(importing ? theme.textMuted : "#c9d1d9")} title="Import ZIP">⬆ ZIP</button>
-          <button type="button" onClick={handleDownloadZip} disabled={isDownloading} style={iconBtn("#58a6ff")} title="Download ZIP">⬇ ZIP</button>
+          <button
+            type="button"
+            onClick={handleImportDir}
+            disabled={importing}
+            style={iconBtn(importing ? theme.textMuted : "#c9d1d9")}
+            title="Import from directory"
+          >
+            ⬆ Dir
+          </button>
+          <button
+            type="button"
+            onClick={handleImportZip}
+            disabled={importing}
+            style={iconBtn(importing ? theme.textMuted : "#c9d1d9")}
+            title="Import ZIP"
+          >
+            ⬆ ZIP
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadZip}
+            disabled={isDownloading}
+            style={iconBtn("#58a6ff")}
+            title="Download ZIP"
+          >
+            ⬇ ZIP
+          </button>
           <button
             type="button"
             onClick={handleGitHub}
             disabled={pushing}
-            style={{ ...iconBtn(user ? "#3fb950" : theme.textMuted), display: "flex", alignItems: "center", gap: 4 }}
+            style={{
+              ...iconBtn(user ? "#3fb950" : theme.textMuted),
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
             title={user ? `Push to GitHub (${user.login})` : "Connect GitHub"}
           >
-            {user ? <img src={user.avatar_url} alt={user.login} width={13} height={13} style={{ borderRadius: "50%" }} /> : null}
+            {user ? (
+              // biome-ignore lint/performance/noImgElement: avatar from GitHub CDN — using next/image would require remotePatterns config and adds no perf benefit for a 13×13 px image
+              <img
+                src={user.avatar_url}
+                alt={user.login}
+                width={13}
+                height={13}
+                style={{ borderRadius: "50%" }}
+              />
+            ) : null}
             {pushing ? "…" : user ? "Push" : "GitHub"}
           </button>
-          <button type="button" onClick={() => setSettingsOpen((o) => !o)} style={iconBtn(theme.textMuted)} title="Settings">⚙</button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((o) => !o)}
+            style={iconBtn(theme.textMuted)}
+            title="Settings"
+          >
+            ⚙
+          </button>
         </div>
       </div>
 
-      {settingsOpen && (
-        <SettingsDrawer onClose={() => setSettingsOpen(false)} />
-      )}
+      {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
 
       {/* ── Main area ── */}
       {/* On narrow viewports collapse to a single column so neither pane gets squeezed
           below readability — chat input and Run button were getting clipped at 375px. */}
-      <div style={{
-        flex: 1, display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-        overflow: "hidden",
-      }} className="bscode-main-grid">
-
+      <div
+        style={{
+          flex: 1,
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          overflow: "hidden",
+        }}
+        className="bscode-main-grid"
+      >
         {/* ── Left: chat history ── */}
-        <div style={{ display: "flex", flexDirection: "column", borderRight: "1px solid #30363d", overflow: "hidden" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            borderRight: "1px solid #30363d",
+            overflow: "hidden",
+          }}
+        >
           {/* Chat scroll area */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 24 }}>
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: "16px 20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 24,
+            }}
+          >
             {turns.length === 0 && (
-              <div style={{ color: theme.textDim, fontSize: 13, textAlign: "center", marginTop: 60 }}>
+              <div
+                style={{ color: theme.textDim, fontSize: 13, textAlign: "center", marginTop: 60 }}
+              >
                 <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
                 <div>Describe a task to get started.</div>
                 <div style={{ fontSize: 11, marginTop: 6, color: theme.textDim }}>
-                  e.g. "build a Vue 3 todo list" · "implement quicksort" · "create a React dashboard"
+                  e.g. "build a Vue 3 todo list" · "implement quicksort" · "create a React
+                  dashboard"
                 </div>
               </div>
             )}
@@ -770,15 +1007,19 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     ? messages.find((m) => m.role === "assistant")?.content
                     : undefined
                 }
-                onFix={turn.status === "error" ? () => {
-                  // Match the original task's language so the agent's
-                  // reply uses the same one.
-                  const isCh = /[一-鿿]/.test(turn.task);
-                  const fixTask = isCh
-                    ? `修复错误：${turn.error}\n\n原始任务：${turn.task}`
-                    : `Fix this error: ${turn.error}\n\nOriginal task: ${turn.task}`;
-                  handleSubmit(fixTask, true);
-                } : undefined}
+                onFix={
+                  turn.status === "error"
+                    ? () => {
+                        // Match the original task's language so the agent's
+                        // reply uses the same one.
+                        const isCh = /[一-鿿]/.test(turn.task);
+                        const fixTask = isCh
+                          ? `修复错误：${turn.error}\n\n原始任务：${turn.task}`
+                          : `Fix this error: ${turn.error}\n\nOriginal task: ${turn.task}`;
+                        handleSubmit(fixTask, true);
+                      }
+                    : undefined
+                }
                 onRetry={() => handleSubmit(turn.task, true)}
                 onPreviewCard={(card) => {
                   setSelectedCard(card);
@@ -790,174 +1031,278 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           </div>
 
           {/* ── Input bar ── */}
-          <div style={{
-            borderTop: "1px solid #30363d",
-            padding: "12px 16px",
-            background: "#0d1117",
-            flexShrink: 0,
-          }}>
+          <div
+            style={{
+              borderTop: "1px solid #30363d",
+              padding: "12px 16px",
+              background: "#0d1117",
+              flexShrink: 0,
+            }}
+          >
             {/* Clarifying questions — Claude Code style: options + free text + auto-continue */}
-            {clarifyingQuestions && clarifyingQuestions.length > 0 && !isRunning && (() => {
-              // Check if all questions have been answered
-              const allAnswered = clarifyingQuestions.every((_, i) => (clarifyAnswers[i] ?? "").trim());
+            {clarifyingQuestions &&
+              clarifyingQuestions.length > 0 &&
+              !isRunning &&
+              (() => {
+                // Check if all questions have been answered
+                const allAnswered = clarifyingQuestions.every((_, i) =>
+                  (clarifyAnswers[i] ?? "").trim()
+                );
 
-              const submitWithAnswers = () => {
-                const answerSuffix = clarifyingQuestions
-                  .map((q, i) => `${q.text}: ${(clarifyAnswers[i] ?? "").replace(/^other:/, "")}`)
-                  .join("\n");
-                // Build enriched task: original task + Q&A answers
-                const baseTask = lastSubmittedTask.current || inputText.trim();
-                const enrichedTask = baseTask
-                  ? `${baseTask}\n\n${answerSuffix}`
-                  : answerSuffix;
-                dismissClarify();
-                setClarifyAnswers({});
-                // skipClarify=true so this doesn't trigger another clarify round
-                handleSubmit(enrichedTask, true);
-              };
+                const submitWithAnswers = () => {
+                  const answerSuffix = clarifyingQuestions
+                    .map((q, i) => `${q.text}: ${(clarifyAnswers[i] ?? "").replace(/^other:/, "")}`)
+                    .join("\n");
+                  // Build enriched task: original task + Q&A answers
+                  const baseTask = lastSubmittedTask.current || inputText.trim();
+                  const enrichedTask = baseTask ? `${baseTask}\n\n${answerSuffix}` : answerSuffix;
+                  dismissClarify();
+                  setClarifyAnswers({});
+                  // skipClarify=true so this doesn't trigger another clarify round
+                  handleSubmit(enrichedTask, true);
+                };
 
-              return (
-                <div style={{ marginBottom: 10, background: "#0d1b2a", border: "1px solid #1f6feb55", borderRadius: 8, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 11, color: "#58a6ff", fontWeight: 700, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span>💬 {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "几个问题帮我更好地理解需求：" : "A few questions before I start:"}</span>
+                return (
+                  <div
+                    style={{
+                      marginBottom: 10,
+                      background: "#0d1b2a",
+                      border: "1px solid #1f6feb55",
+                      borderRadius: 8,
+                      padding: "12px 14px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#58a6ff",
+                        fontWeight: 700,
+                        marginBottom: 10,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span>
+                        💬{" "}
+                        {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
+                          ? "几个问题帮我更好地理解需求："
+                          : "A few questions before I start:"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          dismissClarify();
+                          setClarifyAnswers({});
+                          // Use the original task (before inputText was cleared), skipClarify=true
+                          handleSubmit(lastSubmittedTask.current || inputText, true);
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: theme.textMuted,
+                          fontSize: 10,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
+                          ? "跳过，直接运行 →"
+                          : "Skip, run anyway →"}
+                      </button>
+                    </div>
+
+                    {clarifyingQuestions.map((q, qi) => (
+                      <div
+                        // biome-ignore lint/suspicious/noArrayIndexKey: questions render once per clarification round; index IS identity
+                        key={qi}
+                        style={{ marginBottom: qi < clarifyingQuestions.length - 1 ? 12 : 8 }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: "#c9d1d9",
+                            marginBottom: 6,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {qi + 1}. {q.text}
+                        </div>
+
+                        {/* Option buttons */}
+                        {q.options.length > 0 && (
+                          <div
+                            style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}
+                          >
+                            {q.options.map((opt, oi) => {
+                              const selected = clarifyAnswers[qi] === opt;
+                              return (
+                                <button
+                                  // biome-ignore lint/suspicious/noArrayIndexKey: option list is fixed per question — index IS identity
+                                  key={oi}
+                                  type="button"
+                                  onClick={() =>
+                                    setClarifyAnswers((prev) => ({
+                                      ...prev,
+                                      [qi]: selected ? "" : opt,
+                                    }))
+                                  }
+                                  style={{
+                                    padding: "5px 12px",
+                                    borderRadius: 20,
+                                    border: `1px solid ${selected ? "#58a6ff" : "#30363d"}`,
+                                    background: selected ? "#1f6feb22" : "transparent",
+                                    color: selected ? "#58a6ff" : theme.textMuted,
+                                    fontSize: 11,
+                                    cursor: "pointer",
+                                    fontFamily: "inherit",
+                                    transition: "all 0.1s",
+                                  }}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                            {/* "Other" option to show free text */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setClarifyAnswers((prev) => ({
+                                  ...prev,
+                                  [qi]: prev[qi] && !q.options.includes(prev[qi]) ? "" : "other:",
+                                }))
+                              }
+                              style={{
+                                padding: "5px 12px",
+                                borderRadius: 20,
+                                border: `1px solid ${clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : "#30363d"}`,
+                                background:
+                                  clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi])
+                                    ? "#1f6feb22"
+                                    : "transparent",
+                                color:
+                                  clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi])
+                                    ? "#58a6ff"
+                                    : theme.textMuted,
+                                fontSize: 11,
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
+                                ? "其他…"
+                                : "Other…"}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Free text — shown when "Other" selected or no options */}
+                        {(q.options.length === 0 ||
+                          (clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]))) && (
+                          <input
+                            type="text"
+                            placeholder={
+                              /[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
+                                ? "请输入..."
+                                : "Type your answer..."
+                            }
+                            value={clarifyAnswers[qi]?.replace(/^other:/, "") ?? ""}
+                            onChange={(e) =>
+                              setClarifyAnswers((prev) => ({
+                                ...prev,
+                                [qi]: e.target.value || "other:",
+                              }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && allAnswered) submitWithAnswers();
+                            }}
+                            style={{
+                              width: "100%",
+                              background: "#161b22",
+                              border: "1px solid #30363d",
+                              borderRadius: 6,
+                              color: "#c9d1d9",
+                              fontSize: 12,
+                              padding: "6px 10px",
+                              fontFamily: "inherit",
+                              outline: "none",
+                            }}
+                            // biome-ignore lint/a11y/noAutofocus: intentional focus for UX
+                            autoFocus={qi === 0}
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Submit button — enabled when all answered */}
                     <button
                       type="button"
-                      onClick={() => {
-                      dismissClarify();
-                      setClarifyAnswers({});
-                      // Use the original task (before inputText was cleared), skipClarify=true
-                      handleSubmit(lastSubmittedTask.current || inputText, true);
-                    }}
-                      style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
+                      onClick={submitWithAnswers}
+                      disabled={!allAnswered}
+                      style={{
+                        marginTop: 4,
+                        padding: "7px 16px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: allAnswered ? "#1f6feb" : "#21262d",
+                        color: allAnswered ? "#fff" : theme.textMuted,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: allAnswered ? "pointer" : "default",
+                        fontFamily: "inherit",
+                        transition: "background 0.15s",
+                      }}
                     >
-                      {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "跳过，直接运行 →" : "Skip, run anyway →"}
+                      {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
+                        ? "确认并运行 ▶"
+                        : "Submit & Run ▶"}
                     </button>
                   </div>
-
-                  {clarifyingQuestions.map((q, qi) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: ordered questions
-                    <div key={qi} style={{ marginBottom: qi < clarifyingQuestions.length - 1 ? 12 : 8 }}>
-                      <div style={{ fontSize: 12, color: "#c9d1d9", marginBottom: 6, fontWeight: 500 }}>
-                        {qi + 1}. {q.text}
-                      </div>
-
-                      {/* Option buttons */}
-                      {q.options.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
-                          {q.options.map((opt, oi) => {
-                            const selected = clarifyAnswers[qi] === opt;
-                            return (
-                              // biome-ignore lint/suspicious/noArrayIndexKey: ordered options
-                              <button
-                                key={oi}
-                                type="button"
-                                onClick={() => setClarifyAnswers((prev) => ({ ...prev, [qi]: selected ? "" : opt }))}
-                                style={{
-                                  padding: "5px 12px",
-                                  borderRadius: 20,
-                                  border: `1px solid ${selected ? "#58a6ff" : "#30363d"}`,
-                                  background: selected ? "#1f6feb22" : "transparent",
-                                  color: selected ? "#58a6ff" : theme.textMuted,
-                                  fontSize: 11,
-                                  cursor: "pointer",
-                                  fontFamily: "inherit",
-                                  transition: "all 0.1s",
-                                }}
-                              >
-                                {opt}
-                              </button>
-                            );
-                          })}
-                          {/* "Other" option to show free text */}
-                          <button
-                            type="button"
-                            onClick={() => setClarifyAnswers((prev) => ({ ...prev, [qi]: prev[qi] && !q.options.includes(prev[qi]) ? "" : "other:" }))}
-                            style={{
-                              padding: "5px 12px",
-                              borderRadius: 20,
-                              border: `1px solid ${clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : "#30363d"}`,
-                              background: clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#1f6feb22" : "transparent",
-                              color: clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : theme.textMuted,
-                              fontSize: 11,
-                              cursor: "pointer",
-                              fontFamily: "inherit",
-                            }}
-                          >{/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "其他…" : "Other…"}</button>
-                        </div>
-                      )}
-
-                      {/* Free text — shown when "Other" selected or no options */}
-                      {(q.options.length === 0 || (clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]))) && (
-                        <input
-                          type="text"
-                          placeholder={/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "请输入..." : "Type your answer..."}
-                          value={clarifyAnswers[qi]?.replace(/^other:/, "") ?? ""}
-                          onChange={(e) => setClarifyAnswers((prev) => ({ ...prev, [qi]: e.target.value || "other:" }))}
-                          onKeyDown={(e) => { if (e.key === "Enter" && allAnswered) submitWithAnswers(); }}
-                          style={{
-                            width: "100%",
-                            background: "#161b22",
-                            border: "1px solid #30363d",
-                            borderRadius: 6,
-                            color: "#c9d1d9",
-                            fontSize: 12,
-                            padding: "6px 10px",
-                            fontFamily: "inherit",
-                            outline: "none",
-                          }}
-                          // biome-ignore lint/a11y/noAutofocus: intentional focus for UX
-                          autoFocus={qi === 0}
-                        />
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Submit button — enabled when all answered */}
-                  <button
-                    type="button"
-                    onClick={submitWithAnswers}
-                    disabled={!allAnswered}
-                    style={{
-                      marginTop: 4,
-                      padding: "7px 16px",
-                      borderRadius: 6,
-                      border: "none",
-                      background: allAnswered ? "#1f6feb" : "#21262d",
-                      color: allAnswered ? "#fff" : theme.textMuted,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: allAnswered ? "pointer" : "default",
-                      fontFamily: "inherit",
-                      transition: "background 0.15s",
-                    }}
-                  >{/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "确认并运行 ▶" : "Submit & Run ▶"}</button>
-                </div>
-              );
-            })()}
+                );
+              })()}
 
             {/* Fix error banner */}
             {lastTurnError && !isRunning && (
-              <div style={{
-                marginBottom: 10,
-                background: "#1a0a0a",
-                border: "1px solid #f8514933",
-                borderRadius: 6,
-                padding: "8px 12px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-              }}>
-                <span style={{ fontSize: 11, color: "#f85149", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  ✗ {lastTurnError.slice(0, 120)}{lastTurnError.length > 120 ? "…" : ""}
+              <div
+                style={{
+                  marginBottom: 10,
+                  background: "#1a0a0a",
+                  border: "1px solid #f8514933",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "#f85149",
+                    flex: 1,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  ✗ {lastTurnError.slice(0, 120)}
+                  {lastTurnError.length > 120 ? "…" : ""}
                 </span>
                 <button
                   type="button"
                   onClick={handleFix}
                   style={{
-                    flexShrink: 0, padding: "4px 12px", borderRadius: 4, border: "none",
-                    background: "#f85149", color: "#fff", fontSize: 11, fontWeight: 700,
-                    cursor: "pointer", fontFamily: "inherit",
+                    flexShrink: 0,
+                    padding: "4px 12px",
+                    borderRadius: 4,
+                    border: "none",
+                    background: "#f85149",
+                    color: "#fff",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
                   }}
                 >
                   ⚡ Fix Error
@@ -995,8 +1340,12 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                   fontFamily: "inherit",
                   transition: "border-color 0.15s",
                 }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "#58a6ff44"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "#30363d"; }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = "#58a6ff44";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = "#30363d";
+                }}
               />
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {isRunning || classifying ? (
@@ -1004,9 +1353,15 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     type="button"
                     onClick={abort}
                     style={{
-                      padding: "10px 16px", borderRadius: 8, border: "none",
-                      background: "#b91c1c", color: "#fff", fontSize: 12,
-                      fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                      padding: "10px 16px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#b91c1c",
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
                     }}
                   >
                     ■ Stop
@@ -1017,11 +1372,16 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     onClick={() => handleSubmit(inputText)}
                     disabled={!inputText.trim()}
                     style={{
-                      padding: "10px 16px", borderRadius: 8, border: "none",
+                      padding: "10px 16px",
+                      borderRadius: 8,
+                      border: "none",
                       background: inputText.trim() ? "#1f6feb" : "#21262d",
                       color: inputText.trim() ? "#fff" : theme.textMuted,
-                      fontSize: 12, fontWeight: 700, cursor: inputText.trim() ? "pointer" : "default",
-                      fontFamily: "inherit", transition: "background 0.15s",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: inputText.trim() ? "pointer" : "default",
+                      fontFamily: "inherit",
+                      transition: "background 0.15s",
                     }}
                   >
                     {classifying ? "⟳" : "▶ Run"}
@@ -1029,9 +1389,18 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                 )}
               </div>
             </div>
-            <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                marginTop: 6,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 10, color: theme.textDim }}>Cmd+Enter · @file to reference</span>
+                <span style={{ fontSize: 10, color: theme.textDim }}>
+                  Cmd+Enter · @file to reference
+                </span>
                 {/* Enhance Prompt button (bolt.new pattern) */}
                 {inputText.trim() && !isRunning && !classifying && (
                   <button
@@ -1040,9 +1409,14 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     disabled={enhancing}
                     title="Enhance prompt — expand into detailed spec (bolt.new ✨)"
                     style={{
-                      padding: "2px 8px", borderRadius: 3, border: "1px solid #30363d",
-                      background: "transparent", color: enhancing ? theme.textMuted : "#bc8cff",
-                      fontSize: 10, cursor: enhancing ? "wait" : "pointer", fontFamily: "inherit",
+                      padding: "2px 8px",
+                      borderRadius: 3,
+                      border: "1px solid #30363d",
+                      background: "transparent",
+                      color: enhancing ? theme.textMuted : "#bc8cff",
+                      fontSize: 10,
+                      cursor: enhancing ? "wait" : "pointer",
+                      fontFamily: "inherit",
                     }}
                   >
                     {enhancing ? "⟳" : "✨ Enhance"}
@@ -1057,16 +1431,47 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         {/* ── Right: preview ── */}
         <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Preview header */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "0 12px", height: 36, background: "#161b22",
-            borderBottom: "1px solid #30363d", flexShrink: 0, fontSize: 11, color: theme.textMuted,
-          }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0 12px",
+              height: 36,
+              background: "#161b22",
+              borderBottom: "1px solid #30363d",
+              flexShrink: 0,
+              fontSize: 11,
+              color: theme.textMuted,
+            }}
+          >
             <span style={{ textTransform: "uppercase", letterSpacing: 0.8 }}>
               Preview
-              {!isRunning && wcStatus === "installing" && <span style={{ marginLeft: 8, color: "#e3b341", animation: "pulse 1.2s ease-in-out infinite" }}>● installing</span>}
-              {!isRunning && wcStatus === "starting" && <span style={{ marginLeft: 8, color: "#e3b341", animation: "pulse 1.2s ease-in-out infinite" }}>● starting</span>}
-              {!isRunning && wcStatus === "ready" && previewUrl && <span style={{ marginLeft: 8, color: "#3fb950" }}>● live</span>}
+              {!isRunning && wcStatus === "installing" && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    color: "#e3b341",
+                    animation: "pulse 1.2s ease-in-out infinite",
+                  }}
+                >
+                  ● installing
+                </span>
+              )}
+              {!isRunning && wcStatus === "starting" && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    color: "#e3b341",
+                    animation: "pulse 1.2s ease-in-out infinite",
+                  }}
+                >
+                  ● starting
+                </span>
+              )}
+              {!isRunning && wcStatus === "ready" && previewUrl && (
+                <span style={{ marginLeft: 8, color: "#3fb950" }}>● live</span>
+              )}
             </span>
             <div style={{ display: "flex", gap: 4 }}>
               {(["preview", "messages", "events"] as const).map((v) => (
@@ -1075,14 +1480,23 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                   type="button"
                   onClick={() => setPreviewView(v)}
                   style={{
-                    padding: "3px 8px", borderRadius: 3, border: "none",
+                    padding: "3px 8px",
+                    borderRadius: 3,
+                    border: "none",
                     background: previewView === v ? "#1f6feb33" : "transparent",
-                    color: previewView === v ? "#58a6ff" : (v === "preview" && hasPreview && previewView !== "preview") ? "#e3b341" : theme.textMuted,
-                    fontSize: 10, cursor: "pointer",
+                    color:
+                      previewView === v
+                        ? "#58a6ff"
+                        : v === "preview" && hasPreview && previewView !== "preview"
+                          ? "#e3b341"
+                          : theme.textMuted,
+                    fontSize: 10,
+                    cursor: "pointer",
                     fontWeight: previewView === v ? 600 : 400,
                   }}
                 >
-                  {v.charAt(0).toUpperCase() + v.slice(1)}{v === "preview" && hasPreview && previewView !== "preview" ? " ●" : ""}
+                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                  {v === "preview" && hasPreview && previewView !== "preview" ? " ●" : ""}
                 </button>
               ))}
               <button
@@ -1097,7 +1511,15 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                   setPreview(undefined);
                   wcReset();
                 }}
-                style={{ padding: "3px 8px", borderRadius: 3, border: "none", background: "transparent", color: "#f85149", fontSize: 10, cursor: "pointer" }}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: 3,
+                  border: "none",
+                  background: "transparent",
+                  color: "#f85149",
+                  fontSize: 10,
+                  cursor: "pointer",
+                }}
               >
                 Clear
               </button>
@@ -1143,7 +1565,14 @@ interface TurnBlockProps {
   onPreviewCard: (card: CardBlock) => void;
 }
 
-function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCard }: TurnBlockProps) {
+function TurnBlock({
+  turn,
+  isActive,
+  streamingText,
+  onFix,
+  onRetry,
+  onPreviewCard,
+}: TurnBlockProps) {
   const label = modeLabel(turn.detectedMode);
   // Hide raw <boltThinking>...</boltThinking> tags from the Thought panel —
   // the parsed plan is already shown separately above. While streaming, we
@@ -1171,21 +1600,32 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* User bubble */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <div style={{
-          maxWidth: "80%", background: "#1f6feb22", border: "1px solid #1f6feb44",
-          borderRadius: "12px 12px 3px 12px", padding: "10px 14px",
-        }}>
+        <div
+          style={{
+            maxWidth: "80%",
+            background: "#1f6feb22",
+            border: "1px solid #1f6feb44",
+            borderRadius: "12px 12px 3px 12px",
+            padding: "10px 14px",
+          }}
+        >
           <div style={{ fontSize: 12, color: "#c9d1d9", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
             {turn.task}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
             {label && (
-              <span style={{
-                fontSize: 10, padding: "1px 6px", borderRadius: 3,
-                background: `${MODE_COLORS[label] ?? "#58a6ff"}22`,
-                border: `1px solid ${MODE_COLORS[label] ?? "#58a6ff"}44`,
-                color: MODE_COLORS[label] ?? "#58a6ff",
-              }}>{label}</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: "1px 6px",
+                  borderRadius: 3,
+                  background: `${MODE_COLORS[label] ?? "#58a6ff"}22`,
+                  border: `1px solid ${MODE_COLORS[label] ?? "#58a6ff"}44`,
+                  color: MODE_COLORS[label] ?? "#58a6ff",
+                }}
+              >
+                {label}
+              </span>
             )}
             <span style={{ fontSize: 10, color: theme.textDim, marginLeft: "auto" }}>
               {new Date(turn.timestamp).toLocaleTimeString()}
@@ -1196,13 +1636,21 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
 
       {/* Agent response */}
       <div style={{ display: "flex", gap: 10 }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-          background: isActive ? "#1f6feb" : turn.status === "error" ? "#b91c1c" : "#238636",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 13, marginTop: 2,
-          animation: isActive ? "pulse 1.2s ease-in-out infinite" : undefined,
-        }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            flexShrink: 0,
+            background: isActive ? "#1f6feb" : turn.status === "error" ? "#b91c1c" : "#238636",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 13,
+            marginTop: 2,
+            animation: isActive ? "pulse 1.2s ease-in-out infinite" : undefined,
+          }}
+        >
           {isActive ? "⟳" : turn.status === "error" ? "✗" : "✓"}
         </div>
         <div style={{ flex: 1 }}>
@@ -1213,21 +1661,44 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                 type="button"
                 onClick={() => setThinkingCollapsed((c) => !c)}
                 style={{
-                  display: "flex", alignItems: "center", gap: 4,
-                  background: "none", border: "none", padding: "2px 0",
-                  color: "#58a6ff", fontSize: 10, cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "none",
+                  border: "none",
+                  padding: "2px 0",
+                  color: "#58a6ff",
+                  fontSize: 10,
+                  cursor: "pointer",
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                <span style={{ transform: thinkingCollapsed && !isActive ? "rotate(-90deg)" : "rotate(0)", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
+                <span
+                  style={{
+                    transform: thinkingCollapsed && !isActive ? "rotate(-90deg)" : "rotate(0)",
+                    display: "inline-block",
+                    transition: "transform 0.15s",
+                  }}
+                >
+                  ▾
+                </span>
                 📋 Plan
               </button>
               {(!thinkingCollapsed || isActive) && (
-                <div style={{
-                  background: "#0d1b2a", border: "1px solid #1f6feb33", borderRadius: 5,
-                  padding: "8px 10px", fontSize: 11, color: theme.textMuted, lineHeight: 1.7,
-                  whiteSpace: "pre-wrap", wordBreak: "break-word" as const, marginTop: 4,
-                }}>
+                <div
+                  style={{
+                    background: "#0d1b2a",
+                    border: "1px solid #1f6feb33",
+                    borderRadius: 5,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    color: theme.textMuted,
+                    lineHeight: 1.7,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word" as const,
+                    marginTop: 4,
+                  }}
+                >
                   {turn.planText}
                 </div>
               )}
@@ -1236,13 +1707,37 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
 
           {/* File write progress — shown during framework-mode runs */}
           {isActive && turn.writtenFiles.length > 0 && (
-            <div style={{ marginBottom: 8, background: "#0d1117", border: "1px solid #30363d", borderRadius: 5, padding: "6px 10px" }}>
-              <div style={{ fontSize: 10, color: theme.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.6 }}>
+            <div
+              style={{
+                marginBottom: 8,
+                background: "#0d1117",
+                border: "1px solid #30363d",
+                borderRadius: 5,
+                padding: "6px 10px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  color: theme.textMuted,
+                  marginBottom: 4,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.6,
+                }}
+              >
                 Writing files ({turn.writtenFiles.length})
               </div>
               {turn.writtenFiles.map((f, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: ordered file list
-                <div key={i} style={{ fontSize: 11, color: "#3fb950", fontFamily: "JetBrains Mono, monospace", lineHeight: 1.6 }}>
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: per-turn file list is append-only — i IS identity
+                  key={i}
+                  style={{
+                    fontSize: 11,
+                    color: "#3fb950",
+                    fontFamily: "JetBrains Mono, monospace",
+                    lineHeight: 1.6,
+                  }}
+                >
                   ✓ {f}
                 </div>
               ))}
@@ -1253,9 +1748,17 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
           {turn.toolLines.length > 0 && (
             <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 2 }}>
               {turn.toolLines.map((line, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: ordered tool lines
-                <div key={i} style={{ fontSize: 11, color: "#e3b341", fontFamily: "JetBrains Mono, monospace" }}>
-                  {line.slice(0, 120)}{line.length > 120 ? "…" : ""}
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: per-turn tool log is append-only — i IS identity
+                  key={i}
+                  style={{
+                    fontSize: 11,
+                    color: "#e3b341",
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  {line.slice(0, 120)}
+                  {line.length > 120 ? "…" : ""}
                 </div>
               ))}
             </div>
@@ -1268,25 +1771,73 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                 type="button"
                 onClick={() => setThinkingCollapsed((c) => !c)}
                 style={{
-                  display: "flex", alignItems: "center", gap: 4,
-                  background: "none", border: "none", padding: "2px 0",
-                  color: theme.textMuted, fontSize: 10, cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "none",
+                  border: "none",
+                  padding: "2px 0",
+                  color: theme.textMuted,
+                  fontSize: 10,
+                  cursor: "pointer",
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
-                <span style={{ transform: thinkingCollapsed ? "rotate(-90deg)" : "rotate(0)", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
+                <span
+                  style={{
+                    transform: thinkingCollapsed ? "rotate(-90deg)" : "rotate(0)",
+                    display: "inline-block",
+                    transition: "transform 0.15s",
+                  }}
+                >
+                  ▾
+                </span>
                 {isActive ? "Thinking…" : `Thought (${thinkingText.split(/\s+/).length} words)`}
-                {isActive && <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#bc8cff", animation: "pulse 1s infinite", marginLeft: 2 }} />}
+                {isActive && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "#bc8cff",
+                      animation: "pulse 1s infinite",
+                      marginLeft: 2,
+                    }}
+                  />
+                )}
               </button>
               {!thinkingCollapsed && (
-                <div style={{
-                  background: "#0d1117", border: "1px solid #21262d", borderRadius: 5,
-                  padding: "8px 10px", fontSize: 11, color: theme.textMuted, lineHeight: 1.6,
-                  whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
-                  maxHeight: 200, overflowY: "auto", marginTop: 4,
-                }}>
+                <div
+                  style={{
+                    background: "#0d1117",
+                    border: "1px solid #21262d",
+                    borderRadius: 5,
+                    padding: "8px 10px",
+                    fontSize: 11,
+                    color: theme.textMuted,
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word" as const,
+                    maxHeight: 200,
+                    overflowY: "auto",
+                    marginTop: 4,
+                  }}
+                >
                   {thinkingText}
-                  {isActive && <span style={{ display: "inline-block", width: 6, height: 12, background: "#bc8cff", animation: "blink 1s step-end infinite", verticalAlign: "text-bottom", marginLeft: 2 }} />}
+                  {isActive && (
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 6,
+                        height: 12,
+                        background: "#bc8cff",
+                        animation: "blink 1s step-end infinite",
+                        verticalAlign: "text-bottom",
+                        marginLeft: 2,
+                      }}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -1294,11 +1845,19 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
 
           {/* Final answer — shown prominently when done */}
           {turn.status === "error" && turn.error ? (
-            <div style={{
-              background: "#1a0a0a", border: "1px solid #f8514933", borderRadius: 6,
-              padding: "10px 12px", fontSize: 12, color: "#f85149", lineHeight: 1.6,
-              whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
-            }}>
+            <div
+              style={{
+                background: "#1a0a0a",
+                border: "1px solid #f8514933",
+                borderRadius: 6,
+                padding: "10px 12px",
+                fontSize: 12,
+                color: "#f85149",
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word" as const,
+              }}
+            >
               <span style={{ fontWeight: 700 }}>Error: </span>
               {turn.error}
             </div>
@@ -1306,9 +1865,12 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {hasCards ? (
                 // Cards found: render each segment as a tile (card) or plain text
-                parsedAnswer!.segments.map((seg, i) => {
+                parsedAnswer?.segments.map((seg, i) => {
                   if (seg.kind === "card") {
-                    const cardTypeLabel: Record<string, string> = { d2: "🔷 D2 Diagram", markdown: "📄 Markdown" };
+                    const cardTypeLabel: Record<string, string> = {
+                      d2: "🔷 D2 Diagram",
+                      markdown: "📄 Markdown",
+                    };
                     const label = cardTypeLabel[seg.card.type] ?? `📎 ${seg.card.type}`;
                     return (
                       <button
@@ -1328,21 +1890,52 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                           transition: "border-color 0.15s",
                           width: "100%",
                         }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#58a6ff"; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#30363d"; }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = "#58a6ff";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = "#30363d";
+                        }}
                       >
                         <span style={{ fontSize: 22, flexShrink: 0 }}>
-                          {seg.card.type === "d2" ? "🔷" : seg.card.type === "markdown" ? "📄" : "📎"}
+                          {seg.card.type === "d2"
+                            ? "🔷"
+                            : seg.card.type === "markdown"
+                              ? "📄"
+                              : "📎"}
                         </span>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#c9d1d9", fontFamily: "inherit" }}>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "#c9d1d9",
+                              fontFamily: "inherit",
+                            }}
+                          >
                             {seg.card.meta ?? label}
                           </div>
-                          <div style={{ fontSize: 11, color: theme.textMuted, fontFamily: "JetBrains Mono, monospace" }}>
-                            card:{seg.card.type} · {seg.card.content.split("\n").length} lines · click to view
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: theme.textMuted,
+                              fontFamily: "JetBrains Mono, monospace",
+                            }}
+                          >
+                            card:{seg.card.type} · {seg.card.content.split("\n").length} lines ·
+                            click to view
                           </div>
                         </div>
-                        <span style={{ marginLeft: "auto", fontSize: 16, color: "#58a6ff", flexShrink: 0 }}>›</span>
+                        <span
+                          style={{
+                            marginLeft: "auto",
+                            fontSize: 16,
+                            color: "#58a6ff",
+                            flexShrink: 0,
+                          }}
+                        >
+                          ›
+                        </span>
                       </button>
                     );
                   }
@@ -1351,10 +1944,14 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                   if (!text) return null;
                   return (
                     <div
+                      // biome-ignore lint/suspicious/noArrayIndexKey: text segments per turn are append-only — i IS identity
                       key={`text-${i}`}
                       style={{
-                        fontSize: 12, color: "#c9d1d9", lineHeight: 1.7,
-                        whiteSpace: "pre-wrap", wordBreak: "break-word",
+                        fontSize: 12,
+                        color: "#c9d1d9",
+                        lineHeight: 1.7,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
                       }}
                     >
                       {text}
@@ -1363,12 +1960,21 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                 })
               ) : (
                 // No cards — plain text display
-                <div style={{
-                  background: "#161b22", border: "1px solid #30363d", borderRadius: 6,
-                  padding: "10px 12px", fontSize: 12, color: "#c9d1d9", lineHeight: 1.7,
-                  whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
-                  maxHeight: 300, overflowY: "auto",
-                }}>
+                <div
+                  style={{
+                    background: "#161b22",
+                    border: "1px solid #30363d",
+                    borderRadius: 6,
+                    padding: "10px 12px",
+                    fontSize: 12,
+                    color: "#c9d1d9",
+                    lineHeight: 1.7,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word" as const,
+                    maxHeight: 300,
+                    overflowY: "auto",
+                  }}
+                >
                   {upgradedText}
                 </div>
               )}
@@ -1387,9 +1993,14 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                   type="button"
                   onClick={onFix}
                   style={{
-                    padding: "4px 10px", borderRadius: 4, border: "1px solid #f8514944",
-                    background: "transparent", color: "#f85149", fontSize: 11,
-                    cursor: "pointer", fontFamily: "JetBrains Mono, monospace",
+                    padding: "4px 10px",
+                    borderRadius: 4,
+                    border: "1px solid #f8514944",
+                    background: "transparent",
+                    color: "#f85149",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    fontFamily: "JetBrains Mono, monospace",
                   }}
                 >
                   ⚡ Fix
@@ -1399,9 +2010,14 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                 type="button"
                 onClick={onRetry}
                 style={{
-                  padding: "4px 10px", borderRadius: 4, border: "1px solid #30363d",
-                  background: "transparent", color: theme.textMuted, fontSize: 11,
-                  cursor: "pointer", fontFamily: "JetBrains Mono, monospace",
+                  padding: "4px 10px",
+                  borderRadius: 4,
+                  border: "1px solid #30363d",
+                  background: "transparent",
+                  color: theme.textMuted,
+                  fontSize: 11,
+                  cursor: "pointer",
+                  fontFamily: "JetBrains Mono, monospace",
                 }}
               >
                 ↺ Retry

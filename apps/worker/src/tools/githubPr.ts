@@ -29,11 +29,7 @@ type GhHeaders = {
   "Content-Type": string;
 } & Record<string, string>;
 
-async function ghJson<T>(
-  url: string,
-  init: RequestInit,
-  fetchImpl: typeof fetch
-): Promise<T> {
+async function ghJson<T>(url: string, init: RequestInit, fetchImpl: typeof fetch): Promise<T> {
   const res = await fetchImpl(url, init);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -147,9 +143,7 @@ export function createGitHubPrTool(
 
       // 1. Enumerate workspace files (KV "file:*" namespace).
       const list = await opts.filesKv.list({ prefix: "file:" });
-      let entries = list.keys
-        .map((k) => k.name)
-        .filter((name) => name.startsWith("file:"));
+      let entries = list.keys.map((k) => k.name).filter((name) => name.startsWith("file:"));
       if (input.paths && input.paths.length > 0) {
         const allowed = new Set(input.paths.map((p) => `file:${p.replace(/^\/+/, "")}`));
         entries = entries.filter((k) => allowed.has(k));

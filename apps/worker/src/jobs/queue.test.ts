@@ -23,10 +23,7 @@ afterEach(() => {
 
 /** Helper — yields a final_answer after `delayMs` unless aborted. */
 function delayedAnswerRunner(answer: string, delayMs = 5) {
-  return async function* (
-    _spec: { task: string },
-    signal: AbortSignal,
-  ): AsyncIterable<AgentEvent> {
+  return async function* (_spec: { task: string }, signal: AbortSignal): AsyncIterable<AgentEvent> {
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(resolve, delayMs);
       signal.addEventListener("abort", () => {
@@ -49,7 +46,7 @@ function delayedAnswerRunner(answer: string, delayMs = 5) {
 async function waitFor<T>(
   fn: () => T | Promise<T>,
   predicate: (v: T) => boolean,
-  timeoutMs = 1000,
+  timeoutMs = 1000
 ): Promise<T> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -67,7 +64,7 @@ describe("JobQueue", () => {
     expect(id).toMatch(/^job-/);
     const final = await waitFor(
       () => q.get(id),
-      (rec) => rec?.status === "done",
+      (rec) => rec?.status === "done"
     );
     expect(final?.finalAnswer).toBe("world");
     expect(final?.eventCount).toBe(1);
@@ -77,7 +74,7 @@ describe("JobQueue", () => {
     q = new JobQueue({ concurrency: 2 });
     // Spawn 5 long-ish jobs, then sample the running counter mid-flight.
     const ids = Array.from({ length: 5 }).map((_, i) =>
-      q.submit({ task: `t${i}` }, delayedAnswerRunner(`a${i}`, 30)),
+      q.submit({ task: `t${i}` }, delayedAnswerRunner(`a${i}`, 30))
     );
     // Give the scheduler a microtask tick to start running.
     await new Promise((r) => setTimeout(r, 5));
@@ -85,7 +82,10 @@ describe("JobQueue", () => {
     expect(q.pendingCount).toBeGreaterThanOrEqual(3);
     // Wait for everyone to finish.
     for (const id of ids) {
-      await waitFor(() => q.get(id), (r) => r?.status === "done");
+      await waitFor(
+        () => q.get(id),
+        (r) => r?.status === "done"
+      );
     }
     expect(q.runningCount).toBe(0);
     expect(q.pendingCount).toBe(0);
@@ -95,8 +95,14 @@ describe("JobQueue", () => {
     q = new JobQueue();
     const a = q.submit({ task: "first" }, delayedAnswerRunner("A"));
     const b = q.submit({ task: "second" }, delayedAnswerRunner("B"));
-    await waitFor(() => q.get(a), (r) => r?.status === "done");
-    await waitFor(() => q.get(b), (r) => r?.status === "done");
+    await waitFor(
+      () => q.get(a),
+      (r) => r?.status === "done"
+    );
+    await waitFor(
+      () => q.get(b),
+      (r) => r?.status === "done"
+    );
     const all = q.list();
     expect(all.length).toBe(2);
     expect(all[0]?.id).toBe(b); // newest first
@@ -110,8 +116,14 @@ describe("JobQueue", () => {
     q = new JobQueue();
     const a = q.submit({ task: "x", sessionId: "alice" }, delayedAnswerRunner("A"));
     const b = q.submit({ task: "y", sessionId: "bob" }, delayedAnswerRunner("B"));
-    await waitFor(() => q.get(a), (r) => r?.status === "done");
-    await waitFor(() => q.get(b), (r) => r?.status === "done");
+    await waitFor(
+      () => q.get(a),
+      (r) => r?.status === "done"
+    );
+    await waitFor(
+      () => q.get(b),
+      (r) => r?.status === "done"
+    );
     expect(q.list({ sessionId: "alice" }).map((r) => r.id)).toEqual([a]);
     expect(q.list({ sessionId: "bob" }).map((r) => r.id)).toEqual([b]);
   });
@@ -124,7 +136,7 @@ describe("JobQueue", () => {
     expect(q.abort(id)).toBe(true);
     const rec = await waitFor(
       () => q.get(id),
-      (r) => r?.status === "aborted" || r?.status === "failed",
+      (r) => r?.status === "aborted" || r?.status === "failed"
     );
     // The runner throws on abort during delay; that surfaces as "failed" with
     // the abort message, OR the queue beats it to the abort-flag check; either
@@ -138,7 +150,7 @@ describe("JobQueue", () => {
     let ran = 0;
     const blockerRunner = async function* (
       _s: { task: string },
-      sig: AbortSignal,
+      sig: AbortSignal
     ): AsyncIterable<AgentEvent> {
       ran += 1;
       await new Promise<void>((resolve) => {
@@ -167,18 +179,25 @@ describe("JobQueue", () => {
     q = new JobQueue();
     expect(q.abort("nope")).toBe(false);
     const id = q.submit({ task: "x" }, delayedAnswerRunner("a"));
-    await waitFor(() => q.get(id), (r) => r?.status === "done");
+    await waitFor(
+      () => q.get(id),
+      (r) => r?.status === "done"
+    );
     expect(q.abort(id)).toBe(false);
   });
 
   it("runner that throws surfaces as failed with the error message", async () => {
     q = new JobQueue();
     const id = q.submit({ task: "boom" }, async function* () {
+      // Unreachable yield keeps the generator return type valid; the throw
+      // is what the test exercises.
+      if (false as boolean) yield {} as AgentEvent;
       throw new Error("kaboom");
-      // eslint-disable-next-line no-unreachable
-      yield {} as AgentEvent;
     });
-    const rec = await waitFor(() => q.get(id), (r) => r?.status === "failed");
+    const rec = await waitFor(
+      () => q.get(id),
+      (r) => r?.status === "failed"
+    );
     expect(rec?.error).toContain("kaboom");
     expect(rec?.finalAnswer).toBeUndefined();
   });
@@ -205,7 +224,10 @@ describe("JobQueue", () => {
         timestampMs: Date.now(),
       } as AgentEvent;
     });
-    const rec = await waitFor(() => q.get(id), (r) => r?.status === "done");
+    const rec = await waitFor(
+      () => q.get(id),
+      (r) => r?.status === "done"
+    );
     expect(rec?.eventCount).toBe(11);
     expect(rec?.eventTail.length).toBe(3); // tail bounded
     // Last event in tail should be the final_answer.
@@ -216,7 +238,10 @@ describe("JobQueue", () => {
     const kv = new MemKvStore();
     q = new JobQueue({ durableKv: kv });
     const id = q.submit({ task: "persisted" }, delayedAnswerRunner("kept"));
-    await waitFor(() => q.get(id), (r) => r?.status === "done");
+    await waitFor(
+      () => q.get(id),
+      (r) => r?.status === "done"
+    );
 
     // Simulate worker recycle: fresh queue instance bound to the same KV.
     q._resetForTests();

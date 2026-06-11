@@ -37,11 +37,16 @@ const POLL_INTERVAL_MS = 2000;
 
 function statusColor(s: JobRecord["status"]): string {
   switch (s) {
-    case "queued":   return "#888";
-    case "running":  return "#0a7";
-    case "done":     return "#08c";
-    case "failed":   return "#c33";
-    case "aborted":  return "#a60";
+    case "queued":
+      return "#888";
+    case "running":
+      return "#0a7";
+    case "done":
+      return "#08c";
+    case "failed":
+      return "#c33";
+    case "aborted":
+      return "#a60";
   }
 }
 
@@ -64,7 +69,9 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
   const base = workerUrl ?? getWorkerUrl();
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [stats, setStats] = useState<ListResponse["stats"]>({
-    running: 0, pending: 0, total: 0,
+    running: 0,
+    pending: 0,
+    total: 0,
   });
   const [error, setError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<string>("");
@@ -73,10 +80,9 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await fetch(
-        `${base}/jobs?sessionId=${encodeURIComponent(sessionId)}`,
-        { headers: { "X-Session-Id": sessionId } },
-      );
+      const res = await fetch(`${base}/jobs?sessionId=${encodeURIComponent(sessionId)}`, {
+        headers: { "X-Session-Id": sessionId },
+      });
       if (!res.ok) throw new Error(`GET /jobs ${res.status}`);
       const body = (await res.json()) as ListResponse;
       setJobs(body.jobs);
@@ -139,7 +145,7 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [base, sessionId, fetchJobs],
+    [base, sessionId, fetchJobs]
   );
 
   const sortedJobs = useMemo(() => jobs, [jobs]);
@@ -212,14 +218,26 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
                     {j.status}
                   </span>
                 </td>
-                <td title={j.spec.task} style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <td
+                  title={j.spec.task}
+                  style={{
+                    maxWidth: 300,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {j.spec.task}
                 </td>
                 <td>{j.eventCount}</td>
-                <td title={new Date(j.submittedAtMs).toISOString()}>{relTime(j.submittedAtMs)} ago</td>
+                <td title={new Date(j.submittedAtMs).toISOString()}>
+                  {relTime(j.submittedAtMs)} ago
+                </td>
                 <td>
                   {j.status === "queued" || j.status === "running" ? (
-                    <button type="button" onClick={() => abort(j.id)}>Abort</button>
+                    <button type="button" onClick={() => abort(j.id)}>
+                      Abort
+                    </button>
                   ) : null}
                 </td>
               </tr>

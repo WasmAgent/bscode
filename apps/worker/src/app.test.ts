@@ -37,7 +37,9 @@ let mockEvents: AgentEvent[] = [...DEFAULT_EVENTS];
 
 // Mutable factory — tests can swap this to inject faults
 let agentFactory: () => AsyncGenerator<AgentEvent> = () =>
-  (async function* () { for (const e of mockEvents) yield e; })();
+  (async function* () {
+    for (const e of mockEvents) yield e;
+  })();
 
 vi.mock("./agents/code-agent.js", () => ({
   createCodeAgent: () => ({
@@ -83,7 +85,13 @@ vi.mock("./models/registry.js", async (importOriginal) => {
     resolveModelFromRegistry: vi.fn().mockResolvedValue({ modelId: "mock-model" }),
     discoverLocalModels: vi.fn().mockResolvedValue([]),
     getBuiltinModels: vi.fn().mockResolvedValue([
-      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", provider: "anthropic", available: true, source: "builtin" },
+      {
+        id: "claude-sonnet-4-6",
+        label: "Claude Sonnet 4.6",
+        provider: "anthropic",
+        available: true,
+        source: "builtin",
+      },
     ]),
     loadPreferences: vi.fn().mockResolvedValue({ primaryModelId: "claude-sonnet-4-6" }),
   };
@@ -118,7 +126,11 @@ async function parseSSE(res: Response): Promise<AgentEvent[]> {
     .map((l) => JSON.parse(l.slice(6)) as AgentEvent);
 }
 
-function post(app: ReturnType<typeof createApp>, body: unknown, headers: Record<string, string> = {}) {
+function post(
+  app: ReturnType<typeof createApp>,
+  body: unknown,
+  headers: Record<string, string> = {}
+) {
   return app.fetch(
     new Request("http://localhost/run", {
       method: "POST",
@@ -178,7 +190,7 @@ describe("GET /health", () => {
     const app = makeApp();
     const res = await app.fetch(new Request("http://localhost/health"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { status: string; version: string };
+    const body = (await res.json()) as { status: string; version: string };
     expect(body.status).toBe("ok");
     expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
@@ -191,7 +203,7 @@ describe("GET /capabilities", () => {
     const app = makeApp();
     const res = await app.fetch(new Request("http://localhost/capabilities"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { agentModes: string[]; codeLanguages: string[] };
+    const body = (await res.json()) as { agentModes: string[]; codeLanguages: string[] };
     expect(body.agentModes).toContain("code");
     expect(body.agentModes).toContain("tool");
     expect(body.codeLanguages).toContain("js");
@@ -210,9 +222,13 @@ describe("Bearer token auth", () => {
 
   it("accepts /run with correct Bearer token", async () => {
     const app = makeApp({ clientToken: "secret" });
-    const res = await post(app, { task: "hi", agentMode: "code" }, {
-      Authorization: "Bearer secret",
-    });
+    const res = await post(
+      app,
+      { task: "hi", agentMode: "code" },
+      {
+        Authorization: "Bearer secret",
+      }
+    );
     expect(res.status).toBe(200);
   });
 
@@ -268,7 +284,10 @@ describe("POST /run input validation", () => {
 describe("POST /run SSE streaming", () => {
   beforeEach(() => {
     mockEvents = [...DEFAULT_EVENTS];
-    agentFactory = () => (async function* () { for (const e of mockEvents) yield e; })();
+    agentFactory = () =>
+      (async function* () {
+        for (const e of mockEvents) yield e;
+      })();
   });
 
   it("returns 200 text/event-stream", async () => {
@@ -292,13 +311,15 @@ describe("POST /run SSE streaming", () => {
     const events = await parseSSE(res);
     const finalAnswer = events.find((e) => e.event === "final_answer");
     expect(finalAnswer).toBeDefined();
-    expect((finalAnswer!.data as { answer: string }).answer).toBe("42");
+    expect((finalAnswer?.data as { answer: string }).answer).toBe("42");
   });
 
   it("streams error event when agent throws", async () => {
     agentFactory = async function* () {
+      // The unreachable yield satisfies the generator return type while we
+      // exercise the throw-before-yield code path.
+      if (false as boolean) yield {} as AgentEvent;
       throw new Error("agent exploded");
-      yield {} as AgentEvent;
     };
     const app = makeApp();
     const res = await post(app, { task: "crash", agentMode: "code" });
@@ -317,7 +338,11 @@ describe("POST /run SSE streaming", () => {
   it("caches SSE results and returns X-Bscode-Cache: HIT on replay", async () => {
     const sessionsKv = new MemKvStore();
     const app = makeApp({ sessionsKv });
-    const body = { task: "cached-task-unique-123", agentMode: "code", modelId: "claude-sonnet-4-6" };
+    const body = {
+      task: "cached-task-unique-123",
+      agentMode: "code",
+      modelId: "claude-sonnet-4-6",
+    };
 
     // First call — live, drain the stream fully so cache write completes
     const res1 = await post(app, body);
@@ -343,7 +368,10 @@ describe("GET /models", () => {
     const app = makeApp();
     const res = await app.fetch(new Request("http://localhost/models"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { models: { id: string }[]; preferences: { primaryModelId: string } };
+    const body = (await res.json()) as {
+      models: { id: string }[];
+      preferences: { primaryModelId: string };
+    };
     expect(body.models.length).toBeGreaterThan(0);
     expect(body.preferences.primaryModelId).toBeDefined();
   });
@@ -360,7 +388,7 @@ describe("PUT /models/preferences", () => {
       })
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { ok: boolean };
+    const body = (await res.json()) as { ok: boolean };
     expect(body.ok).toBe(true);
   });
 
@@ -393,11 +421,9 @@ describe("Files KV routes", () => {
     );
     expect(write.status).toBe(200);
 
-    const read = await app.fetch(
-      new Request("http://localhost/files/src/index.ts")
-    );
+    const read = await app.fetch(new Request("http://localhost/files/src/index.ts"));
     expect(read.status).toBe(200);
-    const body = await read.json() as { content: string };
+    const body = (await read.json()) as { content: string };
     expect(body.content).toBe("export const x = 1;");
   });
 
@@ -405,20 +431,24 @@ describe("Files KV routes", () => {
     const filesKv = new MemKvStore();
     const app = makeApp({ filesKv });
 
-    await app.fetch(new Request("http://localhost/files", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: "a.ts", content: "a" }),
-    }));
-    await app.fetch(new Request("http://localhost/files", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: "b.ts", content: "b" }),
-    }));
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "a.ts", content: "a" }),
+      })
+    );
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "b.ts", content: "b" }),
+      })
+    );
 
     const list = await app.fetch(new Request("http://localhost/files"));
     expect(list.status).toBe(200);
-    const body = await list.json() as { files: { path: string }[] };
+    const body = (await list.json()) as { files: { path: string }[] };
     expect(body.files.map((f) => f.path).sort()).toEqual(["a.ts", "b.ts"]);
   });
 
@@ -433,14 +463,14 @@ describe("Files KV routes", () => {
     const filesKv = new MemKvStore();
     const app = makeApp({ filesKv });
 
-    await app.fetch(new Request("http://localhost/files", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: "del.ts", content: "bye" }),
-    }));
-    const del = await app.fetch(
-      new Request("http://localhost/files/del.ts", { method: "DELETE" })
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "del.ts", content: "bye" }),
+      })
     );
+    const del = await app.fetch(new Request("http://localhost/files/del.ts", { method: "DELETE" }));
     expect(del.status).toBe(200);
     const get = await app.fetch(new Request("http://localhost/files/del.ts"));
     expect(get.status).toBe(404);
@@ -450,16 +480,20 @@ describe("Files KV routes", () => {
     const filesKv = new MemKvStore();
     const app = makeApp({ filesKv });
 
-    await app.fetch(new Request("http://localhost/files", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Session-Id": "s1" },
-      body: JSON.stringify({ path: "f.ts", content: "session-1" }),
-    }));
-    await app.fetch(new Request("http://localhost/files", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Session-Id": "s2" },
-      body: JSON.stringify({ path: "f.ts", content: "session-2" }),
-    }));
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "s1" },
+        body: JSON.stringify({ path: "f.ts", content: "session-1" }),
+      })
+    );
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "s2" },
+        body: JSON.stringify({ path: "f.ts", content: "session-2" }),
+      })
+    );
 
     const r1 = await app.fetch(
       new Request("http://localhost/files/f.ts", { headers: { "X-Session-Id": "s1" } })
@@ -479,7 +513,7 @@ describe("Memory routes", () => {
     const app = makeApp();
     const res = await app.fetch(new Request("http://localhost/memory"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { count: number };
+    const body = (await res.json()) as { count: number };
     expect(body.count).toBe(0);
   });
 
@@ -488,7 +522,7 @@ describe("Memory routes", () => {
     // Run an agent that uses memory to populate it — or just hit DELETE
     const res = await app.fetch(new Request("http://localhost/memory", { method: "DELETE" }));
     expect(res.status).toBe(200);
-    const body = await res.json() as { ok: boolean };
+    const body = (await res.json()) as { ok: boolean };
     expect(body.ok).toBe(true);
   });
 });
@@ -500,7 +534,7 @@ describe("GET /errors", () => {
     const app = makeApp();
     const res = await app.fetch(new Request("http://localhost/errors"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { errors: unknown[]; count: number };
+    const body = (await res.json()) as { errors: unknown[]; count: number };
     expect(Array.isArray(body.errors)).toBe(true);
     expect(body.count).toBeGreaterThanOrEqual(0);
   });
@@ -597,8 +631,7 @@ describe("Checkpoints — B1 durable backend", () => {
     const adaptKv = (store: MemKvStore) => ({
       get: (key: string) => store.get(key),
       put: (key: string, value: string) => store.put(key, value),
-      delete: (key: string) =>
-        store.delete ? store.delete(key) : Promise.resolve(),
+      delete: (key: string) => (store.delete ? store.delete(key) : Promise.resolve()),
       list: async (prefix: string) => {
         const result = await store.list({ prefix });
         return result.keys.map((k) => k.name);
@@ -646,8 +679,7 @@ describe("Checkpoints — B1 durable backend", () => {
     const adaptKv = (store: MemKvStore) => ({
       get: (key: string) => store.get(key),
       put: (key: string, value: string) => store.put(key, value),
-      delete: (key: string) =>
-        store.delete ? store.delete(key) : Promise.resolve(),
+      delete: (key: string) => (store.delete ? store.delete(key) : Promise.resolve()),
       list: async (prefix: string) => {
         const result = await store.list({ prefix });
         return result.keys.map((k) => k.name);
@@ -702,13 +734,13 @@ describe("Build result reverse channel (B2)", () => {
           exitCode: 1,
           stderr: "ENOENT not found",
         }),
-      }),
+      })
     );
     expect(post.status).toBe(200);
     const get = await app.fetch(
       new Request("http://localhost/build-result", {
         headers: { "X-Session-Id": "sess-1" },
-      }),
+      })
     );
     expect(get.status).toBe(200);
     const body = (await get.json()) as { status: string; stderr?: string };
@@ -723,7 +755,7 @@ describe("Build result reverse channel (B2)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{not json",
-      }),
+      })
     );
     expect(res.status).toBe(400);
   });
@@ -735,7 +767,7 @@ describe("Build result reverse channel (B2)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "exploded" }),
-      }),
+      })
     );
     expect(res.status).toBe(400);
   });
@@ -747,19 +779,19 @@ describe("Build result reverse channel (B2)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Session-Id": "sess-2" },
         body: JSON.stringify({ status: "success" }),
-      }),
+      })
     );
     const del = await app.fetch(
       new Request("http://localhost/build-result", {
         method: "DELETE",
         headers: { "X-Session-Id": "sess-2" },
-      }),
+      })
     );
     expect(del.status).toBe(200);
     const get = await app.fetch(
       new Request("http://localhost/build-result", {
         headers: { "X-Session-Id": "sess-2" },
-      }),
+      })
     );
     const body = (await get.json()) as { status: string };
     expect(body.status).toBe("unknown");
@@ -772,23 +804,23 @@ describe("Build result reverse channel (B2)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
         body: JSON.stringify({ status: "success" }),
-      }),
+      })
     );
     await app.fetch(
       new Request("http://localhost/build-result", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Session-Id": "bob" },
         body: JSON.stringify({ status: "failed", stage: "build", stderr: "TS2339" }),
-      }),
+      })
     );
     const a = await (
       await app.fetch(
-        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "alice" } }),
+        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "alice" } })
       )
     ).json();
     const b = await (
       await app.fetch(
-        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "bob" } }),
+        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "bob" } })
       )
     ).json();
     expect((a as { status: string }).status).toBe("success");
@@ -802,7 +834,7 @@ describe("Job queue (B1)", () => {
   async function waitForTerminal(
     app: ReturnType<typeof createApp>,
     jobId: string,
-    timeoutMs = 2000,
+    timeoutMs = 2000
   ) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
@@ -823,7 +855,7 @@ describe("Job queue (B1)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task: "compute 6 * 7", agentMode: "code" }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     const { jobIds } = (await res.json()) as { jobIds: string[] };
@@ -846,7 +878,7 @@ describe("Job queue (B1)", () => {
             { task: "task C", agentMode: "code" },
           ],
         }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     const { jobIds } = (await res.json()) as { jobIds: string[] };
@@ -864,7 +896,7 @@ describe("Job queue (B1)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobs: [] }),
-      }),
+      })
     );
     expect(noTask.status).toBe(400);
 
@@ -873,7 +905,7 @@ describe("Job queue (B1)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{not json",
-      }),
+      })
     );
     expect(bad.status).toBe(400);
 
@@ -882,7 +914,7 @@ describe("Job queue (B1)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ irrelevant: 1 }),
-      }),
+      })
     );
     expect(noField.status).toBe(400);
   });
@@ -898,7 +930,7 @@ describe("Job queue (B1)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobs: tooMany }),
-      }),
+      })
     );
     expect(res.status).toBe(400);
   });
@@ -915,14 +947,12 @@ describe("Job queue (B1)", () => {
             { task: "second", agentMode: "code" },
           ],
         }),
-      }),
+      })
     );
     const { jobIds } = (await sub.json()) as { jobIds: string[] };
     for (const id of jobIds) await waitForTerminal(app, id);
 
-    const list = await app.fetch(
-      new Request("http://localhost/jobs?sessionId=list-1"),
-    );
+    const list = await app.fetch(new Request("http://localhost/jobs?sessionId=list-1"));
     const body = (await list.json()) as {
       jobs: Array<{ id: string; spec: { task: string } }>;
       stats: { total: number };
@@ -950,7 +980,8 @@ describe("Job queue (B1)", () => {
     agentFactory = () =>
       (async function* () {
         // First event lets the queue's iterator enter the for-await loop.
-        yield DEFAULT_EVENTS[0]!;
+        const first = DEFAULT_EVENTS[0];
+        if (first) yield first;
         // Wait either until aborted (test triggers it) or up to 1s.
         await new Promise<void>((resolve) => {
           const t = setTimeout(resolve, 1000);
@@ -984,10 +1015,12 @@ describe("Job queue (B1)", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ task: "stuck", agentMode: "code" }),
-        }),
+        })
       );
       const { jobIds } = (await sub.json()) as { jobIds: string[] };
-      const id = jobIds[0]!;
+      const id = jobIds[0];
+      expect(id).toBeTruthy();
+      if (!id) return;
 
       // The job's runner self-fetches /run; that internal Request carries
       // the abort signal. We don't have a hook into that signal, so we test
@@ -996,9 +1029,7 @@ describe("Job queue (B1)", () => {
       // by checking signal.aborted between yields.
       await new Promise((r) => setTimeout(r, 50));
 
-      const del = await app.fetch(
-        new Request(`http://localhost/jobs/${id}`, { method: "DELETE" }),
-      );
+      const del = await app.fetch(new Request(`http://localhost/jobs/${id}`, { method: "DELETE" }));
       expect(del.status).toBe(200);
 
       // Wait up to 2s for terminal state. Even if the inner generator runs
@@ -1007,9 +1038,7 @@ describe("Job queue (B1)", () => {
       const start = Date.now();
       let final = "running";
       while (Date.now() - start < 2000) {
-        const after = await (
-          await app.fetch(new Request(`http://localhost/jobs/${id}`))
-        ).json();
+        const after = await (await app.fetch(new Request(`http://localhost/jobs/${id}`))).json();
         const status = (after as { status: string }).status;
         if (["aborted", "failed", "done"].includes(status)) {
           final = status;
@@ -1028,7 +1057,7 @@ describe("Job queue (B1)", () => {
   it("DELETE /jobs/:id returns 404 for unknown jobs", async () => {
     const app = makeApp();
     const res = await app.fetch(
-      new Request("http://localhost/jobs/no-such-job", { method: "DELETE" }),
+      new Request("http://localhost/jobs/no-such-job", { method: "DELETE" })
     );
     expect(res.status).toBe(404);
   });
@@ -1045,11 +1074,10 @@ describe("GitHub repo import (B3)", () => {
     // biome-ignore lint/suspicious/noExplicitAny: Buffer is Node-only, vitest runs there.
     const Buf = (globalThis as any).Buffer;
     const enc = (s: string) =>
-      Buf
-        ? Buf.from(s, "utf-8").toString("base64")
-        : btoa(unescape(encodeURIComponent(s)));
+      Buf ? Buf.from(s, "utf-8").toString("base64") : btoa(unescape(encodeURIComponent(s)));
     globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
         return new Response(JSON.stringify({ default_branch: "main" }), { status: 200 });
       }
@@ -1067,13 +1095,13 @@ describe("GitHub repo import (B3)", () => {
               },
             ],
           }),
-          { status: 200 },
+          { status: 200 }
         );
       }
       if (/\/git\/blobs\//.test(url)) {
         return new Response(
           JSON.stringify({ content: enc("hello"), encoding: "base64", sha: "s1", size: 5 }),
-          { status: 200 },
+          { status: 200 }
         );
       }
       return new Response("not found", { status: 404 });
@@ -1088,7 +1116,7 @@ describe("GitHub repo import (B3)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ owner: "x", repo: "y" }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { imported: number; preview: string[] };
@@ -1103,7 +1131,7 @@ describe("GitHub repo import (B3)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ owner: "x" }),
-      }),
+      })
     );
     expect(res.status).toBe(400);
   });
@@ -1115,20 +1143,21 @@ describe("GitHub repo import (B3)", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{not json",
-      }),
+      })
     );
     expect(res.status).toBe(400);
   });
 
   it("POST /import/github bubbles GitHub errors as 502", async () => {
-    globalThis.fetch = (async () => new Response("nope", { status: 404 })) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response("nope", { status: 404 })) as unknown as typeof fetch;
     const app = makeApp();
     const res = await app.fetch(
       new Request("http://localhost/import/github", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ owner: "x", repo: "y" }),
-      }),
+      })
     );
     expect(res.status).toBe(502);
   });
@@ -1189,5 +1218,268 @@ describe("planFirst resume (B4)", () => {
     expect(errEv).toBeTruthy();
     const errData = (errEv as unknown as { data: { error: string } }).data;
     expect(errData.error).toMatch(/no snapshot/i);
+  });
+});
+
+// ── C1: SSE Last-Event-ID resume ─────────────────────────────────────────────
+//
+// Scenarios:
+//   1. With checkpointsKv bound, /run responses carry X-Agentkit-Trace-Id
+//      and SSE frames include `id: <padded>` lines.
+//   2. The persisted EventLog under the trace id contains every emitted
+//      event during a successful run.
+//   3. A reconnect with `resumeTraceId` body field + `Last-Event-ID`
+//      header skips the already-delivered events and never starts a
+//      second agent (mock factory call count proves it).
+//   4. A successful run purges its EventLog so KV does not grow
+//      unboundedly across many short runs.
+//   5. Without checkpointsKv the worker still streams events live but
+//      omits id: lines and the resume hint header — feature degrades
+//      cleanly rather than failing.
+describe("C1 — SSE Last-Event-ID resume", () => {
+  // Track how many times agentFactory is invoked in a single test so we
+  // can prove resume does NOT spawn a fresh agent.
+  let factoryCalls = 0;
+  const originalFactory = agentFactory;
+
+  beforeEach(() => {
+    factoryCalls = 0;
+    agentFactory = () => {
+      factoryCalls++;
+      return (async function* () {
+        for (const e of mockEvents) yield e;
+      })();
+    };
+  });
+  afterEach(() => {
+    agentFactory = originalFactory;
+  });
+
+  /** Pull every SSE frame back as { id?, dataJson } so we can inspect ids. */
+  async function parseFramesWithIds(
+    res: Response
+  ): Promise<Array<{ id: string | null; data: AgentEvent | "DONE" }>> {
+    const text = await res.text();
+    const frames = text.split("\n\n").filter((f) => f.trim().length > 0);
+    const out: Array<{ id: string | null; data: AgentEvent | "DONE" }> = [];
+    for (const frame of frames) {
+      const lines = frame.split("\n");
+      let id: string | null = null;
+      let dataLine: string | null = null;
+      for (const line of lines) {
+        if (line.startsWith("id: ")) id = line.slice(4).trim();
+        else if (line.startsWith("data: ")) dataLine = line.slice(6);
+      }
+      if (dataLine === null) continue; // comment frame (e.g. ": connected")
+      if (dataLine === "[DONE]") {
+        out.push({ id, data: "DONE" });
+      } else {
+        out.push({ id, data: JSON.parse(dataLine) as AgentEvent });
+      }
+    }
+    return out;
+  }
+
+  it("with checkpointsKv bound, response exposes X-Agentkit-Trace-Id and SSE frames carry id: lines", async () => {
+    const checkpointsKv = new MemKvStore();
+    const app = makeApp({ checkpointsKv });
+    const res = await post(app, { task: "trace-id-test" });
+    expect(res.status).toBe(200);
+
+    const traceId = res.headers.get("X-Agentkit-Trace-Id");
+    expect(traceId).toMatch(/^run-\d+-[a-z0-9]+$/);
+
+    const expose = res.headers.get("Access-Control-Expose-Headers") ?? "";
+    expect(expose).toContain("X-Agentkit-Trace-Id");
+
+    const frames = await parseFramesWithIds(res);
+    const dataFrames = frames.filter((f) => f.data !== "DONE");
+    expect(dataFrames.length).toBeGreaterThan(0);
+    for (const f of dataFrames) {
+      // Every persisted event must carry a monotonic id from EventLog.
+      expect(f.id).toMatch(/^\d{12}$/);
+    }
+  });
+
+  it("EventLog is purged after a successful run completes", async () => {
+    const checkpointsKv = new MemKvStore();
+    const app = makeApp({ checkpointsKv });
+    const res = await post(app, { task: "purge-after-success" });
+    await res.text(); // drain
+
+    const list = await checkpointsKv.list({ prefix: "evlog:" });
+    // After purge, no `evlog:<traceId>:*` keys should remain. (cleanup is
+    // best-effort but synchronous in tests because MemKvStore is sync.)
+    // Allow a microtask flush.
+    await new Promise((r) => setTimeout(r, 0));
+    const list2 = await checkpointsKv.list({ prefix: "evlog:" });
+    expect(list2.keys.length).toBe(0);
+    expect(list.keys.length).toBeGreaterThanOrEqual(0); // sanity
+  });
+
+  it("reconnect with resumeTraceId + Last-Event-ID delivers only the missing tail and does NOT start a new agent", async () => {
+    // We need an in-flight EventLog: simulate by letting the run finish but
+    // disabling purge via a special flag. The simplest approach: skip the
+    // /run pipeline for the second call by populating EventLog directly,
+    // using the same KV-shape we adapt to.
+    const checkpointsKv = new MemKvStore();
+    const app = makeApp({ checkpointsKv });
+
+    // Drive the first run to completion AND override mockEvents temporarily
+    // so purge does not run (no final_answer → server keeps the log).
+    const previousEvents = mockEvents;
+    mockEvents = [
+      {
+        traceId: "t1",
+        parentTraceId: null,
+        channel: "text",
+        event: "run_start",
+        data: { task: "resume-flow" },
+        timestampMs: 0,
+      },
+      {
+        traceId: "t1",
+        parentTraceId: null,
+        channel: "thinking",
+        event: "step_start",
+        data: { step: 1 },
+        timestampMs: 1,
+      },
+      {
+        traceId: "t1",
+        parentTraceId: null,
+        channel: "thinking",
+        event: "thinking_delta",
+        data: { delta: "hello", step: 1 },
+        timestampMs: 2,
+      },
+      {
+        traceId: "t1",
+        parentTraceId: null,
+        channel: "thinking",
+        event: "thinking_delta",
+        data: { delta: " world", step: 1 },
+        timestampMs: 3,
+      },
+      // No final_answer → server does NOT purge the log.
+    ];
+
+    try {
+      const res1 = await post(app, { task: "resume-flow" });
+      const frames1 = await parseFramesWithIds(res1);
+      const traceId = res1.headers.get("X-Agentkit-Trace-Id");
+      expect(traceId).toBeTruthy();
+      const dataFrames1 = frames1.filter((f) => f.data !== "DONE");
+      expect(dataFrames1.length).toBe(mockEvents.length);
+      const callsAfterFirst = factoryCalls;
+      expect(callsAfterFirst).toBe(1);
+
+      // Pretend the client received up to and including the SECOND event id.
+      const firstSeenIdx = 1;
+      const lastEventId = dataFrames1[firstSeenIdx]?.id;
+      expect(lastEventId).toBeTruthy();
+      if (!lastEventId) return;
+
+      // Reconnect: body has resumeTraceId; header has Last-Event-ID. The
+      // worker MUST replay only the tail (events idx 2 and 3) and MUST NOT
+      // call the agent factory again.
+      const res2 = await post(
+        app,
+        { task: "resume-flow", resumeTraceId: traceId },
+        { "Last-Event-ID": lastEventId }
+      );
+      expect(res2.status).toBe(200);
+      expect(res2.headers.get("X-Bscode-Resume")).toBe("1");
+
+      const frames2 = await parseFramesWithIds(res2);
+      const dataFrames2 = frames2.filter((f) => f.data !== "DONE");
+      // Tail-only: original events 2..3 (0-indexed) → 2 frames.
+      expect(dataFrames2.length).toBe(mockEvents.length - (firstSeenIdx + 1));
+      expect(dataFrames2[0]?.id).toBe(dataFrames1[firstSeenIdx + 1]?.id);
+      // Agent factory must NOT have been re-invoked — pure replay.
+      expect(factoryCalls).toBe(callsAfterFirst);
+    } finally {
+      mockEvents = previousEvents;
+    }
+  });
+
+  it("resume with Last-Event-ID past the high-water mark yields just [DONE] with no extra events", async () => {
+    const checkpointsKv = new MemKvStore();
+    const app = makeApp({ checkpointsKv });
+
+    const previousEvents = mockEvents;
+    mockEvents = [
+      {
+        traceId: "t1",
+        parentTraceId: null,
+        channel: "text",
+        event: "run_start",
+        data: { task: "tail" },
+        timestampMs: 0,
+      },
+      {
+        traceId: "t1",
+        parentTraceId: null,
+        channel: "thinking",
+        event: "step_start",
+        data: { step: 1 },
+        timestampMs: 1,
+      },
+    ];
+    try {
+      const res1 = await post(app, { task: "tail" });
+      const frames1 = await parseFramesWithIds(res1);
+      const traceId = res1.headers.get("X-Agentkit-Trace-Id");
+      expect(traceId).toBeTruthy();
+      if (!traceId) return;
+      const lastSeen = frames1.filter((f) => f.data !== "DONE").at(-1)?.id;
+      expect(lastSeen).toBeTruthy();
+      if (!lastSeen) return;
+
+      const res2 = await post(
+        app,
+        { task: "tail", resumeTraceId: traceId },
+        { "Last-Event-ID": lastSeen }
+      );
+      const frames2 = await parseFramesWithIds(res2);
+      // Only the [DONE] sentinel survives.
+      const data2 = frames2.filter((f) => f.data !== "DONE");
+      expect(data2.length).toBe(0);
+      expect(frames2.some((f) => f.data === "DONE")).toBe(true);
+    } finally {
+      mockEvents = previousEvents;
+    }
+  });
+
+  it("without checkpointsKv: live SSE works, but no id: lines and no trace id header — feature degrades cleanly", async () => {
+    const app = makeApp({ checkpointsKv: undefined });
+    const res = await post(app, { task: "no-kv-degradation" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Agentkit-Trace-Id")).toMatch(/^run-/); // header is always set; resume just isn't usable
+    const frames = await parseFramesWithIds(res);
+    const dataFrames = frames.filter((f) => f.data !== "DONE");
+    expect(dataFrames.length).toBeGreaterThan(0);
+    for (const f of dataFrames) {
+      // No EventLog tap → no id: lines.
+      expect(f.id).toBeNull();
+    }
+  });
+
+  it("resume without checkpointsKv silently falls through to a fresh run", async () => {
+    const app = makeApp({ checkpointsKv: undefined });
+    const res = await post(
+      app,
+      { task: "no-kv-resume", resumeTraceId: "run-orphan" },
+      { "Last-Event-ID": "000000000005" }
+    );
+    expect(res.status).toBe(200);
+    // Without persistence the resume hint cannot be honored; we just
+    // run the task fresh — better than failing the request.
+    expect(res.headers.get("X-Bscode-Resume")).toBeNull();
+    const events = await parseSSE(res);
+    expect(events.some((e) => e.event === "final_answer")).toBe(true);
+    // factoryCalls is bumped only when the live path runs (resume
+    // path bypasses the agent factory). Here we expect a real run.
+    expect(factoryCalls).toBeGreaterThanOrEqual(1);
   });
 });

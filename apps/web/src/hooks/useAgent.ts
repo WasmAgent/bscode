@@ -37,7 +37,12 @@ export interface AgentConfig {
     selfConsistency?: { enabled: boolean; n?: number; earlyStopThreshold?: number };
     reflectRefine?: { enabled: boolean; maxCycles?: number };
     budgetForcing?: { enabled: boolean };
-    parallelForkJoin?: { enabled: boolean; branches?: number; concurrency?: number; aggregation?: "summary" | "first" };
+    parallelForkJoin?: {
+      enabled: boolean;
+      branches?: number;
+      concurrency?: number;
+      aggregation?: "summary" | "first";
+    };
     budget?: { maxTokens?: number; maxSteps?: number; maxDurationMs?: number };
   };
   /** Seal a B2 cache breakpoint every N steps (default: 5 for prompt-cache savings) */
@@ -73,7 +78,10 @@ interface AgentEventMinimal {
   traceId?: string;
 }
 
-export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<AgentConfig>) => void) {
+export function useAgent(
+  config: AgentConfig,
+  onConfigUpdate?: (update: Partial<AgentConfig>) => void
+) {
   const workerUrl = getWorkerUrl();
   const [tokenStats, setTokenStats] = useState<TokenStats>({
     inputTokens: 0,
@@ -169,21 +177,28 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
       }
 
       // Clarification check — only once per original task, never after user has answered
-      if (!skipClarify && config.autoMode && effectiveConfig.agentMode === "tool" && !task.includes("@")) {
+      if (
+        !skipClarify &&
+        config.autoMode &&
+        effectiveConfig.agentMode === "tool" &&
+        !task.includes("@")
+      ) {
         try {
           const res = await fetch(`${workerUrl}/clarify`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ task: task.slice(0, 600) }),
           });
-          const result = await res.json() as {
+          const result = (await res.json()) as {
             needsClarification: boolean;
             questions?: Array<{ text: string; options: string[] } | string>;
           };
           if (result.needsClarification && result.questions?.length) {
             // Normalise to ClarifyQuestion[]
             const qs: ClarifyQuestion[] = result.questions.map((q) =>
-              typeof q === "string" ? { text: q, options: [] } : { text: q.text, options: q.options ?? [] }
+              typeof q === "string"
+                ? { text: q, options: [] }
+                : { text: q.text, options: q.options ?? [] }
             );
             setClarifyingQuestions(qs);
             return; // pause — let user answer before running
@@ -215,11 +230,17 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         ...(effectiveConfig.framework ? { framework: effectiveConfig.framework } : {}),
         ...(effectiveConfig.modelIds?.length ? { modelIds: effectiveConfig.modelIds } : {}),
         ...(stopConditions?.length ? { stopConditions } : {}),
-        ...(effectiveConfig.enhancementPolicy ? { enhancementPolicy: effectiveConfig.enhancementPolicy } : {}),
+        ...(effectiveConfig.enhancementPolicy
+          ? { enhancementPolicy: effectiveConfig.enhancementPolicy }
+          : {}),
         ...(effectiveConfig.scheduler ? { scheduler: effectiveConfig.scheduler } : {}),
-        ...(effectiveConfig.maxBudgetTokens ? { maxBudgetTokens: effectiveConfig.maxBudgetTokens } : {}),
+        ...(effectiveConfig.maxBudgetTokens
+          ? { maxBudgetTokens: effectiveConfig.maxBudgetTokens }
+          : {}),
         ...(effectiveConfig.maxDurationMs ? { maxDurationMs: effectiveConfig.maxDurationMs } : {}),
-        ...(effectiveConfig.autoCompactThreshold ? { autoCompactThreshold: effectiveConfig.autoCompactThreshold } : {}),
+        ...(effectiveConfig.autoCompactThreshold
+          ? { autoCompactThreshold: effectiveConfig.autoCompactThreshold }
+          : {}),
         ...(conversationHistory?.length ? { conversationHistory } : {}),
       });
     },
@@ -231,7 +252,13 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
     setRawEvents([]);
     setDetectedMode(null);
     setClarifyingQuestions(null);
-    setTokenStats({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, calls: 0, accumulatedUsd: 0 });
+    setTokenStats({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      calls: 0,
+      accumulatedUsd: 0,
+    });
   }, [reset]);
 
   /** Dismiss clarifying questions and proceed with the run as-is */

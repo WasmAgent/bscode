@@ -117,7 +117,9 @@ describe("useSessionStorage", () => {
 
     const blob = result.current.exportCurrent();
     expect(blob).not.toBeNull();
-    const text = await blob!.text();
+    const text = await blob?.text();
+    expect(text).toBeDefined();
+    if (text === undefined) return;
 
     let newId = "";
     await act(async () => {

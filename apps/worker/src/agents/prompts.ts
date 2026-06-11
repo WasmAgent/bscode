@@ -11,19 +11,19 @@
  */
 
 import {
-  composePrompt,
-  REASONING_FIRST,
-  SANDBOX_QUICKJS,
-  SANDBOX_PYODIDE,
-  SANDBOX_NODE,
-  OUTPUT_CONTRACT_FINAL_ANSWER,
   CODE_QUALITY_GENERIC,
   CODE_QUALITY_TYPESCRIPT,
-  ERROR_RECOVERY,
-  FILE_OPS_ATOMIC,
-  DIAGRAMS_GENERIC,
+  composePrompt,
   DIAGRAMS_CODE_JS,
   DIAGRAMS_CODE_PYTHON,
+  DIAGRAMS_GENERIC,
+  ERROR_RECOVERY,
+  FILE_OPS_ATOMIC,
+  OUTPUT_CONTRACT_FINAL_ANSWER,
+  REASONING_FIRST,
+  SANDBOX_NODE,
+  SANDBOX_PYODIDE,
+  SANDBOX_QUICKJS,
 } from "@agentkit-js/agent-prompts";
 
 export type CodeLanguage = "js" | "python" | "node";
@@ -31,9 +31,11 @@ export type Framework = "react" | "vue" | "svelte" | "vanilla" | "general";
 
 // ── Code-agent prompts (sandbox-bound) ────────────────────────────────────────
 
-const JS_PERSONA = "You are an expert JavaScript coding assistant running inside a QuickJS WASM sandbox.";
+const JS_PERSONA =
+  "You are an expert JavaScript coding assistant running inside a QuickJS WASM sandbox.";
 
-const PYTHON_PERSONA = "You are a Python coding assistant executing code in a Pyodide WASM sandbox in the browser.";
+const PYTHON_PERSONA =
+  "You are a Python coding assistant executing code in a Pyodide WASM sandbox in the browser.";
 
 const NODE_PERSONA = "You are an expert Node.js coding assistant running inside a remote sandbox.";
 
@@ -97,7 +99,8 @@ export function bscodeCodeAgentPrompt(language: CodeLanguage = "js"): string {
 
 // ── Tool-agent prompts (framework-aware) ──────────────────────────────────────
 
-const GENERAL_PERSONA = "You are BSCode, an expert coding assistant with access to a virtual file system.";
+const GENERAL_PERSONA =
+  "You are BSCode, an expert coding assistant with access to a virtual file system.";
 
 const GENERAL_RESPONSE_FORMAT = `## Response Format
 After completing all file operations, provide a concise summary:

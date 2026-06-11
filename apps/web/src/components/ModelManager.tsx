@@ -356,7 +356,11 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
 
         {/* Tabs */}
         <div style={s.tabs}>
-          <button type="button" style={tabBtnStyle(tab === "select")} onClick={() => setTab("select")}>
+          <button
+            type="button"
+            style={tabBtnStyle(tab === "select")}
+            onClick={() => setTab("select")}
+          >
             Select Models
           </button>
           <button type="button" style={tabBtnStyle(tab === "add")} onClick={() => setTab("add")}>

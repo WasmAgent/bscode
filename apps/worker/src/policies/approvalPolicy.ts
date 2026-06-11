@@ -99,7 +99,7 @@ export class ApprovalPolicy {
     }
     if (m.paths !== undefined && m.paths.length > 0) {
       const matchPath = m.paths.some(
-        (p) => query.path === p || query.path.startsWith(`${p}/`) || query.path.startsWith(p),
+        (p) => query.path === p || query.path.startsWith(`${p}/`) || query.path.startsWith(p)
       );
       if (!matchPath) return false;
     }
@@ -118,17 +118,28 @@ export class ApprovalPolicy {
 // function. Other behaviour is unchanged — we deliberately do NOT
 // re-implement the underlying tools to avoid drift.
 
-interface PathOnly { path: string }
-interface PatchInput { path: string; patch: string }
-interface RenameInput { from: string; to: string }
-interface WriteInput { path: string; content: string }
+interface PathOnly {
+  path: string;
+}
+interface PatchInput {
+  path: string;
+  patch: string;
+}
+interface RenameInput {
+  from: string;
+  to: string;
+}
+interface WriteInput {
+  path: string;
+  content: string;
+}
 
 function applyPolicy<I, O>(
   tool: ToolDefinition<I, O>,
   op: WriteOpKind,
   policy: ApprovalPolicy,
   pickPath: (input: I) => string,
-  pickSize: (input: I) => number,
+  pickSize: (input: I) => number
 ): ToolDefinition<I, O> {
   return {
     ...tool,
@@ -143,7 +154,7 @@ function applyPolicy<I, O>(
 
 export function applyApprovalPolicy(
   policy: ApprovalPolicy,
-  tools: ToolDefinition[],
+  tools: ToolDefinition[]
 ): ToolDefinition[] {
   return tools.map((t) => {
     switch (t.name) {
@@ -153,7 +164,7 @@ export function applyApprovalPolicy(
           "write",
           policy,
           (i) => i.path,
-          (i) => i.content?.length ?? 0,
+          (i) => i.content?.length ?? 0
         ) as unknown as ToolDefinition;
       case "patch_file":
         return applyPolicy(
@@ -161,7 +172,7 @@ export function applyApprovalPolicy(
           "patch",
           policy,
           (i) => i.path,
-          (i) => i.patch?.length ?? 0,
+          (i) => i.patch?.length ?? 0
         ) as unknown as ToolDefinition;
       case "delete_file":
         return applyPolicy(
@@ -169,7 +180,7 @@ export function applyApprovalPolicy(
           "delete",
           policy,
           (i) => i.path,
-          () => 0,
+          () => 0
         ) as unknown as ToolDefinition;
       case "rename_file":
         return applyPolicy(
@@ -177,7 +188,7 @@ export function applyApprovalPolicy(
           "rename",
           policy,
           (i) => i.from,
-          () => 0,
+          () => 0
         ) as unknown as ToolDefinition;
       default:
         return t;
@@ -210,7 +221,16 @@ export const PolicyPresets = {
       rules: [
         {
           id: "dotfiles-require-approval",
-          match: { paths: [".env", ".env.production", ".env.local", ".dev.vars", ".github/", "wrangler.toml"] },
+          match: {
+            paths: [
+              ".env",
+              ".env.production",
+              ".env.local",
+              ".dev.vars",
+              ".github/",
+              "wrangler.toml",
+            ],
+          },
           verdict: "require",
         },
         {

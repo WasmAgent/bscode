@@ -11,15 +11,13 @@
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { createApp } from "./app.js";
-import { FsKvStore, MemKvStore } from "./platform.js";
+import { FsKvStore } from "./platform.js";
 
 const port = Number(process.env.PORT ?? 8788);
 const workdir = process.env.BSCODE_WORKDIR ?? process.cwd();
 
 const embedding =
-  process.env.EMBEDDING_API_KEY &&
-  process.env.EMBEDDING_BASE_URL &&
-  process.env.EMBEDDING_MODEL
+  process.env.EMBEDDING_API_KEY && process.env.EMBEDDING_BASE_URL && process.env.EMBEDDING_MODEL
     ? {
         apiKey: process.env.EMBEDDING_API_KEY,
         baseUrl: process.env.EMBEDDING_BASE_URL,
@@ -77,8 +75,9 @@ const server = createServer((req, res) => {
     const headers = new Headers();
     for (const [key, val] of Object.entries(req.headers)) {
       if (!val) continue;
-      if (Array.isArray(val)) val.forEach((v) => headers.append(key, v));
-      else headers.set(key, val);
+      if (Array.isArray(val)) {
+        for (const v of val) headers.append(key, v);
+      } else headers.set(key, val);
     }
 
     const webReq = new Request(url, {
@@ -119,7 +118,9 @@ const server = createServer((req, res) => {
             res.end();
             return;
           }
-          res.write(value, () => { pump(); });
+          res.write(value, () => {
+            pump();
+          });
         };
         pump();
       })
@@ -149,7 +150,7 @@ server.listen(port, () => {
   console.log(
     `  Embedder : ${
       embedding ? `HttpEmbedder (${embedding.model} @ ${embedding.baseUrl})` : "TF-IDF (in-process)"
-    }`,
+    }`
   );
   console.log(`\n  CLI: node ../../scripts/bscode.mjs --url http://localhost:${port} "task"\n`);
 });
@@ -163,4 +164,3 @@ process.on("SIGTERM", () => {
 process.on("SIGINT", () => {
   server.close(() => process.exit(0));
 });
-

@@ -83,7 +83,10 @@ export class FsKvStore implements KvStore {
     async function walk(dir: string) {
       let entries: { name: string | Buffer; isDirectory(): boolean }[];
       try {
-        entries = await readdir(dir, { withFileTypes: true }) as { name: string | Buffer; isDirectory(): boolean }[];
+        entries = (await readdir(dir, { withFileTypes: true })) as {
+          name: string | Buffer;
+          isDirectory(): boolean;
+        }[];
       } catch {
         return;
       }

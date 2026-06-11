@@ -9,7 +9,9 @@ describe("FileTree", () => {
   });
 
   it("renders flat files at root level", () => {
-    const { container } = render(<FileTree files={[{ path: "README.md" }, { path: "package.json" }]} />);
+    const { container } = render(
+      <FileTree files={[{ path: "README.md" }, { path: "package.json" }]} />
+    );
     expect(container.textContent).toContain("README.md");
     expect(container.textContent).toContain("package.json");
   });

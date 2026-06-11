@@ -145,7 +145,11 @@ function providerDotStyle(provider: string): CSSProperties {
 
 const CODE_LANGS = [
   { id: "js" as const, label: "JS", title: "JavaScript in QuickJS WASM sandbox" },
-  { id: "python" as const, label: "Python", title: "Python via Pyodide WASM — no GUI (tkinter/pygame not supported)" },
+  {
+    id: "python" as const,
+    label: "Python",
+    title: "Python via Pyodide WASM — no GUI (tkinter/pygame not supported)",
+  },
   // Node requires E2B remote sandbox (paid API key) — hidden until configured
   // { id: "node" as const, label: "Node", title: "Node.js via E2B remote sandbox" },
 ];
@@ -188,7 +192,7 @@ export function AgentPanel({
       .catch(() => {
         /* keep defaults */
       });
-  }, [onChange, config.modelId, config]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onChange, config.modelId, config, workerUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={panelStyle}>
@@ -201,9 +205,25 @@ export function AgentPanel({
 
       {/* ── Mode: Auto-detect toggle + manual override ─────── */}
       <div>
-        <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          style={{
+            ...labelStyle,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <span>Mode</span>
-          <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", textTransform: "none", letterSpacing: 0 }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              cursor: "pointer",
+              textTransform: "none",
+              letterSpacing: 0,
+            }}
+          >
             <input
               type="checkbox"
               checked={config.autoMode ?? true}
@@ -218,17 +238,21 @@ export function AgentPanel({
         {config.autoMode ? (
           <div style={{ minHeight: 28, display: "flex", alignItems: "center", gap: 6 }}>
             {classifying ? (
-              <span style={{ fontSize: 11, color: "#e3b341", animation: "pulse 1s infinite" }}>⟳ Analyzing task…</span>
+              <span style={{ fontSize: 11, color: "#e3b341", animation: "pulse 1s infinite" }}>
+                ⟳ Analyzing task…
+              </span>
             ) : detectedMode ? (
               <>
-                <span style={{
-                  fontSize: 11,
-                  background: detectedMode.mode === "framework" ? "#23863622" : "#1f6feb22",
-                  border: `1px solid ${detectedMode.mode === "framework" ? "#3fb950" : "#58a6ff"}`,
-                  borderRadius: 4,
-                  padding: "2px 8px",
-                  color: detectedMode.mode === "framework" ? "#3fb950" : "#58a6ff",
-                }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    background: detectedMode.mode === "framework" ? "#23863622" : "#1f6feb22",
+                    border: `1px solid ${detectedMode.mode === "framework" ? "#3fb950" : "#58a6ff"}`,
+                    borderRadius: 4,
+                    padding: "2px 8px",
+                    color: detectedMode.mode === "framework" ? "#3fb950" : "#58a6ff",
+                  }}
+                >
                   {detectedMode.mode === "framework"
                     ? `Framework · ${detectedMode.framework ?? "react"}`
                     : detectedMode.mode === "code"
@@ -263,7 +287,13 @@ export function AgentPanel({
                   color: config.framework ? "#3fb950" : undefined,
                   background: config.framework ? "#238636" + "22" : undefined,
                 }}
-                onClick={() => onChange({ ...config, agentMode: "tool", framework: config.framework ? null : "react" })}
+                onClick={() =>
+                  onChange({
+                    ...config,
+                    agentMode: "tool",
+                    framework: config.framework ? null : "react",
+                  })
+                }
               >
                 Framework
               </button>
@@ -274,10 +304,20 @@ export function AgentPanel({
                   <button
                     type="button"
                     key={fw}
-                    style={{ ...modeBtnStyle(config.framework === fw), flex: "unset", padding: "5px 10px" }}
+                    style={{
+                      ...modeBtnStyle(config.framework === fw),
+                      flex: "unset",
+                      padding: "5px 10px",
+                    }}
                     onClick={() => onChange({ ...config, framework: fw })}
                   >
-                    {fw === "react" ? "React" : fw === "vue" ? "Vue 3" : fw === "svelte" ? "Svelte" : "Vanilla"}
+                    {fw === "react"
+                      ? "React"
+                      : fw === "vue"
+                        ? "Vue 3"
+                        : fw === "svelte"
+                          ? "Svelte"
+                          : "Vanilla"}
                   </button>
                 ))}
               </div>
@@ -289,7 +329,13 @@ export function AgentPanel({
                     type="button"
                     key={lang.id}
                     title={lang.title}
-                    style={{ ...modeBtnStyle(config.codeLanguage === lang.id || (!config.codeLanguage && lang.id === "js")), flex: 1 }}
+                    style={{
+                      ...modeBtnStyle(
+                        config.codeLanguage === lang.id ||
+                          (!config.codeLanguage && lang.id === "js")
+                      ),
+                      flex: 1,
+                    }}
                     onClick={() => onChange({ ...config, codeLanguage: lang.id })}
                   >
                     {lang.label}
@@ -459,7 +505,9 @@ export function AgentPanel({
         >
           {isRunning ? (
             <>
-              <span style={{ display: "inline-block", animation: "spin 0.8s linear infinite" }}>⟳</span>
+              <span style={{ display: "inline-block", animation: "spin 0.8s linear infinite" }}>
+                ⟳
+              </span>
               Running…
             </>
           ) : (
@@ -467,7 +515,12 @@ export function AgentPanel({
           )}
         </button>
         {isRunning && (
-          <button type="button" style={{ ...btnStyle(false, true), cursor: "pointer" }} onClick={onAbort} title="Stop agent">
+          <button
+            type="button"
+            style={{ ...btnStyle(false, true), cursor: "pointer" }}
+            onClick={onAbort}
+            title="Stop agent"
+          >
             ■ Stop
           </button>
         )}

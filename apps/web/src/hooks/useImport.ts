@@ -12,7 +12,7 @@ const SKIP_EXACT: ReadonlySet<string> = new Set([
   ".env.development.local",
   ".env.test.local",
   ".env.production.local",
-  ".dev.vars",       // Wrangler secrets
+  ".dev.vars", // Wrangler secrets
   ".dev.vars.local",
 ]);
 
@@ -34,20 +34,38 @@ const SKIP_DIRS: ReadonlyArray<string> = [
   ".venv",
   "venv",
   ".tox",
-  "build",          // Python/Go build output
+  "build", // Python/Go build output
 ];
 
 /**
  * File extensions that are binary or too large to be useful as text.
  */
 const SKIP_EXTENSIONS: ReadonlySet<string> = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg",
-  ".mp4", ".mp3", ".wav", ".ogg",
-  ".zip", ".tar", ".gz", ".bz2", ".7z",
-  ".exe", ".dll", ".so", ".dylib",
-  ".pdf", ".docx", ".xlsx",
-  ".wasm",          // compiled — not useful to import as text
-  ".lock",          // not .lock files but package-lock and yarn.lock are fine — handled below
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".ico",
+  ".svg",
+  ".mp4",
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".bz2",
+  ".7z",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".pdf",
+  ".docx",
+  ".xlsx",
+  ".wasm", // compiled — not useful to import as text
+  ".lock", // not .lock files but package-lock and yarn.lock are fine — handled below
 ]);
 
 /** Max file size in bytes — skip files larger than this (5 MB). */
@@ -68,7 +86,7 @@ function shouldSkip(path: string): boolean {
   }
 
   // Skip by extension
-  const ext = filename.includes(".") ? "." + filename.split(".").pop()!.toLowerCase() : "";
+  const ext = filename.includes(".") ? "." + filename.split(".").pop()?.toLowerCase() : "";
   if (ext && SKIP_EXTENSIONS.has(ext)) return true;
 
   return false;
@@ -88,7 +106,12 @@ function isGitignored(path: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
     const pat = pattern.replace(/\/$/, ""); // strip trailing slash
     // Simple contains-segment check
-    if (p === pat || p.startsWith(pat + "/") || p.includes("/" + pat + "/") || p.endsWith("/" + pat))
+    if (
+      p === pat ||
+      p.startsWith(pat + "/") ||
+      p.includes("/" + pat + "/") ||
+      p.endsWith("/" + pat)
+    )
       return true;
     // Wildcard: *.ext
     if (pat.startsWith("*") && p.endsWith(pat.slice(1))) return true;
@@ -131,8 +154,7 @@ export function useImport(): UseImportReturn {
       // Strip common top-level folder that zips often wrap everything in
       const allPaths = Object.keys(zip.files);
       const topDirs = new Set(allPaths.map((p) => p.split("/")[0]));
-      const stripPrefix =
-        topDirs.size === 1 ? [...topDirs][0] + "/" : "";
+      const stripPrefix = topDirs.size === 1 ? [...topDirs][0] + "/" : "";
 
       for (const [zipPath, entry] of Object.entries(zip.files)) {
         if (entry.dir) continue;
@@ -168,11 +190,8 @@ export function useImport(): UseImportReturn {
    * Falls back gracefully if the API is not supported.
    */
   const importFromDirectory = useCallback(async (): Promise<ImportedFile[]> => {
-    // biome-ignore lint/suspicious/noExplicitAny: File System Access API not in TS types
     if (!("showDirectoryPicker" in window)) {
-      throw new Error(
-        "Directory picker is not supported in this browser. Try Chrome or Edge."
-      );
+      throw new Error("Directory picker is not supported in this browser. Try Chrome or Edge.");
     }
 
     setImporting(true);

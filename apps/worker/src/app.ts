@@ -1,24 +1,22 @@
 import type { AgentEvent, Model, ModelMessage, Scorer, ToolDefinition } from "@agentkit-js/core";
 import {
-  FileTreeManager,
-} from "@agentkit-js/core";
-import {
   BudgetForcingRunner,
   CheckpointableRun,
-  classifierGuardrail,
   createMemoryTool,
+  EventLog,
   exactMatch,
   FallbackModel,
+  FileTreeManager,
   finalAnswerLength,
   forbiddenPhrases,
+  formatSseFrame,
   InMemoryCheckpointer,
   InMemorySpanExporter,
   KvCheckpointer,
   MapKvBackend,
   maxInputLength,
-  MessageAssembler,
   OtelBridge,
-  ParallelForkJoinRunner,
+  type ParallelForkJoinRunner,
   ProgrammaticOrchestrator,
   ReflectRefineRunner,
   runEval,
@@ -30,8 +28,15 @@ import {
 } from "@agentkit-js/core";
 import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
-import { multiAgentRun, runPlanFirstExecution, type MultiAgentMode } from "./agents/multi-agent.js";
+import { type MultiAgentMode, multiAgentRun, runPlanFirstExecution } from "./agents/multi-agent.js";
 import { createToolAgent } from "./agents/tool-agent.js";
+import {
+  type BuildResultSnapshot,
+  clearBuildResult,
+  getBuildResult,
+  putBuildResult,
+} from "./build-results.js";
+import { JobQueue, type JobRunner, type JobSpec } from "./jobs/index.js";
 import {
   type CustomModelConfig,
   discoverLocalModels,
@@ -46,6 +51,12 @@ import {
 } from "./models/registry.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
+import {
+  ApprovalPolicy,
+  type ApprovalPolicyOptions,
+  applyApprovalPolicy,
+  PolicyPresets,
+} from "./policies/approvalPolicy.js";
 import {
   createDeleteFileTool,
   createGitHubPrTool,
@@ -66,19 +77,6 @@ import {
 } from "./tools/index.js";
 import { createGitTools, createShellRunner } from "./tools/shell.js";
 import { createWebSearchTool } from "./tools/web-search.js";
-import {
-  type BuildResultSnapshot,
-  clearBuildResult,
-  getBuildResult,
-  putBuildResult,
-} from "./build-results.js";
-import { JobQueue, type JobRunner, type JobSpec } from "./jobs/index.js";
-import {
-  applyApprovalPolicy,
-  ApprovalPolicy,
-  type ApprovalPolicyOptions,
-  PolicyPresets,
-} from "./policies/approvalPolicy.js";
 
 export type { AppConfig } from "./platform.js";
 
@@ -222,13 +220,14 @@ export function createApp(config: AppConfig) {
   // Kick off the dynamic import once if embedding is configured. Failure
   // logs and falls through to TF-IDF — we never crash the app on this.
   if (config.embedding) {
+    const embedding = config.embedding;
     void (async () => {
       try {
         const { HttpEmbedder } = await import("@agentkit-js/tools-rag");
         sharedEmbedder = new HttpEmbedder({
-          apiKey: config.embedding!.apiKey,
-          baseUrl: config.embedding!.baseUrl,
-          model: config.embedding!.model,
+          apiKey: embedding.apiKey,
+          baseUrl: embedding.baseUrl,
+          model: embedding.model,
         });
         // Existing TF-IDF indexers stay as-is — only NEW sessions pick up
         // the HttpEmbedder. This avoids a re-index storm on restart.
@@ -415,10 +414,10 @@ OR
 
     try {
       let text = "";
-      for await (const ev of model.generate(
-        [{ role: "user", content: prompt }],
-        { stream: true, maxTokens: 300 }
-      )) {
+      for await (const ev of model.generate([{ role: "user", content: prompt }], {
+        stream: true,
+        maxTokens: 300,
+      })) {
         if (ev.type === "text_delta" && ev.delta) text += ev.delta;
       }
       const jsonMatch = /\{[\s\S]*\}/.exec(text.trim());
@@ -428,11 +427,13 @@ OR
         questions?: Array<{ text: string; options: string[] } | string>;
       };
       // Normalise — handle both old string format and new {text, options} format
-      const questions = (result.questions ?? []).slice(0, 2).map((q) =>
-        typeof q === "string"
-          ? { text: q, options: [] }
-          : { text: q.text, options: (q.options ?? []).slice(0, 4) }
-      );
+      const questions = (result.questions ?? [])
+        .slice(0, 2)
+        .map((q) =>
+          typeof q === "string"
+            ? { text: q, options: [] }
+            : { text: q.text, options: (q.options ?? []).slice(0, 4) }
+        );
       return c.json({
         needsClarification: result.needsClarification ?? false,
         questions,
@@ -446,35 +447,45 @@ OR
   // Accepts a JSON schema and returns a React component that renders a form/view
   // for that schema, with field types mapped to appropriate UI components.
   app.post("/generate-from-schema", async (c) => {
-    const { schema, framework = "react", componentName = "DataForm" } =
-      await c.req.json<{ schema: Record<string, unknown>; framework?: string; componentName?: string }>();
+    const {
+      schema,
+      framework = "react",
+      componentName = "DataForm",
+    } = await c.req.json<{
+      schema: Record<string, unknown>;
+      framework?: string;
+      componentName?: string;
+    }>();
     if (!schema) return c.json({ error: "schema required" }, 400);
 
     // Type-to-component mapping (Glide pattern)
     const typeMap: Record<string, { component: string; props: string }> = {
-      string:  { component: "Input",    props: 'type="text"' },
-      number:  { component: "Input",    props: 'type="number"' },
-      integer: { component: "Input",    props: 'type="number" step="1"' },
-      boolean: { component: "input",    props: 'type="checkbox"' },
-      array:   { component: "Textarea", props: 'placeholder="JSON array"' },
-      object:  { component: "Textarea", props: 'placeholder="JSON object"' },
+      string: { component: "Input", props: 'type="text"' },
+      number: { component: "Input", props: 'type="number"' },
+      integer: { component: "Input", props: 'type="number" step="1"' },
+      boolean: { component: "input", props: 'type="checkbox"' },
+      array: { component: "Textarea", props: 'placeholder="JSON array"' },
+      object: { component: "Textarea", props: 'placeholder="JSON object"' },
     };
 
     // Heuristic: detect image/date/email by field name
     const nameHints: Record<string, { component: string; props: string }> = {
-      image: { component: "img",   props: 'alt={field} className="w-32 h-32 object-cover"' },
-      img:   { component: "img",   props: 'alt={field} className="w-32 h-32 object-cover"' },
-      photo: { component: "img",   props: 'alt={field} className="w-32 h-32 object-cover"' },
-      date:  { component: "Input", props: 'type="date"' },
-      time:  { component: "Input", props: 'type="time"' },
+      image: { component: "img", props: 'alt={field} className="w-32 h-32 object-cover"' },
+      img: { component: "img", props: 'alt={field} className="w-32 h-32 object-cover"' },
+      photo: { component: "img", props: 'alt={field} className="w-32 h-32 object-cover"' },
+      date: { component: "Input", props: 'type="date"' },
+      time: { component: "Input", props: 'type="time"' },
       email: { component: "Input", props: 'type="email"' },
       phone: { component: "Input", props: 'type="tel"' },
-      url:   { component: "Input", props: 'type="url"' },
+      url: { component: "Input", props: 'type="url"' },
       color: { component: "Input", props: 'type="color"' },
       password: { component: "Input", props: 'type="password"' },
     };
 
-    const properties = (schema.properties ?? {}) as Record<string, { type?: string; description?: string }>;
+    const properties = (schema.properties ?? {}) as Record<
+      string,
+      { type?: string; description?: string }
+    >;
     const required = new Set<string>((schema.required as string[]) ?? []);
 
     const fields = Object.entries(properties).map(([name, def]) => {
@@ -485,7 +496,9 @@ OR
     });
 
     // Generate React component (framework=react default)
-    const componentCode = framework === "react" ? `
+    const componentCode =
+      framework === "react"
+        ? `
 import { useState } from "react";
 
 interface ${componentName}Data {
@@ -499,21 +512,34 @@ ${fields.map((f) => `    ${f.name}: ${f.component === "input" ? "false" : '""'},
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit?.(data); }} className="space-y-4 p-4">
-${fields.map((f) => `      <div className="flex flex-col gap-1">
+${fields
+  .map(
+    (f) => `      <div className="flex flex-col gap-1">
         <label htmlFor="${f.name}" className="text-sm font-medium">${f.name}${f.required ? " *" : ""}</label>
-        ${f.component === "Textarea"
-          ? `<textarea id="${f.name}" ${f.props} value={data.${f.name} as string} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.value}))} className="border rounded p-2" />`
-          : f.component === "img"
-          ? `{data.${f.name} && <${f.component} src={data.${f.name} as string} ${f.props} />}`
-          : `<${f.component === "Input" ? "input" : f.component} id="${f.name}" ${f.props} ${f.component === "input" ? `checked={data.${f.name} as boolean} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.checked}))` : `value={data.${f.name} as string} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.value}))`} className="border rounded p-2" />`}
-      </div>`).join("\n")}
+        ${
+          f.component === "Textarea"
+            ? `<textarea id="${f.name}" ${f.props} value={data.${f.name} as string} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.value}))} className="border rounded p-2" />`
+            : f.component === "img"
+              ? `{data.${f.name} && <${f.component} src={data.${f.name} as string} ${f.props} />}`
+              : `<${f.component === "Input" ? "input" : f.component} id="${f.name}" ${f.props} ${f.component === "input" ? `checked={data.${f.name} as boolean} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.checked}))` : `value={data.${f.name} as string} onChange={(e) => setData(p => ({...p, ${f.name}: e.target.value}))`} className="border rounded p-2" />`
+        }
+      </div>`
+  )
+  .join("\n")}
       <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">Submit</button>
     </form>
   );
 }
-`.trim() : `// Framework "${framework}" not yet supported for schema generation.`;
+`.trim()
+        : `// Framework "${framework}" not yet supported for schema generation.`;
 
-    return c.json({ ok: true, framework, componentName, code: componentCode, fields: fields.length });
+    return c.json({
+      ok: true,
+      framework,
+      componentName,
+      code: componentCode,
+      fields: fields.length,
+    });
   });
 
   // ── Task classifier — detects agent mode from task description ────────────
@@ -538,9 +564,8 @@ ${fields.map((f) => `      <div className="flex flex-col gap-1">
     // Only honor the fast-path if the task does NOT also ask for an app
     // / interactive UI (e.g. "build a Vue app that draws a diagram") —
     // those still need framework mode.
-    const looksLikeApp = /\b(app|todo|game|component|website|ui|界面|应用|网站|游戏|计算器|看板)\b/i.test(
-      lcTask
-    );
+    const looksLikeApp =
+      /\b(app|todo|game|component|website|ui|界面|应用|网站|游戏|计算器|看板)\b/i.test(lcTask);
     if (isDiagramTask && !looksLikeApp) {
       return c.json({ mode: "code", framework: null });
     }
@@ -576,10 +601,10 @@ or {"mode":"tool","framework":null}`;
 
     try {
       let text = "";
-      for await (const ev of model.generate(
-        [{ role: "user", content: prompt }],
-        { stream: true, maxTokens: 50 }
-      )) {
+      for await (const ev of model.generate([{ role: "user", content: prompt }], {
+        stream: true,
+        maxTokens: 50,
+      })) {
         if (ev.type === "text_delta" && ev.delta) text += ev.delta;
       }
       const jsonMatch = /\{[^}]+\}/.exec(text.trim());
@@ -684,7 +709,7 @@ or {"mode":"tool","framework":null}`;
           headers: { "Content-Type": "application/json", ...headers },
           body: JSON.stringify(body),
           signal,
-        }),
+        })
       );
       if (!res.body) {
         throw new Error(`/run returned no body (status ${res.status})`);
@@ -739,7 +764,7 @@ or {"mode":"tool","framework":null}`;
     const auth = c.req.header("Authorization");
     const headers: Record<string, string> = {};
     if (sessionHeader) headers["X-Session-Id"] = sessionHeader;
-    if (auth) headers["Authorization"] = auth;
+    if (auth) headers.Authorization = auth;
 
     // Normalise to a list of {task, payload} jobs.
     let entries: Array<Record<string, unknown>>;
@@ -773,7 +798,12 @@ or {"mode":"tool","framework":null}`;
   /** GET /jobs — list jobs, optionally filtered by status / sessionId. */
   app.get("/jobs", (c) => {
     const status = c.req.query("status") as
-      | "queued" | "running" | "done" | "failed" | "aborted" | undefined;
+      | "queued"
+      | "running"
+      | "done"
+      | "failed"
+      | "aborted"
+      | undefined;
     const sessionId = c.req.query("sessionId") ?? c.req.header("X-Session-Id");
     const filter: { status?: typeof status; sessionId?: string } = {};
     if (status) filter.status = status;
@@ -894,9 +924,7 @@ or {"mode":"tool","framework":null}`;
     if (!Array.isArray(files) || files.length === 0)
       return c.json({ error: "files array required" }, 400);
     await Promise.all(
-      files.map(({ path, content }) =>
-        kv.put(`file:${path.replace(/^\/+/, "")}`, content ?? "")
-      )
+      files.map(({ path, content }) => kv.put(`file:${path.replace(/^\/+/, "")}`, content ?? ""))
     );
     return c.json({ ok: true, count: files.length, paths: files.map((f) => f.path) });
   });
@@ -905,7 +933,10 @@ or {"mode":"tool","framework":null}`;
   app.get("/files/:path{.+}/versions", async (c) => {
     const path = c.req.param("path");
     const versions = fileTreeFor(c).getVersions(path);
-    return c.json({ path, versions: versions.map((v) => ({ version: v.version, hash: v.hash, savedAtMs: v.savedAtMs })) });
+    return c.json({
+      path,
+      versions: versions.map((v) => ({ version: v.version, hash: v.hash, savedAtMs: v.savedAtMs })),
+    });
   });
 
   // Fetch the actual content of a specific historical version. Used by the
@@ -917,7 +948,13 @@ or {"mode":"tool","framework":null}`;
     const versions = fileTreeFor(c).getVersions(path);
     const target = versions.find((v) => v.version === versionNum);
     if (!target) return c.json({ error: `version ${versionNum} not found` }, 404);
-    return c.json({ path, version: target.version, content: target.content, hash: target.hash, savedAtMs: target.savedAtMs });
+    return c.json({
+      path,
+      version: target.version,
+      content: target.content,
+      hash: target.hash,
+      savedAtMs: target.savedAtMs,
+    });
   });
 
   app.post("/files/:path{.+}/rollback", async (c) => {
@@ -964,7 +1001,7 @@ or {"mode":"tool","framework":null}`;
           owner: body.owner,
           repo: body.repo,
           ...(body.ref ? { ref: body.ref } : {}),
-          ...(body.token ?? ambientToken ? { token: body.token ?? ambientToken } : {}),
+          ...((body.token ?? ambientToken) ? { token: body.token ?? ambientToken } : {}),
           ...(body.paths ? { paths: body.paths } : {}),
           ...(body.textExtensions ? { textExtensions: body.textExtensions } : {}),
         },
@@ -981,7 +1018,7 @@ or {"mode":"tool","framework":null}`;
                 },
               }
             : {}),
-        },
+        }
       );
       return c.json(result);
     } catch (err) {
@@ -1020,7 +1057,7 @@ or {"mode":"tool","framework":null}`;
       return c.json({ error: "KV backend does not support delete" }, 501);
     }
     const list = await kv.list({ prefix: "file:" });
-    await Promise.all(list.keys.map((k) => kv.delete!(k.name)));
+    await Promise.all(list.keys.map((k) => kv.delete?.(k.name)));
     // Also reset the in-memory file tree (and version history) for this
     // session — otherwise stale versions linger after a workspace wipe.
     sessionFileTrees.delete(sessionIdOf(c));
@@ -1081,6 +1118,29 @@ or {"mode":"tool","framework":null}`;
       useOtel = false,
     } = body;
 
+    // ── C1 — SSE resume fast-path ─────────────────────────────────────────
+    // When the client supplies a `resumeTraceId` (last response's
+    // X-Agentkit-Trace-Id) AND a `Last-Event-ID` header AND we have a
+    // persistence backend, we *only* replay the missing tail. We never
+    // start a second agent for the same trace — that would burn tokens
+    // and produce duplicate side-effects (file writes, PR pushes, …).
+    //
+    // If `checkpointsKv` is unbound the resume signal is silently
+    // ignored and the request falls through to a fresh run; the client
+    // already learned its previous events, so the cost is at most one
+    // duplicate run, never event loss.
+    const resumeTraceId = body.resumeTraceId;
+    const lastEventIdHeader = c.req.header("Last-Event-ID");
+    if (resumeTraceId && config.checkpointsKv) {
+      return streamResumeReplay(
+        adaptKvStoreToBackend(config.checkpointsKv),
+        resumeTraceId,
+        lastEventIdHeader ?? null,
+        config,
+        c.req.header("Origin")
+      );
+    }
+
     // ── Input validation ─────────────────────────────────────────────────────
     // Validate `agentMode` and `modelId` upfront so callers get a synchronous
     // 400 instead of a streaming-then-failing SSE. The model gateway returns
@@ -1094,7 +1154,10 @@ or {"mode":"tool","framework":null}`;
     if (agentMode && !VALID_MODES.has(agentMode)) {
       return c.json({ error: `agentMode must be one of: ${[...VALID_MODES].join(", ")}` }, 400);
     }
-    if (modelId !== undefined && (typeof modelId !== "string" || modelId.length === 0 || modelId.length > 200)) {
+    if (
+      modelId !== undefined &&
+      (typeof modelId !== "string" || modelId.length === 0 || modelId.length > 200)
+    ) {
       return c.json({ error: "modelId must be a non-empty string under 200 chars" }, 400);
     }
 
@@ -1103,17 +1166,27 @@ or {"mode":"tool","framework":null}`;
     // ── Session cache pre-check (fast path, avoids spawning agent) ──────────
     // Only attempt when sessionsKv is available — resolve modelId for hash.
     const sessionsKv = sessionId
-      ? config.sessionsKv ? new SessionKvStore(config.sessionsKv, sessionId) : config.sessionsKv
+      ? config.sessionsKv
+        ? new SessionKvStore(config.sessionsKv, sessionId)
+        : config.sessionsKv
       : config.sessionsKv;
 
     if (sessionsKv) {
       // Resolve model just enough to compute the cache key (no expensive init).
       const store = getModelStore(config);
       const primaryModelForHash = await resolveModelFromRegistry(modelId, config, store);
-      const resolvedModelId = primaryModelForHash ? getModelId(primaryModelForHash) : (modelId ?? "unknown");
+      const resolvedModelId = primaryModelForHash
+        ? getModelId(primaryModelForHash)
+        : (modelId ?? "unknown");
       const kvKey = await contentHash({
-        task, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement,
-        ...((((body as unknown) as Record<string, unknown>)._testRunId) ? { _r: ((body as unknown) as Record<string, unknown>)._testRunId } : {}),
+        task,
+        agentMode,
+        maxSteps: clampedSteps,
+        modelId: resolvedModelId,
+        enhancement,
+        ...((body as unknown as Record<string, unknown>)._testRunId
+          ? { _r: (body as unknown as Record<string, unknown>)._testRunId }
+          : {}),
       });
       const cached = await sessionsKv.get(kvKey);
       if (cached) return streamCachedEvents(cached);
@@ -1125,6 +1198,14 @@ or {"mode":"tool","framework":null}`;
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
+
+    // C1 — Per-run trace id surfaces in the response header so the client
+    // can echo it back as `resumeTraceId` if the connection drops. It is
+    // also used as the EventLog key when checkpointsKv is bound.
+    const runTraceId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const eventLog = config.checkpointsKv
+      ? new EventLog(adaptKvStoreToBackend(config.checkpointsKv))
+      : null;
 
     (async () => {
       // Flush headers + first byte immediately so Chrome doesn't time out.
@@ -1153,9 +1234,10 @@ or {"mode":"tool","framework":null}`;
         if (projectContext) {
           // Use the per-session FileTreeManager (richer than KV listing — has hashes for conflict detection).
           const sessionTree = sessionFileTrees.get(sessionId ?? "default");
-          const fileTree = sessionTree && sessionTree.size > 0
-            ? sessionTree.formatForPrompt(60)
-            : await buildProjectFileTree(filesKv);
+          const fileTree =
+            sessionTree && sessionTree.size > 0
+              ? sessionTree.formatForPrompt(60)
+              : await buildProjectFileTree(filesKv);
           const ctxParts: string[] = ["## Project Files\n" + fileTree];
 
           // Relevance filtering: include content of files that match task keywords
@@ -1165,7 +1247,9 @@ or {"mode":"tool","framework":null}`;
             if (relevantFiles.length > 0) {
               ctxParts.push(
                 "## Relevant File Contents\n" +
-                relevantFiles.map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 800)}\n\`\`\``).join("\n\n")
+                  relevantFiles
+                    .map((f) => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 800)}\n\`\`\``)
+                    .join("\n\n")
               );
             }
           }
@@ -1184,16 +1268,25 @@ or {"mode":"tool","framework":null}`;
           finalTask = `${ctxParts.join("\n\n")}\n\n---\n\n${task}`;
         }
 
-        const tools = buildTools(filesKv, useMemory, config, [
-          ...(guardrails?.deniedTools ?? []),
-          // Framework mode: block run_command and git tools — WebContainers handles execution
-          ...(body.framework ? ["run_command", "git_status", "git_diff", "git_log", "git_commit", "git_checkout"] : []),
-        ], fileTreeFor(c), indexerFor(c), sessionId, Boolean(body.framework));
+        const tools = buildTools(
+          filesKv,
+          useMemory,
+          config,
+          [
+            ...(guardrails?.deniedTools ?? []),
+            // Framework mode: block run_command and git tools — WebContainers handles execution
+            ...(body.framework
+              ? ["run_command", "git_status", "git_diff", "git_log", "git_commit", "git_checkout"]
+              : []),
+          ],
+          fileTreeFor(c),
+          indexerFor(c),
+          sessionId,
+          Boolean(body.framework)
+        );
         // B4 — wrap write tools with the configured approval policy.
         const approvalPolicy = resolveApprovalPolicy(body.approvalPolicy);
-        const policedTools = approvalPolicy
-          ? applyApprovalPolicy(approvalPolicy, tools)
-          : tools;
+        const policedTools = approvalPolicy ? applyApprovalPolicy(approvalPolicy, tools) : tools;
         const inputGuardrails = buildInputGuardrails(guardrails);
         const outputGuardrails = buildOutputGuardrails(guardrails);
         // Merge resource budget from request into enhancementPolicy
@@ -1232,25 +1325,38 @@ or {"mode":"tool","framework":null}`;
         // enhancementPolicy takes precedence when both are provided.
         const policy = body.enhancementPolicy;
         const useParallelFork = policy?.parallelForkJoin?.enabled;
-        const useSelfConsistency = policy?.selfConsistency?.enabled ?? (enhancement === "self-consistency");
-        const useReflectRefine = policy?.reflectRefine?.enabled ?? (enhancement === "reflect-refine");
-        const useBudgetForcing = policy?.budgetForcing?.enabled ?? (enhancement === "budget-forcing");
+        const useSelfConsistency =
+          policy?.selfConsistency?.enabled ?? enhancement === "self-consistency";
+        const useReflectRefine = policy?.reflectRefine?.enabled ?? enhancement === "reflect-refine";
+        const useBudgetForcing = policy?.budgetForcing?.enabled ?? enhancement === "budget-forcing";
 
         if (useSelfConsistency) {
           const n = policy?.selfConsistency?.n ?? 3;
           const threshold = policy?.selfConsistency?.earlyStopThreshold ?? 0.67;
-          agentRun = enhancedAgentRun(model, new SelfConsistencyRunner({ n, earlyStopThreshold: threshold }), finalTask);
+          agentRun = enhancedAgentRun(
+            model,
+            new SelfConsistencyRunner({ n, earlyStopThreshold: threshold }),
+            finalTask
+          );
         } else if (useReflectRefine) {
           const maxCycles = policy?.reflectRefine?.maxCycles ?? 2;
           agentRun = enhancedAgentRun(model, new ReflectRefineRunner({ maxCycles }), finalTask);
         } else if (useBudgetForcing) {
-          agentRun = enhancedAgentRun(model, new BudgetForcingRunner({ maxWaitRounds: 2 }), finalTask);
+          agentRun = enhancedAgentRun(
+            model,
+            new BudgetForcingRunner({ maxWaitRounds: 2 }),
+            finalTask
+          );
         } else if (useParallelFork) {
           const { ParallelForkJoinRunner } = await import("@agentkit-js/core");
           const branches = policy?.parallelForkJoin?.branches ?? 3;
           const concurrency = policy?.parallelForkJoin?.concurrency ?? 2;
           const aggregation = policy?.parallelForkJoin?.aggregation ?? "summary";
-          agentRun = enhancedAgentRun(model, new ParallelForkJoinRunner({ branches, concurrency, aggregation }), finalTask);
+          agentRun = enhancedAgentRun(
+            model,
+            new ParallelForkJoinRunner({ branches, concurrency, aggregation }),
+            finalTask
+          );
         } else if (agentMode === "multi") {
           // B4 resume path — when the client posts a humanResponse + checkpointId
           // we treat this as the second half of a planFirst flow: restore the
@@ -1277,14 +1383,18 @@ or {"mode":"tool","framework":null}`;
               snapshot.task,
               planText,
               body.humanResponse.response,
-              { maxSteps: agentExtras.maxSteps },
+              { maxSteps: agentExtras.maxSteps }
             );
           } else {
             const multiAgentExtras: Parameters<typeof multiAgentRun>[3] = {
               maxSteps: agentExtras.maxSteps,
               ...(body.multiAgentMode ? { mode: body.multiAgentMode } : {}),
-              ...(body.multiAgentBranches !== undefined ? { branches: body.multiAgentBranches } : {}),
-              ...(body.multiAgentConcurrency !== undefined ? { concurrency: body.multiAgentConcurrency } : {}),
+              ...(body.multiAgentBranches !== undefined
+                ? { branches: body.multiAgentBranches }
+                : {}),
+              ...(body.multiAgentConcurrency !== undefined
+                ? { concurrency: body.multiAgentConcurrency }
+                : {}),
             };
             const baseRun = multiAgentRun(model, policedTools, finalTask, multiAgentExtras);
             // planFirst suspends mid-stream via await_human_input — wrap with
@@ -1301,7 +1411,7 @@ or {"mode":"tool","framework":null}`;
               planAssembler.addStep({ type: "user_message", content: finalTask });
               const cpRun = new CheckpointableRun(
                 { checkpointer: checkpointerFor(config) },
-                planAssembler,
+                planAssembler
               );
               agentRun = cpRun.run(baseRun, finalTask, cpTraceId);
             } else {
@@ -1314,7 +1424,11 @@ or {"mode":"tool","framework":null}`;
           const agent =
             agentMode === "tool"
               ? createToolAgent(model, policedTools, agentExtras)
-              : createCodeAgent(model, policedTools, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
+              : createCodeAgent(model, policedTools, {
+                  ...agentExtras,
+                  codeLanguage,
+                  e2bApiKey: config.e2bApiKey,
+                });
 
           // Inject conversation history as prior user_message + assistant steps
           // so the agent has multi-turn context within its MessageAssembler.
@@ -1360,41 +1474,91 @@ or {"mode":"tool","framework":null}`;
         const resolvedModelId = getModelId(model);
         const kvKey = sessionsKv
           ? await contentHash({
-              task: finalTask, agentMode, maxSteps: clampedSteps, modelId: resolvedModelId, enhancement,
-              ...((((body as unknown) as Record<string, unknown>)._testRunId) ? { _r: ((body as unknown) as Record<string, unknown>)._testRunId } : {}),
+              task: finalTask,
+              agentMode,
+              maxSteps: clampedSteps,
+              modelId: resolvedModelId,
+              enhancement,
+              ...((body as unknown as Record<string, unknown>)._testRunId
+                ? { _r: (body as unknown as Record<string, unknown>)._testRunId }
+                : {}),
             })
           : null;
 
-        // Stream live events
+        // Stream live events. When `eventLog` is bound, we tap the agent
+        // generator so every event is persisted under `evlog:<runTraceId>:`
+        // before it leaves the writer; SSE frames carry the matching `id:`
+        // line via formatSseFrame() so a reconnecting client can resume
+        // exactly past the last id it saw.
         const allEvents: AgentEvent[] = [];
         let success = false;
-        for await (const event of agentRun) {
-          await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-          if (kvKey && sessionsKv && (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS))
-            allEvents.push(event);
-          if (event.event === "final_answer") success = true;
+        if (eventLog) {
+          for await (const logged of eventLog.tap(agentRun, runTraceId)) {
+            await writer.write(encoder.encode(formatSseFrame(logged)));
+            const event = logged.event;
+            if (
+              kvKey &&
+              sessionsKv &&
+              (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS)
+            )
+              allEvents.push(event);
+            if (event.event === "final_answer") success = true;
+          }
+        } else {
+          // No checkpointsKv bound — keep the original best-effort path.
+          // Clients still get every event live; only resume is unavailable.
+          for await (const event of agentRun) {
+            await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            if (
+              kvKey &&
+              sessionsKv &&
+              (event.event === "final_answer" || allEvents.length < MAX_KV_EVENTS)
+            )
+              allEvents.push(event);
+            if (event.event === "final_answer") success = true;
+          }
         }
         await writer.write(encoder.encode("data: [DONE]\n\n"));
         if (kvKey && sessionsKv && success)
-          await sessionsKv.put(kvKey, JSON.stringify(allEvents), { expirationTtl: SESSION_TTL }).catch(console.error);
+          await sessionsKv
+            .put(kvKey, JSON.stringify(allEvents), { expirationTtl: SESSION_TTL })
+            .catch(console.error);
 
+        // Successful completion → purge the persisted EventLog. Resume only
+        // makes sense for in-flight runs; a finished run has nothing left
+        // to deliver, and leaving the entries around grows KV unboundedly.
+        if (eventLog && success) {
+          eventLog.purge(runTraceId).catch(() => {
+            /* best-effort cleanup */
+          });
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        const stack = err instanceof Error && err.stack ? err.stack.split("\n").slice(0, 4).join("\n") : undefined;
+        const stack =
+          err instanceof Error && err.stack
+            ? err.stack.split("\n").slice(0, 4).join("\n")
+            : undefined;
         recordError(msg, stack);
+        // The error frame is a terminal event — clients stop after seeing
+        // it, so it does not need an EventLog id to enable resume. Write
+        // the bare data frame and let the resumed client (if any) replay
+        // up to whatever was persisted before the throw.
         await writer.write(
-          encoder.encode(`data: ${JSON.stringify({ event: "error", data: { error: msg, ...(stack ? { stack } : {}) } })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({ event: "error", data: { error: msg, ...(stack ? { stack } : {}) } })}\n\n`
+          )
         );
       } finally {
         await writer.close().catch(() => {});
       }
     })();
 
-    const allowOrigin = (config.allowedOrigin ?? "*") === "*"
-      ? "*"
-      : (c.req.header("Origin") ?? "") === config.allowedOrigin
-        ? config.allowedOrigin!
-        : "null";
+    const allowOrigin =
+      (config.allowedOrigin ?? "*") === "*"
+        ? "*"
+        : (c.req.header("Origin") ?? "") === config.allowedOrigin
+          ? (config.allowedOrigin ?? "null")
+          : "null";
 
     return new Response(readable, {
       headers: {
@@ -1403,6 +1567,11 @@ or {"mode":"tool","framework":null}`;
         "X-Accel-Buffering": "no",
         "Access-Control-Allow-Origin": allowOrigin,
         "Access-Control-Allow-Private-Network": "true",
+        // C1 — surface the trace id so the client can echo it back as
+        // `resumeTraceId` on reconnect. Must be in expose-headers so a
+        // CORS request can read it from JS.
+        "X-Agentkit-Trace-Id": runTraceId,
+        "Access-Control-Expose-Headers": "X-Agentkit-Trace-Id",
       },
     });
   });
@@ -1540,6 +1709,20 @@ interface RunBody {
    */
   outputJsonSchema?: Record<string, unknown>;
   outputSchemaRetries?: number;
+
+  // ── C1 — SSE Last-Event-ID resume ─────────────────────────────────────────
+  /**
+   * Trace id from a previous /run response (header `X-Agentkit-Trace-Id`).
+   * When set together with the `Last-Event-ID` request header, the worker
+   * skips starting a new agent and instead replays the persisted EventLog
+   * for that trace, delivering only entries with id > Last-Event-ID. This
+   * lets a client survive a worker recycle, a network blip, or a tab
+   * reload mid-run without losing events or duplicating them.
+   *
+   * Requires `checkpointsKv` to be bound — otherwise the worker has no
+   * place to read the persisted log from and falls back to a fresh run.
+   */
+  resumeTraceId?: string;
 }
 
 function getModelId(model: Model): string {
@@ -1597,7 +1780,7 @@ function buildTools(
   // B2 — session id for the build-result reverse channel. Optional so
   // out-of-band paths (eg /eval) can keep calling buildTools unchanged.
   sessionId?: string,
-  isFramework?: boolean,
+  isFramework?: boolean
 ): ToolDefinition[] {
   const shellRunner = createShellRunner(config);
   const tools: ToolDefinition[] = [
@@ -1616,9 +1799,7 @@ function buildTools(
   // browser is the only execution surface. Outside framework mode the
   // agent has run_command, so the build-result channel is redundant.
   if (isFramework && sessionId) {
-    tools.push(
-      createReadBuildResultTool({ sessionId, kv: config.buildResultsKv }),
-    );
+    tools.push(createReadBuildResultTool({ sessionId, kv: config.buildResultsKv }));
   }
   // B2 — semantic search registered when an indexer is present.
   if (indexer) tools.push(createSemanticSearchTool(indexer));
@@ -1690,7 +1871,11 @@ function buildOutputGuardrails(guardrails?: RunBody["guardrails"]) {
 
 async function* enhancedAgentRun(
   model: Model,
-  runner: SelfConsistencyRunner | ReflectRefineRunner | BudgetForcingRunner | ParallelForkJoinRunner,
+  runner:
+    | SelfConsistencyRunner
+    | ReflectRefineRunner
+    | BudgetForcingRunner
+    | ParallelForkJoinRunner,
   task: string
 ): AsyncGenerator<AgentEvent> {
   const traceId = `enhanced-${Date.now()}`;
@@ -1814,7 +1999,7 @@ Respond with ONLY a JS code block.`;
   }
 }
 
-function agentEventStream(
+function _agentEventStream(
   run: AsyncGenerator<AgentEvent>,
   kvKey: string | null,
   sessionsKv: KvStore | undefined
@@ -1888,6 +2073,75 @@ function streamCachedEvents(cachedJson: string): Response {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       "X-Bscode-Cache": "HIT",
+    },
+  });
+}
+
+/**
+ * C1 — Replay-only response for an SSE reconnect.
+ *
+ * Reads persisted events from the EventLog under `runTraceId`, skips
+ * everything ≤ `lastEventId` (the value the client received in the
+ * `Last-Event-ID` request header), and streams the remainder using
+ * canonical SSE frames (id: + data:). Always finishes with `data: [DONE]`
+ * so the client transitions back to "complete" or "interrupted" state
+ * deterministically.
+ *
+ * If the trace has no persisted entries (purged / never existed) we
+ * still send `[DONE]` — better than hanging the client forever. The
+ * client distinguishes "all caught up" from "trace unknown" by the
+ * absence of the X-Agentkit-Trace-Id echo (we don't set it on resume).
+ */
+function streamResumeReplay(
+  kv: ReturnType<typeof adaptKvStoreToBackend>,
+  runTraceId: string,
+  lastEventId: string | null,
+  config: AppConfig,
+  origin: string | undefined
+): Response {
+  const log = new EventLog(kv);
+  const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+
+  (async () => {
+    // Flush headers immediately — same rationale as the live /run path.
+    await writer.write(encoder.encode(": resume\n\n"));
+    try {
+      for await (const logged of log.replay(runTraceId, lastEventId)) {
+        await writer.write(encoder.encode(formatSseFrame(logged)));
+      }
+      await writer.write(encoder.encode("data: [DONE]\n\n"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await writer.write(
+        encoder.encode(
+          `data: ${JSON.stringify({ event: "error", data: { error: `resume failed: ${msg}` } })}\n\n`
+        )
+      );
+    } finally {
+      await writer.close().catch(() => {});
+    }
+  })();
+
+  const allowOrigin =
+    (config.allowedOrigin ?? "*") === "*"
+      ? "*"
+      : (origin ?? "") === config.allowedOrigin
+        ? (config.allowedOrigin ?? "null")
+        : "null";
+
+  return new Response(readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+      "Access-Control-Allow-Origin": allowOrigin,
+      "Access-Control-Allow-Private-Network": "true",
+      // Echo the trace id so the client confirms we accepted the resume.
+      "X-Agentkit-Trace-Id": runTraceId,
+      "X-Bscode-Resume": "1",
+      "Access-Control-Expose-Headers": "X-Agentkit-Trace-Id, X-Bscode-Resume",
     },
   });
 }

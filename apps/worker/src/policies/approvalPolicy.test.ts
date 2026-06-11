@@ -11,21 +11,22 @@
  *   - presets behave as advertised
  */
 
-import { z } from "zod";
-import { describe, expect, it } from "vitest";
 import type { ToolDefinition } from "@agentkit-js/core";
-import {
-  applyApprovalPolicy,
-  ApprovalPolicy,
-  PolicyPresets,
-} from "./approvalPolicy.js";
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { ApprovalPolicy, applyApprovalPolicy, PolicyPresets } from "./approvalPolicy.js";
 
 function fakeTool(name: string, hasInput: boolean): ToolDefinition {
   return {
     name,
     description: `fake ${name}`,
     inputSchema: hasInput
-      ? z.object({ path: z.string(), content: z.string().optional(), patch: z.string().optional(), from: z.string().optional() })
+      ? z.object({
+          path: z.string(),
+          content: z.string().optional(),
+          patch: z.string().optional(),
+          from: z.string().optional(),
+        })
       : z.object({}),
     outputSchema: z.string(),
     readOnly: false,
@@ -79,9 +80,7 @@ describe("ApprovalPolicy", () => {
   it("minSizeChars gates large writes", () => {
     const policy = new ApprovalPolicy({
       defaultVerdict: "allow",
-      rules: [
-        { id: "big-writes", match: { op: "write", minSizeChars: 1000 }, verdict: "require" },
-      ],
+      rules: [{ id: "big-writes", match: { op: "write", minSizeChars: 1000 }, verdict: "require" }],
     });
     expect(policy.needsApproval({ op: "write", path: "x", sizeChars: 500 })).toBe(false);
     expect(policy.needsApproval({ op: "write", path: "x", sizeChars: 5000 })).toBe(true);
@@ -105,10 +104,7 @@ describe("ApprovalPolicy", () => {
 
 describe("applyApprovalPolicy", () => {
   it("wraps write_file with a policy-driven needsApproval", () => {
-    const tools = [
-      fakeTool("write_file", true),
-      fakeTool("read_file", true),
-    ];
+    const tools = [fakeTool("write_file", true), fakeTool("read_file", true)];
     const policy = new ApprovalPolicy({
       defaultVerdict: "allow",
       rules: [{ id: "block-env", match: { paths: [".env"] }, verdict: "require" }],
@@ -147,7 +143,9 @@ describe("applyApprovalPolicy", () => {
     const del = wrapped.find((t) => t.name === "delete_file");
     const ren = wrapped.find((t) => t.name === "rename_file");
     expect((del?.needsApproval as (i: { path: string }) => boolean)({ path: "x" })).toBe(true);
-    expect((ren?.needsApproval as (i: { from: string; to: string }) => boolean)({ from: "a", to: "b" })).toBe(true);
+    expect(
+      (ren?.needsApproval as (i: { from: string; to: string }) => boolean)({ from: "a", to: "b" })
+    ).toBe(true);
   });
 });
 

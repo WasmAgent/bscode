@@ -24,13 +24,19 @@ export function useGitHub() {
 
   // Fetch user profile whenever token changes
   useEffect(() => {
-    if (!token) { setUser(null); return; }
+    if (!token) {
+      setUser(null);
+      return;
+    }
     fetch("https://api.github.com/user", {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
     })
       .then((r) => r.json())
       .then((u: GitHubUser) => setUser(u))
-      .catch(() => { setToken(null); localStorage.removeItem(GH_TOKEN_KEY); });
+      .catch(() => {
+        setToken(null);
+        localStorage.removeItem(GH_TOKEN_KEY);
+      });
   }, [token]);
 
   // Read token from URL fragment after OAuth redirect
@@ -90,7 +96,9 @@ export function useGitHub() {
             try {
               const pkg = JSON.parse(pkgFile.content) as { name?: string };
               name = pkg.name?.replace(/[^a-z0-9-]/g, "-") || undefined;
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           }
           name = name || `bscode-project-${Date.now().toString(36)}`;
         }

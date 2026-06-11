@@ -63,7 +63,7 @@ export async function* multiAgentRun(
   model: Model,
   tools: ToolDefinition[],
   task: string,
-  extras: MultiAgentExtras = {},
+  extras: MultiAgentExtras = {}
 ): AsyncGenerator<AgentEvent> {
   const mode = extras.mode ?? "parallel";
   if (mode === "planFirst") {
@@ -79,7 +79,7 @@ async function* runParallel(
   model: Model,
   tools: ToolDefinition[],
   task: string,
-  extras: MultiAgentExtras,
+  extras: MultiAgentExtras
 ): AsyncGenerator<AgentEvent> {
   const traceId = `multi-parallel-${Date.now()}`;
   const base = { traceId, parentTraceId: null, timestampMs: Date.now() } as const;
@@ -148,9 +148,9 @@ async function* runParallel(
 
 async function* runPlanFirst(
   model: Model,
-  tools: ToolDefinition[],
+  _tools: ToolDefinition[],
   task: string,
-  extras: MultiAgentExtras,
+  extras: MultiAgentExtras
 ): AsyncGenerator<AgentEvent> {
   const traceId = `multi-planfirst-${Date.now()}`;
   const base = () => ({
@@ -243,7 +243,7 @@ export async function* runPlanFirstExecution(
   task: string,
   plan: string,
   approvalResponse: string,
-  extras: { maxSteps?: number } = {},
+  extras: { maxSteps?: number } = {}
 ): AsyncGenerator<AgentEvent> {
   const traceId = `multi-planfirst-exec-${Date.now()}`;
   yield {

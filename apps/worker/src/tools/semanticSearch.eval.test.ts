@@ -82,7 +82,10 @@ const TOPICS = [
       "Structured logger producing JSON lines with severity, timestamp, " +
       "and trace id. Wraps pino with a redactor for PII fields like email and SSN.",
     others: [
-      ["src/observability/redact.ts", "Recursive object walker that replaces matched keys with [REDACTED]"],
+      [
+        "src/observability/redact.ts",
+        "Recursive object walker that replaces matched keys with [REDACTED]",
+      ],
       ["src/observability/transport.ts", "OTLP HTTP exporter for log shipping"],
       ["src/observability/test.spec.ts", "Snapshot tests for the redaction walker"],
       ["src/observability/types.ts", "LogLevel union; LogContext shape"],
@@ -173,12 +176,21 @@ const QUERIES: Query[] = [
   { query: "user login flow with bearer tokens", expectedPath: "src/auth/credentials.ts" },
   { query: "shopping cart subtotal and tax computation", expectedPath: "src/checkout/basket.ts" },
   { query: "send transactional confirmation email via SMTP", expectedPath: "src/notify/mailer.ts" },
-  { query: "structured JSON log lines with PII redaction", expectedPath: "src/observability/logger.ts" },
+  {
+    query: "structured JSON log lines with PII redaction",
+    expectedPath: "src/observability/logger.ts",
+  },
   { query: "per-IP request throttling with Redis", expectedPath: "src/middleware/throttle.ts" },
   { query: "resumable large file upload to S3", expectedPath: "src/storage/uploader.ts" },
   { query: "Stripe payment webhook subscription update", expectedPath: "src/payments/stripe.ts" },
-  { query: "autocomplete dropdown component with keyboard navigation", expectedPath: "src/ui/typeahead.tsx" },
-  { query: "translation and pluralization message format", expectedPath: "src/locale/translator.ts" },
+  {
+    query: "autocomplete dropdown component with keyboard navigation",
+    expectedPath: "src/ui/typeahead.tsx",
+  },
+  {
+    query: "translation and pluralization message format",
+    expectedPath: "src/locale/translator.ts",
+  },
   { query: "scheduled background tasks with leader election", expectedPath: "src/jobs/cron.ts" },
 ];
 
@@ -186,7 +198,8 @@ function buildCorpus(): Doc[] {
   const out: Doc[] = [];
   for (const t of TOPICS) {
     out.push({ path: t.canonical, content: t.canonicalContent });
-    for (const [path, content] of t.others) out.push({ path: path as string, content: content as string });
+    for (const [path, content] of t.others)
+      out.push({ path: path as string, content: content as string });
   }
   return out;
 }

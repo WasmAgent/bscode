@@ -104,12 +104,14 @@ export function DiffViewer({
         setVersions(list);
         // Default to second-newest (so the diff has content), or first if only one
         if (selectedVersion === null && list.length > 0) {
-          setSelectedVersion(list[Math.max(0, list.length - 2)]?.version ?? list[0]?.version ?? null);
+          setSelectedVersion(
+            list[Math.max(0, list.length - 2)]?.version ?? list[0]?.version ?? null
+          );
         }
       })
       .catch((e) => setError(String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workerUrl, sessionId, path]);
+  }, [workerUrl, sessionId, path, selectedVersion]);
 
   // Fetch the selected version's content when it changes.
   useEffect(() => {
@@ -166,7 +168,12 @@ export function DiffViewer({
           )}
           {loading && <span style={{ color: "#e3b341", fontSize: 11 }}>● loading</span>}
           {error && <span style={{ color: "#f85149", fontSize: 11 }}>● {error}</span>}
-          <button type="button" style={BTN} onClick={handleRevert} disabled={selectedVersion === null}>
+          <button
+            type="button"
+            style={BTN}
+            onClick={handleRevert}
+            disabled={selectedVersion === null}
+          >
             Revert to selected
           </button>
           {onClose && (

@@ -21,13 +21,7 @@
  */
 
 import type { AgentEvent } from "@agentkit-js/core";
-import type {
-  JobQueueOptions,
-  JobRecord,
-  JobRunner,
-  JobSpec,
-  JobStatus,
-} from "./types.js";
+import type { JobQueueOptions, JobRecord, JobRunner, JobSpec, JobStatus } from "./types.js";
 
 interface JobState {
   id: string;
@@ -187,7 +181,7 @@ export class JobQueue {
       const id = this.#pending.shift();
       if (id === undefined) break;
       const state = this.#jobs.get(id);
-      if (!state || state.status !== "queued") continue;
+      if (state?.status !== "queued") continue;
       this.#running += 1;
       const promise = this.#runOne(state, runner);
       if (this.#waitUntil) this.#waitUntil(promise);
@@ -237,11 +231,9 @@ export class JobQueue {
     if (!this.#durableKv) return;
     if (state.status !== "done" && state.status !== "failed" && state.status !== "aborted") return;
     try {
-      await this.#durableKv.put(
-        `job:${state.id}`,
-        JSON.stringify(this.#snapshot(state)),
-        { expirationTtl: DURABLE_TTL_SECONDS },
-      );
+      await this.#durableKv.put(`job:${state.id}`, JSON.stringify(this.#snapshot(state)), {
+        expirationTtl: DURABLE_TTL_SECONDS,
+      });
     } catch (err) {
       console.warn("[jobs] durable mirror failed:", err);
     }
@@ -268,7 +260,9 @@ export class JobQueue {
     for (const state of this.#jobs.values()) {
       try {
         state.controller.abort();
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     this.#jobs.clear();
     this.#pending.length = 0;

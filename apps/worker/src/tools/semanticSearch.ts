@@ -18,11 +18,7 @@
  */
 
 import type { Embedder, Retriever, ToolDefinition } from "@agentkit-js/core";
-import {
-  InMemoryVectorStore,
-  KvBackendVectorStore,
-  type KvBackend,
-} from "@agentkit-js/core";
+import { InMemoryVectorStore, type KvBackend, KvBackendVectorStore } from "@agentkit-js/core";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
 
@@ -106,9 +102,7 @@ export function createSemanticIndexer(opts: SemanticIndexerOptions = {}): Semant
         opts.prefix ?? "rag:"
       );
     }
-    return opts.embedder
-      ? new InMemoryVectorStore(opts.embedder)
-      : new InMemoryVectorStore();
+    return opts.embedder ? new InMemoryVectorStore(opts.embedder) : new InMemoryVectorStore();
   }
   retriever = makeRetriever();
 
@@ -174,12 +168,7 @@ export function createSemanticSearchTool(
       // Use .min(1) instead of .positive(): zod-to-json-schema's openApi3 target
       // emits draft-04-style `exclusiveMinimum: true` for .positive(), which
       // Anthropic's draft 2020-12 validator rejects with "JSON schema is invalid".
-      topK: z
-        .number()
-        .int()
-        .min(1)
-        .optional()
-        .describe("Number of results (default 5)"),
+      topK: z.number().int().min(1).optional().describe("Number of results (default 5)"),
     }),
     outputSchema: z.object({
       results: z.array(
