@@ -49,7 +49,13 @@ export function createWebSearchTool(): ToolDefinition<
           headers: { "User-Agent": "bscode/1.0 (+https://github.com/WasmAgent/bscode)" },
           signal: AbortSignal.timeout(8_000),
         });
-        if (!resp.ok) return `(search unavailable: HTTP ${resp.status})`;
+        if (!resp.ok) {
+          return (
+            `Search backend unavailable (HTTP ${resp.status}). ` +
+            `Try answering from your existing knowledge instead — do NOT retry web_search ` +
+            `for the same or similar query in this run.`
+          );
+        }
 
         const data = (await resp.json()) as DdgResponse;
         const results: string[] = [];
@@ -77,7 +83,15 @@ export function createWebSearchTool(): ToolDefinition<
 
         return `Search results for "${query}":\n\n${results.slice(0, maxResults).join("\n\n---\n\n")}`;
       } catch (err) {
-        return `(search unavailable: ${err instanceof Error ? err.message : String(err)})`;
+        const msg = err instanceof Error ? err.message : String(err);
+        // Make the error actionable so the agent doesn't loop on it.
+        // Without the explicit "do NOT retry" the agent treats every
+        // failure as transient and burns tokens on identical retries.
+        const hint =
+          msg.includes("socket") || msg.includes("ENOTFOUND") || msg.includes("timeout")
+            ? "Network is unavailable from the worker — answer from your existing knowledge instead. Do NOT retry web_search for the same or similar query in this run."
+            : "Try a different query or proceed without web search.";
+        return `Search backend unavailable (${msg}). ${hint}`;
       }
     },
   };

@@ -330,7 +330,15 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   // ── Final answer → preview ─────────────────────────────────────────────────
   useEffect(() => {
     if (!finalAnswer) return;
-    const htmlFenced = /```(?:html)?\n([\s\S]+?)```/.exec(finalAnswer)?.[1];
+    // Only treat the final answer as HTML if it's:
+    //   (a) a complete HTML document (<!DOCTYPE / <html>), OR
+    //   (b) wrapped in an EXPLICIT ```html ... ``` fence (lang=html required).
+    // The earlier regex used (?:html)? which made the language optional, so a
+    // `card:markdown` block (which contains its OWN nested ``` fences) would
+    // be mistakenly extracted as HTML and rendered as plain text in the
+    // iframe — see the chromedev regression for the "raw markdown in
+    // preview" finding.
+    const htmlFenced = /```html\n([\s\S]+?)```/.exec(finalAnswer)?.[1];
     const isHtmlDoc = /<(!DOCTYPE|html)\b/i.test(finalAnswer);
     const htmlContent = htmlFenced ?? (isHtmlDoc ? finalAnswer : null);
     if (htmlContent) {
