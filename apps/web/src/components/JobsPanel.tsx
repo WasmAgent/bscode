@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getWorkerUrl } from "@/lib/workerUrl";
 
 interface JobRecord {
   id: string;
@@ -60,7 +61,7 @@ export interface JobsPanelProps {
 }
 
 export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
-  const base = workerUrl ?? process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+  const base = workerUrl ?? getWorkerUrl();
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [stats, setStats] = useState<ListResponse["stats"]>({
     running: 0, pending: 0, total: 0,

@@ -9,6 +9,7 @@ import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgen
 import { useGitHub } from "@/hooks/useGitHub";
 import { useImport } from "@/hooks/useImport";
 import { toFileSystemTree, useWebContainer } from "@/hooks/useWebContainer";
+import { getWorkerUrl } from "@/lib/workerUrl";
 import { parseCardBlocks } from "@agentkit-js/ui-cards";
 import type { CardBlock } from "@agentkit-js/ui-cards";
 import { upgradeCardSyntax } from "@agentkit-js/ui-cards";
@@ -85,6 +86,14 @@ const iconBtn = (color = theme.textMuted): React.CSSProperties => ({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function Home() {
+  // Hydrate from localStorage on the first render. The `bscode:modelPreference`
+  // key is owned by SettingsDrawer; reading it here keeps the header dropdown
+  // in sync with whatever the user picked there, even after a reload.
+  // We MUST guard against SSR — Next.js renders this on the server first and
+  // `localStorage` is not defined there. Returning the static default for the
+  // server pass and the persisted value for the client pass would mismatch
+  // hydration; instead we always start from the static default and override
+  // in a useEffect once we know we're on the client.
   const [config, setConfig] = useState<AgentConfig>({
     agentMode: "tool",
     modelId: "claude-sonnet-4-6",
@@ -95,6 +104,17 @@ export default function Home() {
     framework: null,
     autoMode: true,
   });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("bscode:modelPreference");
+      if (saved && saved !== "claude-sonnet-4-6") {
+        setConfig((c) => ({ ...c, modelId: saved }));
+      }
+    } catch {
+      // localStorage may throw in strict privacy modes; fall through to default.
+    }
+  }, []);
 
   // Chat history
   const [turns, setTurns] = useState<ConversationTurn[]>([]);
@@ -278,7 +298,7 @@ export default function Home() {
     const wasRunning = prevIsFrameworkRunning.current;
     prevIsFrameworkRunning.current = isRunning && !!config.framework;
     if (wasRunning && !isRunning && config.framework) {
-      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+      const workerUrl = getWorkerUrl();
       setPreviewView("preview");
       addToast("Mounting files into WebContainers…", "info");
       fetch(`${workerUrl}/files/bulk`)
@@ -306,7 +326,7 @@ export default function Home() {
       addToast("Build failed — auto-fixing…", "warn");
 
       // Auto-fix loop: fetch workspace files and ask agent to fix the error
-      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+      const workerUrl = getWorkerUrl();
       fetch(`${workerUrl}/files/bulk`)
         .then((r) => r.json())
         .then((data: { files: { path: string; content: string }[] }) => {
@@ -400,7 +420,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       setStreamingArtifacts(new Map());
       wcReset();
 
-      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+      const workerUrl = getWorkerUrl();
 
       // Clear workspace files before each new run to prevent cross-task file contamination
       // (framework mode writes many files; old files from prior runs cause mismatch bugs)
@@ -488,7 +508,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   const handleEnhancePrompt = useCallback(async () => {
     const text = inputText.trim();
     if (!text || enhancing) return;
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+    const workerUrl = getWorkerUrl();
     setEnhancing(true);
     try {
       const res = await fetch(`${workerUrl}/enhance-prompt`, {
@@ -525,7 +545,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
 
   // ── ZIP download ───────────────────────────────────────────────────────────
   const handleDownloadZip = useCallback(async () => {
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+    const workerUrl = getWorkerUrl();
     setIsDownloading(true);
     try {
       const res = await fetch(`${workerUrl}/files/bulk`);
@@ -556,7 +576,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
 
   // ── Import ─────────────────────────────────────────────────────────────────
   const handleImportZip = useCallback(() => {
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+    const workerUrl = getWorkerUrl();
     const input = document.createElement("input");
     input.type = "file"; input.accept = ".zip";
     input.onchange = async () => {
@@ -571,7 +591,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   }, [importFromZip, uploadFiles, addToast]);
 
   const handleImportDir = useCallback(async () => {
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+    const workerUrl = getWorkerUrl();
     try {
       const files = await importFromDirectory();
       if (!files.length) { addToast("No importable files found", "warn"); return; }
@@ -582,7 +602,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   // ── GitHub ─────────────────────────────────────────────────────────────────
   const handleGitHub = useCallback(async () => {
     if (!user) { githubLogin(); return; }
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+    const workerUrl = getWorkerUrl();
     try {
       const r = await pushToGitHub(workerUrl);
       addToast(`Pushed: ${r.repoName}`, "success");
@@ -614,7 +634,8 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       {/* ── Top navbar ── */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 16px", height: 44, background: "#161b22",
+        flexWrap: "wrap", rowGap: 6,
+        padding: "0 16px", minHeight: 44, background: "#161b22",
         borderBottom: "1px solid #30363d", flexShrink: 0,
       }}>
         {/* Left: logo + mode */}
@@ -684,6 +705,8 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         {/* Right: model + tools */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <select
+            id="bscode-model-select"
+            name="model"
             aria-label="Model"
             title="Select language model"
             value={config.modelId}
@@ -716,7 +739,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       )}
 
       {/* ── Main area ── */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
+      {/* On narrow viewports collapse to a single column so neither pane gets squeezed
+          below readability — chat input and Run button were getting clipped at 375px. */}
+      <div style={{
+        flex: 1, display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+        overflow: "hidden",
+      }} className="bscode-main-grid">
 
         {/* ── Left: chat history ── */}
         <div style={{ display: "flex", flexDirection: "column", borderRight: "1px solid #30363d", overflow: "hidden" }}>
@@ -939,6 +968,9 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
               <textarea
                 ref={textareaRef}
+                id="bscode-task-input"
+                name="task"
+                aria-label="Coding task"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => {

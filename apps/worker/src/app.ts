@@ -1081,6 +1081,23 @@ or {"mode":"tool","framework":null}`;
       useOtel = false,
     } = body;
 
+    // ── Input validation ─────────────────────────────────────────────────────
+    // Validate `agentMode` and `modelId` upfront so callers get a synchronous
+    // 400 instead of a streaming-then-failing SSE. The model gateway returns
+    // INVALID_MODEL several seconds in, which paints "Done" briefly in the UI
+    // before the error event arrives — ugly. Catch unknown values here.
+    //
+    // Valid agentModes are the four documented in the RunBody type at the
+    // bottom of this file. "framework" is NOT a separate mode here — the
+    // framework field on the body is what selects scaffolding inside "tool".
+    const VALID_MODES = new Set(["code", "tool", "multi", "ptc"]);
+    if (agentMode && !VALID_MODES.has(agentMode)) {
+      return c.json({ error: `agentMode must be one of: ${[...VALID_MODES].join(", ")}` }, 400);
+    }
+    if (modelId !== undefined && (typeof modelId !== "string" || modelId.length === 0 || modelId.length > 200)) {
+      return c.json({ error: "modelId must be a non-empty string under 200 chars" }, 400);
+    }
+
     const clampedSteps = Math.min(maxSteps, MAX_STEPS_CAP);
 
     // ── Session cache pre-check (fast path, avoids spawning agent) ──────────

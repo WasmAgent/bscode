@@ -1,6 +1,7 @@
 "use client";
 import { type FileSystemTree, WebContainer } from "@webcontainer/api";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getWorkerUrl } from "@/lib/workerUrl";
 
 export type WcStatus = "idle" | "booting" | "installing" | "starting" | "ready" | "error";
 
@@ -65,7 +66,7 @@ export function useWebContainer(): UseWebContainerReturn {
   // path must continue to work even if the worker is unreachable.
   const reportBuildResult = useCallback(async (payload: BuildResultPayload) => {
     try {
-      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+      const workerUrl = getWorkerUrl();
       const sessionId =
         (typeof window !== "undefined" && window.localStorage.getItem("bscode.sessionId")) ||
         "default";

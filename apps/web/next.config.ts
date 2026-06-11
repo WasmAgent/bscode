@@ -3,7 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   env: {
-    NEXT_PUBLIC_WORKER_URL: process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8787",
+    // The default `bun run dev` worker (apps/worker/src/server.node.ts) listens
+    // on PORT=8788. Wrangler's `dev:wrangler` uses 8787, but that's a secondary
+    // path. Keep this in sync with the per-component fallbacks in apps/web/src.
+    NEXT_PUBLIC_WORKER_URL: process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788",
   },
   async headers() {
     return [

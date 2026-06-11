@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { theme } from "@/lib/theme";
+import { refreshWorkerUrl } from "@/lib/workerUrl";
 
 /**
  * Minimal settings drawer.
@@ -32,6 +33,10 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
   const onSave = () => {
     localStorage.setItem(LS_WORKER_URL, workerUrl.trim() || "http://localhost:8788");
     localStorage.setItem(LS_MODEL_PREF, modelPref.trim() || "claude-sonnet-4-6");
+    // Re-read so subsequent fetches in the same session see the new URL.
+    // Existing component closures still hold the old value until reload —
+    // hence the "Reload to apply" hint stays accurate for those.
+    refreshWorkerUrl();
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 1200);
   };
@@ -74,6 +79,8 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
         <label style={fieldLabel}>
           Worker URL
           <input
+            id="bscode-settings-worker-url"
+            name="workerUrl"
             type="url"
             value={workerUrl}
             onChange={(e) => setWorkerUrl(e.target.value)}
@@ -86,6 +93,8 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
         <label style={fieldLabel}>
           Default model
           <select
+            id="bscode-settings-default-model"
+            name="defaultModel"
             value={modelPref}
             onChange={(e) => setModelPref(e.target.value)}
             style={fieldInput}

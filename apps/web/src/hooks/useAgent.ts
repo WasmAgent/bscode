@@ -1,6 +1,7 @@
 "use client";
 import { useAgentRun } from "@agentkit-js/react";
 import { useCallback, useRef, useState } from "react";
+import { getWorkerUrl } from "@/lib/workerUrl";
 
 export interface TokenStats {
   inputTokens: number;
@@ -73,7 +74,7 @@ interface AgentEventMinimal {
 }
 
 export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<AgentConfig>) => void) {
-  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+  const workerUrl = getWorkerUrl();
   const [tokenStats, setTokenStats] = useState<TokenStats>({
     inputTokens: 0,
     outputTokens: 0,

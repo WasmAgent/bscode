@@ -78,3 +78,13 @@ select {
   font-family: inherit;
   font-size: 12px;
 }
+
+/* Mobile: collapse the chat / preview split to a single column so neither
+   pane drops below the readable width. Tested at 375px (iPhone SE) — both
+   panes were visibly clipped before this rule. */
+@media (max-width: 720px) {
+  .bscode-main-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
