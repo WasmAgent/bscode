@@ -116,6 +116,11 @@ export default function Home() {
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIsRunning = useRef(false);
+  // Synchronous guard for rapid re-clicks on Run — React's `isRunning`
+  // state is updated asynchronously, so multiple clicks within the same
+  // tick all see isRunning=false and submit duplicate turns. This ref
+  // is flipped synchronously inside handleSubmit before any awaits.
+  const submitInFlight = useRef(false);
 
   const addToast = useCallback((message: string, kind: Toast["kind"] = "info") => {
     const id = ++toastId;
@@ -368,8 +373,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   const handleSubmit = useCallback(
     async (taskText: string, skipClarify = false) => {
       const text = taskText.trim();
-      if (!text || isRunning || classifying) return;
-      lastSubmittedTask.current = text;
+      // React state isRunning/classifying flip on next render — between
+      // a rapid click sequence they're all still false, so we'd submit
+      // N duplicate turns. Use a synchronous ref to short-circuit.
+      if (!text || isRunning || classifying || submitInFlight.current) return;
+      submitInFlight.current = true;
+      try {
+        lastSubmittedTask.current = text;
       setInputText("");
       setClarifyAnswers({});
       setPreview(undefined);
@@ -434,9 +444,30 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         ]);
 
       submit(resolvedText, history.length > 0 ? history : undefined, skipClarify);
+      } catch (err) {
+        // Submit failed synchronously — release the guard so the user
+        // can try again. Without this, a thrown error would strand the
+        // ref at true and silently disable Run forever.
+        submitInFlight.current = false;
+        throw err;
+      }
+      // NOTE: do NOT reset submitInFlight in a finally here. submit()
+      // schedules React state updates that haven't flushed yet — if we
+      // released the guard now, a second click in the same tick would
+      // race past it. The guard is released by the useEffect below that
+      // watches isRunning/classifying.
     },
     [isRunning, classifying, submit, resetAll, wcReset, turns]
   );
+
+  // Release the synchronous-submit guard once React has acknowledged
+  // the run started (isRunning OR classifying flips to true). After
+  // that, the disabled-Run-button + isRunning check cover repeat clicks.
+  useEffect(() => {
+    if ((isRunning || classifying) && submitInFlight.current) {
+      submitInFlight.current = false;
+    }
+  }, [isRunning, classifying]);
 
   // ── Enhance Prompt ─────────────────────────────────────────────────────────
   // Calls /enhance-prompt to rewrite a vague task into a detailed spec (bolt.new)
