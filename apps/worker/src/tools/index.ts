@@ -281,7 +281,9 @@ export function createRevertFileTool(
       "Revert a file to a previous version. Use list_file_versions first to see what versions exist.",
     inputSchema: z.object({
       path: z.string().describe("File path to revert"),
-      version: z.number().int().positive().describe("Target version number"),
+      // Same draft-2020-12 caveat as semantic_search.topK: use .min(1)
+      // instead of .positive() to avoid `exclusiveMinimum: true`.
+      version: z.number().int().min(1).describe("Target version number"),
     }),
     outputSchema: z.string(),
     readOnly: false,

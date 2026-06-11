@@ -171,7 +171,15 @@ export function createSemanticSearchTool(
       "like 'where is auth handled' or 'find the retry logic'.",
     inputSchema: z.object({
       query: z.string().describe("Natural-language query"),
-      topK: z.number().int().positive().optional().describe("Number of results (default 5)"),
+      // Use .min(1) instead of .positive(): zod-to-json-schema's openApi3 target
+      // emits draft-04-style `exclusiveMinimum: true` for .positive(), which
+      // Anthropic's draft 2020-12 validator rejects with "JSON schema is invalid".
+      topK: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("Number of results (default 5)"),
     }),
     outputSchema: z.object({
       results: z.array(
