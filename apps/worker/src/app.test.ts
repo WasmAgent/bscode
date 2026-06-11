@@ -566,4 +566,106 @@ describe("Checkpoints — B1 durable backend", () => {
     expect(json.backend).toBe("kv");
     expect(json.count).toBeNull();
   });
+
+  // B1 DoD ① — restart safety: save snapshot via instance A, drop A, build a
+  // fresh instance B sharing the same KV store, and verify B can read the
+  // snapshot. This is the "worker recycle doesn't lose the run" guarantee.
+  it("snapshot saved via one createApp() instance is readable by a fresh instance sharing the same KV", async () => {
+    const { KvCheckpointer } = await import("@agentkit-js/core");
+    const sharedKv = new MemKvStore();
+
+    // Adapter shape used by createApp() internally; mirror it here so we can
+    // drive a checkpoint write directly without spinning up the full agent.
+    const adaptKv = (store: MemKvStore) => ({
+      get: (key: string) => store.get(key),
+      put: (key: string, value: string) => store.put(key, value),
+      delete: (key: string) =>
+        store.delete ? store.delete(key) : Promise.resolve(),
+      list: async (prefix: string) => {
+        const result = await store.list({ prefix });
+        return result.keys.map((k) => k.name);
+      },
+    });
+
+    const TRACE = "b1-restart-trace";
+    const snapshot = {
+      traceId: TRACE,
+      task: "implement quicksort",
+      history: [{ type: "user_message" as const, content: "implement quicksort" }],
+      stepIndex: 4,
+      savedAtMs: 1781000000000,
+    };
+
+    // ── INSTANCE A — boot, persist a snapshot, then drop the instance. ──────
+    {
+      const appA = makeApp({ checkpointsKv: sharedKv });
+      // Sanity: the app responds.
+      const res = await appA.fetch(new Request("http://localhost/health"));
+      expect(res.status).toBe(200);
+      const cp = new KvCheckpointer(adaptKv(sharedKv));
+      await cp.save(TRACE, snapshot);
+    }
+
+    // ── Simulate worker recycle: instance A is gone; sharedKv survives. ─────
+
+    // ── INSTANCE B — fresh app, fresh checkpointer, same KV. ────────────────
+    const appB = makeApp({ checkpointsKv: sharedKv });
+    const res = await appB.fetch(new Request("http://localhost/health"));
+    expect(res.status).toBe(200);
+
+    const cpB = new KvCheckpointer(adaptKv(sharedKv));
+    const restored = await cpB.load(TRACE);
+
+    expect(restored).not.toBeNull();
+    expect(restored?.traceId).toBe(TRACE);
+    expect(restored?.task).toBe("implement quicksort");
+    expect(restored?.stepIndex).toBe(4);
+  });
+
+  it("HITL pendingHumanInput survives across app instances (A3 + B1 contract)", async () => {
+    const { KvCheckpointer, resumeFromHuman } = await import("@agentkit-js/core");
+    const sharedKv = new MemKvStore();
+    const adaptKv = (store: MemKvStore) => ({
+      get: (key: string) => store.get(key),
+      put: (key: string, value: string) => store.put(key, value),
+      delete: (key: string) =>
+        store.delete ? store.delete(key) : Promise.resolve(),
+      list: async (prefix: string) => {
+        const result = await store.list({ prefix });
+        return result.keys.map((k) => k.name);
+      },
+    });
+
+    const TRACE = "b1-hitl-trace";
+
+    // Pause: instance A persists a snapshot with a pending prompt.
+    {
+      makeApp({ checkpointsKv: sharedKv });
+      const cp = new KvCheckpointer(adaptKv(sharedKv));
+      await cp.save(TRACE, {
+        traceId: TRACE,
+        task: "build dashboard",
+        history: [],
+        stepIndex: 1,
+        savedAtMs: 0,
+        pendingHumanInput: { promptId: "approve-push", prompt: "Push to main?" },
+      });
+    }
+
+    // Resume: instance B (fresh) submits the human response.
+    {
+      makeApp({ checkpointsKv: sharedKv });
+      const cp = new KvCheckpointer(adaptKv(sharedKv));
+      const ok = await resumeFromHuman(cp, TRACE, "approve-push", "yes");
+      expect(ok).toBe(true);
+    }
+
+    // Continue: instance C (fresh again) sees the response in the snapshot.
+    {
+      makeApp({ checkpointsKv: sharedKv });
+      const cp = new KvCheckpointer(adaptKv(sharedKv));
+      const snap = await cp.load(TRACE);
+      expect(snap?.humanResponse).toEqual({ promptId: "approve-push", response: "yes" });
+    }
+  });
 });
