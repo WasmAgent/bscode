@@ -1131,7 +1131,11 @@ function buildTools(
     : tools;
   if (useMemory) {
     const memTool = createMemoryTool({ backend: globalMemoryBackend });
-    tools.push({
+    // BUG FIX: previously this was `tools.push(...)` which mutated the
+    // pre-filter array; the returned `filteredTools` never included
+    // the memory tool, so the model never saw it and the agent
+    // claimed "I don't have a memory tool available".
+    filteredTools.push({
       ...memTool,
       rawInputJsonSchema: {
         type: "object",

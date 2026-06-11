@@ -500,7 +500,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   const handleFix = useCallback(() => {
     const lastTurn = turns.at(-1);
     if (!lastTurn?.error) return;
-    const fixTask = `请修复以下错误：\n${lastTurn.error}\n\n原始任务：${lastTurn.task}`;
+    // Use the same language as the original task so the agent's reply
+    // matches the user's language. The user instructs the assistant
+    // when they type the task; we shouldn't clobber that with English.
+    const isChinese = /[一-鿿]/.test(lastTurn.task);
+    const fixTask = isChinese
+      ? `请修复以下错误：\n${lastTurn.error}\n\n原始任务：${lastTurn.task}`
+      : `Fix the following error:\n${lastTurn.error}\n\nOriginal task: ${lastTurn.task}`;
     handleSubmit(fixTask, true); // skipClarify=true — fix runs immediately, no re-clarify
   }, [turns, handleSubmit]);
 
@@ -706,7 +712,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                 <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
                 <div>Describe a task to get started.</div>
                 <div style={{ fontSize: 11, marginTop: 6, color: "#30363d" }}>
-                  e.g. "写一个 Vue 3 Todo List" · "implement quicksort" · "create a React dashboard"
+                  e.g. "build a Vue 3 todo list" · "implement quicksort" · "create a React dashboard"
                 </div>
               </div>
             )}
@@ -721,7 +727,12 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     : undefined
                 }
                 onFix={turn.status === "error" ? () => {
-                  const fixTask = `修复错误：${turn.error}\n\n原始任务：${turn.task}`;
+                  // Match the original task's language so the agent's
+                  // reply uses the same one.
+                  const isCh = /[一-鿿]/.test(turn.task);
+                  const fixTask = isCh
+                    ? `修复错误：${turn.error}\n\n原始任务：${turn.task}`
+                    : `Fix this error: ${turn.error}\n\nOriginal task: ${turn.task}`;
                   handleSubmit(fixTask, true);
                 } : undefined}
                 onRetry={() => handleSubmit(turn.task, true)}
@@ -831,7 +842,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                         </div>
                       )}
 
-                      {/* Free text — shown when "其他" selected or no options */}
+                      {/* Free text — shown when "Other" selected or no options */}
                       {(q.options.length === 0 || (clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]))) && (
                         <input
                           type="text"
@@ -1281,7 +1292,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                             {seg.card.meta ?? label}
                           </div>
                           <div style={{ fontSize: 11, color: "#8b949e", fontFamily: "JetBrains Mono, monospace" }}>
-                            card:{seg.card.type} · {seg.card.content.split("\n").length} lines · 点击查看
+                            card:{seg.card.type} · {seg.card.content.split("\n").length} lines · click to view
                           </div>
                         </div>
                         <span style={{ marginLeft: "auto", fontSize: 16, color: "#58a6ff", flexShrink: 0 }}>›</span>
