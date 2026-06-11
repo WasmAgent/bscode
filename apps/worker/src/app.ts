@@ -13,6 +13,7 @@ import {
   forbiddenPhrases,
   InMemoryCheckpointer,
   InMemorySpanExporter,
+  KvCheckpointer,
   MapKvBackend,
   maxInputLength,
   MessageAssembler,
@@ -47,13 +48,19 @@ import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
 import {
   createDeleteFileTool,
+  createGitHubPrTool,
   createListFilesTool,
+  createListFileVersionsTool,
   createPatchFileTool,
   createReadFileTool,
   createRenameFileTool,
+  createRevertFileTool,
   createRunCommandTool,
   createSearchCodeTool,
+  createSemanticIndexer,
+  createSemanticSearchTool,
   createWriteFileTool,
+  type SemanticIndexer,
 } from "./tools/index.js";
 import { createGitTools, createShellRunner } from "./tools/shell.js";
 import { createWebSearchTool } from "./tools/web-search.js";
@@ -91,7 +98,43 @@ function recordError(message: string, stack?: string, traceId?: string) {
   console.error(`${prefix} ERROR: ${message}`);
   if (stack) console.error(stack.split("\n").slice(0, 4).join("\n"));
 }
-const globalCheckpointer = new InMemoryCheckpointer();
+/**
+ * B1 — Adapter from bscode's KvStore (CF KVNamespace-shape) to agentkit-js's
+ * canonical KvBackend (string list, plain put). One-line keeps both codebases
+ * speaking the same KV contract without dragging the worker-types dependency.
+ */
+function adaptKvStoreToBackend(store: import("./platform.js").KvStore) {
+  return {
+    get: (key: string) => store.get(key),
+    put: (key: string, value: string) => store.put(key, value),
+    delete: (key: string) => (store.delete ? store.delete(key) : Promise.resolve()),
+    list: async (prefix: string) => {
+      const result = await store.list({ prefix });
+      return result.keys.map((k) => k.name);
+    },
+  };
+}
+
+/**
+ * Per-AppConfig checkpointer. When the runtime supplies a checkpoints KV,
+ * we use {@link KvCheckpointer} so paused or partially-completed runs
+ * survive worker recycle (A1 + A3). Without a binding we fall back to
+ * the in-memory implementation, preserving the original dev behaviour.
+ *
+ * Cached on the config object so all routes within the same request share
+ * one checkpointer instance.
+ */
+const checkpointerByConfig = new WeakMap<AppConfig, InMemoryCheckpointer | KvCheckpointer>();
+function checkpointerFor(config: AppConfig): InMemoryCheckpointer | KvCheckpointer {
+  let cp = checkpointerByConfig.get(config);
+  if (!cp) {
+    cp = config.checkpointsKv
+      ? new KvCheckpointer(adaptKvStoreToBackend(config.checkpointsKv))
+      : new InMemoryCheckpointer();
+    checkpointerByConfig.set(config, cp);
+  }
+  return cp;
+}
 
 // Per-session FileTreeManager — keyed by X-Session-Id header so two
 // browsers (or two tabs) cannot read each other's files or version
@@ -112,6 +155,20 @@ function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }):
     sessionFileTrees.set(id, tree);
   }
   return tree;
+}
+
+// B2 — per-session semantic indexer. The default in-process TF-IDF embedder
+// keeps zero-deps and works without an external API; pass a real Embedder via
+// AppConfig (future) for cross-session persistence + better recall.
+const sessionIndexers = new Map<string, SemanticIndexer>();
+function indexerFor(c: { req: { header: (n: string) => string | undefined } }): SemanticIndexer {
+  const id = sessionIdOf(c);
+  let idx = sessionIndexers.get(id);
+  if (!idx) {
+    idx = createSemanticIndexer({});
+    sessionIndexers.set(id, idx);
+  }
+  return idx;
 }
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
@@ -493,7 +550,14 @@ or {"mode":"tool","framework":null}`;
   });
 
   // ── Checkpoints ───────────────────────────────────────────────────────────
-  app.get("/checkpoints", (c) => c.json({ count: globalCheckpointer.size }));
+  app.get("/checkpoints", (c) => {
+    const cp = checkpointerFor(config);
+    // Only InMemoryCheckpointer exposes .size; KvCheckpointer needs a list().
+    if (cp instanceof InMemoryCheckpointer) {
+      return c.json({ count: cp.size, backend: "in-memory" });
+    }
+    return c.json({ count: null, backend: "kv" });
+  });
 
   // ── Error log (last 50 agent errors for debugging) ────────────────────────
   app.get("/errors", (c) => c.json({ errors: [...errorLog].reverse(), count: errorLog.length }));
@@ -802,7 +866,7 @@ or {"mode":"tool","framework":null}`;
           ...(guardrails?.deniedTools ?? []),
           // Framework mode: block run_command and git tools — WebContainers handles execution
           ...(body.framework ? ["run_command", "git_status", "git_diff", "git_log", "git_commit", "git_checkout"] : []),
-        ], fileTreeFor(c));
+        ], fileTreeFor(c), indexerFor(c));
         const inputGuardrails = buildInputGuardrails(guardrails);
         const outputGuardrails = buildOutputGuardrails(guardrails);
         // Merge resource budget from request into enhancementPolicy
@@ -895,7 +959,10 @@ or {"mode":"tool","framework":null}`;
           if (useCheckpoint) {
             const cpId = checkpointId ?? finalTask.slice(0, 40);
             const cpTraceId = `cp-${cpId}-${Date.now()}`;
-            const cpRun = new CheckpointableRun({ checkpointer: globalCheckpointer }, agent.assembler);
+            const cpRun = new CheckpointableRun(
+              { checkpointer: checkpointerFor(config) },
+              agent.assembler
+            );
             agentRun = cpRun.run(agent.run(finalTask, cpTraceId), finalTask, cpTraceId);
           } else {
             agentRun = agent.run(finalTask);
@@ -1110,21 +1177,40 @@ function buildTools(
   useMemory: boolean,
   config: AppConfig,
   deniedTools?: string[],
-  fileTree?: FileTreeManager
+  fileTree?: FileTreeManager,
+  indexer?: SemanticIndexer
 ): ToolDefinition[] {
   const shellRunner = createShellRunner(config);
   const tools: ToolDefinition[] = [
     createReadFileTool(filesKv),
     createListFilesTool(filesKv),
     createSearchCodeTool(filesKv),
-    createWriteFileTool(filesKv, fileTree),
-    createPatchFileTool(filesKv),
-    createDeleteFileTool(filesKv),
-    createRenameFileTool(filesKv),
+    createWriteFileTool(filesKv, fileTree, indexer),
+    createPatchFileTool(filesKv, indexer),
+    createDeleteFileTool(filesKv, indexer),
+    createRenameFileTool(filesKv, indexer),
     createRunCommandTool(shellRunner),
     createWebSearchTool(),
     ...createGitTools(config),
   ];
+  // B2 — semantic search registered when an indexer is present.
+  if (indexer) tools.push(createSemanticSearchTool(indexer));
+  // B4 — versioning tools registered when a per-session FileTreeManager is present.
+  if (fileTree) {
+    tools.push(createListFileVersionsTool(fileTree));
+    tools.push(createRevertFileTool(filesKv, fileTree, indexer));
+  }
+  // B3 — GitHub PR loop registered when KV is bound. needsApproval=true means
+  // the agent's HITL gate (A3) catches it before the push happens.
+  if (filesKv) {
+    const ambientToken = config.githubToken;
+    tools.push(
+      createGitHubPrTool({
+        filesKv,
+        ...(ambientToken !== undefined && { ambientToken }),
+      })
+    );
+  }
   // P4: filter out denied tools
   const filteredTools = deniedTools?.length
     ? tools.filter((t) => !deniedTools.includes(t.name))

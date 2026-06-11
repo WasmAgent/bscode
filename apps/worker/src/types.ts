@@ -27,6 +27,18 @@ export interface AppConfig {
   allowedOrigin?: string;
   filesKv?: KvStore;
   sessionsKv?: KvStore;
+  /**
+   * B1 — Optional KV store for durable agent checkpoints. When set, every
+   * agent step + every await_human_input is persisted; a CF worker recycle
+   * or container restart no longer loses the run. Falls back to in-memory
+   * when undefined (suitable for short-lived dev sessions).
+   */
+  checkpointsKv?: KvStore;
+  /**
+   * B3 — Optional GitHub personal access token used as a fallback by
+   * `create_github_pr`. Per-call `token` in the tool input always wins.
+   */
+  githubToken?: string;
   enableShell?: boolean;
   workdir?: string;
 }

@@ -545,3 +545,25 @@ describe("Unknown routes", () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ── B1: durable checkpointer via checkpointsKv ───────────────────────────────
+
+describe("Checkpoints — B1 durable backend", () => {
+  it("GET /checkpoints reports backend: in-memory when checkpointsKv is unset", async () => {
+    const app = makeApp();
+    const res = await app.fetch(new Request("http://localhost/checkpoints"));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { backend: string; count: number | null };
+    expect(json.backend).toBe("in-memory");
+    expect(json.count).toBe(0);
+  });
+
+  it("GET /checkpoints reports backend: kv when checkpointsKv is set", async () => {
+    const app = makeApp({ checkpointsKv: new MemKvStore() });
+    const res = await app.fetch(new Request("http://localhost/checkpoints"));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { backend: string; count: number | null };
+    expect(json.backend).toBe("kv");
+    expect(json.count).toBeNull();
+  });
+});

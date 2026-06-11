@@ -2,13 +2,15 @@
 
 A Coding Assistant built on [agentkit-js](https://github.com/user/agentkit-js), deployed on Cloudflare Workers + Pages.
 
-## What this tests
+## What it does
 
-| Capability | How it's tested |
+| Capability | How it works |
 |---|---|
-| **CodeAgent + QuickJSKernel** | Agent writes JS code and executes it in a real WASM sandbox on the edge |
-| **ToolCallingAgent + DAG scheduling** | 5 coding tools (read/write/search/list/run), `readOnly` tools execute in parallel |
-| **Prompt Cache optimization** | `model_done` events expose `cacheReadTokens`; TokenMeter shows hit rate live |
+| **Edge-isolated code execution** | CodeAgent writes JS and runs it in a QuickJS WASM sandbox on Cloudflare Workers — no container, no cold-start hit |
+| **Speculative tool fan-out** | ToolCallingAgent runs `readOnly` tools (read/list/search/semantic_search) in parallel via the agentkit DAG scheduler |
+| **Semantic codebase search** | `semantic_search` indexes every file write and ranks matches by meaning, not just substring |
+| **Durable runs** | Checkpoints persisted to Workers KV; SSE streams resume via `Last-Event-ID`; `await_human_input` survives worker recycle |
+| **Prompt-cache instrumentation** | `model_done` events expose `cacheReadTokens`; the TokenMeter shows hit rate live |
 | **Multi-model switching** | Claude Sonnet/Haiku, Doubao Seed-1.6, DeepSeek V4 selectable in the UI |
 
 ## Architecture
@@ -64,3 +66,39 @@ pnpm deploy:web
 # Local dev with Wrangler/Miniflare (CodeAgent WASM limited)
 pnpm dev:worker:cf
 ```
+
+### Required and optional bindings
+
+Add these to `apps/worker/wrangler.toml` to enable the durable runtime
+features (all optional — bscode falls back to in-memory when absent):
+
+```toml
+[[kv_namespaces]]
+binding = "BSCODE_FILES"          # required for the virtual file system
+id = "..."
+
+[[kv_namespaces]]
+binding = "BSCODE_SESSIONS"        # session result caching (warm replays)
+id = "..."
+
+[[kv_namespaces]]
+binding = "BSCODE_CHECKPOINTS"     # B1 — durable agent checkpoints; without it
+id = "..."                         # paused runs do not survive worker recycle.
+```
+
+The `create_github_pr` tool is registered automatically when `BSCODE_FILES`
+is bound. Tokens come from the per-call tool input (preferred) or — if you
+choose — a worker-level `GITHUB_TOKEN` env var wired through `AppConfig.githubToken`.
+
+### Tools the agent can call
+
+| Tool | Read-only | Notes |
+|---|:---:|---|
+| `read_file`, `list_files`, `search_code` | ✅ | DAG scheduler runs these in parallel |
+| `semantic_search` | ✅ | TF-IDF default; pluggable Embedder for cross-session indexing |
+| `list_file_versions` | ✅ | B4 — surfaces per-file timeline |
+| `write_file`, `patch_file`, `delete_file`, `rename_file` | ❌ | Auto-update semantic index + version history |
+| `revert_file` | ❌ | B4 — roll a file back to any prior version |
+| `run_command` | ❌ | Node/Bun only; blocked on edge |
+| `web_search`, `git_status`/`git_diff`/`git_log`/`git_commit` | mixed | Standard tools |
+| `create_github_pr` | ❌ | B3 — branch + commit + PR via REST. **HITL-gated** (`needsApproval: true`) |

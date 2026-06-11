@@ -3,9 +3,21 @@ import { FileTreeManager, globalFileLock } from "@agentkit-js/core";
 import { applyPatch } from "diff";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
+import type { SemanticIndexer } from "./semanticSearch.js";
 
 // ── Re-export type so callers can use KvStore directly ────────────────────────
 export type { KvStore };
+export type { SemanticIndexer } from "./semanticSearch.js";
+export {
+  createSemanticIndexer,
+  createSemanticSearchTool,
+} from "./semanticSearch.js";
+export type {
+  CreateGitHubPrToolOptions,
+  GitHubPrInput,
+  GitHubPrOutput,
+} from "./githubPr.js";
+export { createGitHubPrTool } from "./githubPr.js";
 
 // Lock Wrangler dev secrets — specific to BSCode worker deployment
 globalFileLock.lock(".dev.vars", "hard", "Wrangler dev secrets — never overwrite");
@@ -23,7 +35,7 @@ export function createReadFileTool(
     readOnly: true,
     idempotent: true,
     forward: async ({ path }) => {
-      if (!kv) return `# (KV not bound)\n// File: ${path}`;
+      if (!kv) return `Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry`;
       const content = await kv.get(normalizeKey(path));
       if (content === null) return `Error: File not found: ${path}`;
       return content;
@@ -44,7 +56,7 @@ export function createListFilesTool(
     readOnly: true,
     idempotent: true,
     forward: async ({ prefix }) => {
-      if (!kv) return "file1.ts\nfile2.ts\nREADME.md  # (KV not bound)";
+      if (!kv) return "Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry";
       const list = await kv.list({ prefix: prefix ? `file:${prefix}` : "file:" });
       if (list.keys.length === 0) return "(no files found)";
       return list.keys.map((k) => k.name.replace(/^file:/, "")).join("\n");
@@ -67,7 +79,7 @@ export function createSearchCodeTool(
     readOnly: true,
     idempotent: true,
     forward: async ({ query, path }) => {
-      if (!kv) return `# (KV not bound)\n# Search for: ${query}`;
+      if (!kv) return "Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry";
       const list = await kv.list({ prefix: path ? `file:${path}` : "file:" });
       const results: string[] = [];
       for (const key of list.keys.slice(0, 20)) {
@@ -87,7 +99,8 @@ export function createSearchCodeTool(
 
 export function createWriteFileTool(
   kv: KvStore | undefined,
-  fileTree?: FileTreeManager
+  fileTree?: FileTreeManager,
+  indexer?: SemanticIndexer
 ): ToolDefinition<{ path: string; content: string }, string> {
   return {
     name: "write_file",
@@ -112,20 +125,30 @@ export function createWriteFileTool(
         return `Error: ${lockErr instanceof Error ? lockErr.message : String(lockErr)}`;
       }
 
-      if (!kv) return `OK (KV not bound — write to ${path} simulated)`;
+      if (!kv) return `Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry`;
       await kv.put(normalizeKey(path), content);
       // Mirror into the per-session FileTreeManager so version history
       // accrues for agent-written files (not just user-written via POST
       // /files). Without this the v0.dev-style checkpoint feature only
       // works for manual edits, which defeats the point.
       if (fileTree) fileTree.recordWrite(path.replace(/^\/+/, ""), content);
+      // B2: keep the semantic index in sync. Indexer is a best-effort
+      // side-channel — failures should NOT fail the write.
+      if (indexer) {
+        try {
+          await indexer.upsert(path, content);
+        } catch (err) {
+          console.warn(`[write_file] semantic index upsert failed for ${path}:`, err);
+        }
+      }
       return `OK: written ${content.length} chars to ${path}`;
     },
   };
 }
 
 export function createPatchFileTool(
-  kv: KvStore | undefined
+  kv: KvStore | undefined,
+  indexer?: SemanticIndexer
 ): ToolDefinition<{ path: string; patch: string }, string> {
   return {
     name: "patch_file",
@@ -146,7 +169,7 @@ export function createPatchFileTool(
       } catch (lockErr) {
         return `Error: ${lockErr instanceof Error ? lockErr.message : String(lockErr)}`;
       }
-      if (!kv) return `OK (KV not bound — patch to ${path} simulated)`;
+      if (!kv) return `Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry`;
       const original = await kv.get(normalizeKey(path));
       if (original === null) return `Error: File not found: ${path}`;
       const patched = applyPatch(original, patch);
@@ -154,13 +177,21 @@ export function createPatchFileTool(
         return `Error: Patch failed — hunk mismatch or context mismatch for ${path}`;
       await kv.put(normalizeKey(path), patched as string);
       const saved = patched as string;
+      if (indexer) {
+        try {
+          await indexer.upsert(path, saved);
+        } catch (err) {
+          console.warn(`[patch_file] semantic index upsert failed for ${path}:`, err);
+        }
+      }
       return `OK: patched ${path} (${original.length} → ${saved.length} chars)`;
     },
   };
 }
 
 export function createDeleteFileTool(
-  kv: KvStore | undefined
+  kv: KvStore | undefined,
+  indexer?: SemanticIndexer
 ): ToolDefinition<{ path: string }, string> {
   return {
     name: "delete_file",
@@ -178,18 +209,26 @@ export function createDeleteFileTool(
       } catch (lockErr) {
         return `Error: ${lockErr instanceof Error ? lockErr.message : String(lockErr)}`;
       }
-      if (!kv) return `OK (KV not bound — delete ${path} simulated)`;
+      if (!kv) return `Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry`;
       const key = normalizeKey(path);
       const existing = await kv.get(key);
       if (existing === null) return `Error: File not found: ${path}`;
       await (kv as { delete?: (k: string) => Promise<void> }).delete?.(key);
+      if (indexer) {
+        try {
+          await indexer.remove(path);
+        } catch (err) {
+          console.warn(`[delete_file] semantic index remove failed for ${path}:`, err);
+        }
+      }
       return `OK: deleted ${path}`;
     },
   };
 }
 
 export function createRenameFileTool(
-  kv: KvStore | undefined
+  kv: KvStore | undefined,
+  indexer?: SemanticIndexer
 ): ToolDefinition<{ from: string; to: string }, string> {
   return {
     name: "rename_file",
@@ -202,12 +241,95 @@ export function createRenameFileTool(
     readOnly: false,
     idempotent: false,
     forward: async ({ from, to }) => {
-      if (!kv) return `OK (KV not bound — rename ${from} → ${to} simulated)`;
+      if (!kv) return `Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry`;
       const content = await kv.get(normalizeKey(from));
       if (content === null) return `Error: File not found: ${from}`;
       await kv.put(normalizeKey(to), content);
       await (kv as { delete?: (k: string) => Promise<void> }).delete?.(normalizeKey(from));
+      if (indexer) {
+        try {
+          await indexer.rename(from, to, content);
+        } catch (err) {
+          console.warn(`[rename_file] semantic index rename failed:`, err);
+        }
+      }
       return `OK: renamed ${from} → ${to}`;
+    },
+  };
+}
+
+/**
+ * B4 — revert_file: roll a file back to a previous version captured by the
+ * per-session FileTreeManager. The version history is the same one surfaced
+ * by `GET /files/:path/versions`, so UI and agent see the same timeline.
+ *
+ * Behaviour:
+ *   - On revert, the previous content is also written back to KV so subsequent
+ *     read_file calls observe the rolled-back state.
+ *   - The semantic index is updated so search reflects the reverted file.
+ *   - Returns "Error: …" if the file or version is unknown — the agent treats
+ *     that as a soft failure and can list versions first.
+ */
+export function createRevertFileTool(
+  kv: KvStore | undefined,
+  fileTree: FileTreeManager | undefined,
+  indexer?: SemanticIndexer
+): ToolDefinition<{ path: string; version: number }, string> {
+  return {
+    name: "revert_file",
+    description:
+      "Revert a file to a previous version. Use list_file_versions first to see what versions exist.",
+    inputSchema: z.object({
+      path: z.string().describe("File path to revert"),
+      version: z.number().int().positive().describe("Target version number"),
+    }),
+    outputSchema: z.string(),
+    readOnly: false,
+    idempotent: false,
+    forward: async ({ path, version }) => {
+      if (!fileTree) return "Error: file version history unavailable in this session";
+      const reverted = fileTree.rollback(path, version);
+      if (reverted === null) {
+        return `Error: version ${version} not found for ${path}`;
+      }
+      // Mirror back into KV so reads see the rolled-back content.
+      if (kv) await kv.put(normalizeKey(path), reverted);
+      if (indexer) {
+        try {
+          await indexer.upsert(path, reverted);
+        } catch (err) {
+          console.warn(`[revert_file] semantic index upsert failed for ${path}:`, err);
+        }
+      }
+      return `OK: reverted ${path} to version ${version} (${reverted.length} chars)`;
+    },
+  };
+}
+
+/**
+ * B4 — list_file_versions: surface the per-file version timeline to the
+ * agent so it can revert intelligently rather than blindly.
+ */
+export function createListFileVersionsTool(
+  fileTree: FileTreeManager | undefined
+): ToolDefinition<{ path: string }, string> {
+  return {
+    name: "list_file_versions",
+    description: "List version history for a file (oldest → newest), with timestamp and size.",
+    inputSchema: z.object({ path: z.string().describe("File path") }),
+    outputSchema: z.string(),
+    readOnly: true,
+    idempotent: true,
+    forward: async ({ path }) => {
+      if (!fileTree) return "Error: file version history unavailable in this session";
+      const versions = fileTree.getVersions(path);
+      if (versions.length === 0) return `No versions recorded for ${path}`;
+      return versions
+        .map(
+          (v) =>
+            `v${v.version}\t${new Date(v.savedAtMs).toISOString()}\t${v.content.length} chars`
+        )
+        .join("\n");
     },
   };
 }
