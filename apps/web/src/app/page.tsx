@@ -335,7 +335,19 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   // ── Final answer → preview ─────────────────────────────────────────────────
   useEffect(() => {
     if (!finalAnswer) return;
-    // Only treat the final answer as HTML if it's:
+    // 1. card:* blocks — let the Preview tab render them via CardRenderer
+    //    so the user sees the same rich rendering as the chat. Pre-fix
+    //    they fell through to the `plain` branch and showed raw markdown
+    //    text in the preview iframe, which made the Messages tab look
+    //    "more rendered" than Preview.
+    const parsed = parseCardBlocks(finalAnswer);
+    const firstCard = parsed.cards[0];
+    if (firstCard) {
+      setPreview((prev) => ({ ...prev, card: firstCard }));
+      setPreviewView("preview");
+      return;
+    }
+    // 2. Only treat the final answer as HTML if it's:
     //   (a) a complete HTML document (<!DOCTYPE / <html>), OR
     //   (b) wrapped in an EXPLICIT ```html ... ``` fence (lang=html required).
     // The earlier regex used (?:html)? which made the language optional, so a
