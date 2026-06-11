@@ -403,6 +403,28 @@ ${fields.map((f) => `      <div className="flex flex-col gap-1">
     const { task } = await c.req.json<{ task: string }>();
     if (!task) return c.json({ error: "task required" }, 400);
 
+    // Fast-path: diagram/visualization-only tasks belong in "code" mode
+    // (the agent emits a card:d2 / card:mermaid block — no files, no
+    // WebContainers). Without this the LLM classifier sometimes routes
+    // "画一个流程图" / "draw a sequence diagram" to "framework·vanilla",
+    // which spins up WebContainers for nothing.
+    const lcTask = task.toLowerCase();
+    const diagramKeywords = [
+      "画.*?(图|流程图|架构图|时序图|关系图|拓扑图|思维导图)",
+      "(draw|render|create|make|generate).*\\b(diagram|flowchart|flow chart|sequence|architecture|topology|mindmap|mind map|er diagram|state machine)\\b",
+      "\\b(d2|mermaid|graphviz|plantuml)\\b",
+    ];
+    const isDiagramTask = diagramKeywords.some((re) => new RegExp(re, "i").test(lcTask));
+    // Only honor the fast-path if the task does NOT also ask for an app
+    // / interactive UI (e.g. "build a Vue app that draws a diagram") —
+    // those still need framework mode.
+    const looksLikeApp = /\b(app|todo|game|component|website|ui|界面|应用|网站|游戏|计算器|看板)\b/i.test(
+      lcTask
+    );
+    if (isDiagramTask && !looksLikeApp) {
+      return c.json({ mode: "code", framework: null });
+    }
+
     const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
     if (!apiKey) return c.json({ mode: "tool", framework: null }); // fallback
 
@@ -418,7 +440,7 @@ Task: "${task.slice(0, 500)}"
 
 Categories:
 - "framework": The task asks to build a UI app, web app, website, interactive animation/game with visuals, or use React/Vue/Svelte/Next.js/Vite. Choose this for games (贪吃蛇, calculator app, todo app, etc), canvas animations (fireworks, particle effects, etc), or anything that needs a live interactive visual output in the browser.
-- "code": The task asks to write/execute an algorithm, function, data structure, math computation, or data analysis. Choose this ONLY for non-visual, non-interactive scripts. If the task would normally use tkinter/pygame/GUI on desktop → use "framework" instead.
+- "code": The task asks to write/execute an algorithm, function, data structure, math computation, data analysis, OR to draw a static diagram (flow chart, sequence diagram, architecture, ER, mind map — D2 / Mermaid / PlantUML output). Choose this ONLY for non-visual, non-interactive scripts and for diagram-only output (which renders inline as a card, no app needed). If the task would normally use tkinter/pygame/GUI on desktop → use "framework" instead.
 - "tool": Everything else — file operations, multi-file projects without a framework, analysis, refactoring.
 
 If mode is "framework", also pick: "react" | "vue" | "svelte" | "vanilla"

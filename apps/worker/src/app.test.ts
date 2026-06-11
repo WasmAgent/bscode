@@ -488,6 +488,54 @@ describe("GET /errors", () => {
   });
 });
 
+describe("POST /classify — diagram fast-path", () => {
+  // The classifier has a deterministic keyword fast-path for
+  // diagram-only tasks so we don't need an LLM round-trip and the
+  // task doesn't get mis-routed to "framework·vanilla".
+  function classifyApp() {
+    return createApp({
+      // Intentionally NO API key — proves the fast-path resolves
+      // before the LLM call would be attempted.
+      allowedOrigin: "*",
+      filesKv: new MemKvStore(),
+      sessionsKv: new MemKvStore(),
+    });
+  }
+
+  async function classify(app: ReturnType<typeof createApp>, task: string) {
+    const res = await app.fetch(
+      new Request("http://localhost/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task }),
+      })
+    );
+    return (await res.json()) as { mode: string; framework: string | null };
+  }
+
+  it.each([
+    "画一个用户注册流程的D2流程图",
+    "draw a sequence diagram for the auth flow",
+    "create a mermaid flow chart for the deploy pipeline",
+    "render an architecture diagram for the new service",
+    "用 D2 画一张服务拓扑图",
+  ])('routes diagram-only task "%s" to mode=code', async (task) => {
+    const result = await classify(classifyApp(), task);
+    expect(result.mode).toBe("code");
+    expect(result.framework).toBeNull();
+  });
+
+  it("does NOT short-circuit when the task asks for an app that draws diagrams", async () => {
+    // "build a Vue app that renders a diagram" still needs framework
+    // mode — falls through to the LLM (no key → falls back to tool).
+    const result = await classify(
+      classifyApp(),
+      "build a Vue app that renders a flowchart of user actions"
+    );
+    expect(result.mode).not.toBe("code"); // fast-path skipped
+  });
+});
+
 // ── 404 ───────────────────────────────────────────────────────────────────────
 
 describe("Unknown routes", () => {

@@ -6,6 +6,8 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "deploy": "npx @cloudflare/next-on-pages && wrangler pages deploy .vercel/output/static"
   },

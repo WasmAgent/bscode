@@ -1034,7 +1034,15 @@ interface TurnBlockProps {
 
 function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCard }: TurnBlockProps) {
   const label = modeLabel(turn.detectedMode);
-  const thinkingText = isActive ? streamingText : turn.agentText;
+  // Hide raw <boltThinking>...</boltThinking> tags from the Thought panel —
+  // the parsed plan is already shown separately above. While streaming, we
+  // also hide an unmatched-open <boltThinking> tag (the closing one hasn't
+  // arrived yet) so the user doesn't briefly see the raw markup.
+  const rawThinking = (isActive ? streamingText : turn.agentText) ?? "";
+  const thinkingText = rawThinking
+    .replace(/<boltThinking>[\s\S]*?<\/boltThinking>/gi, "")
+    .replace(/<boltThinking>[\s\S]*$/i, "")
+    .trim();
   const displayText = turn.status === "done" && turn.finalAnswer ? turn.finalAnswer : null;
   const [thinkingCollapsed, setThinkingCollapsed] = useState(turn.thinkingCollapsed);
 

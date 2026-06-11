@@ -63,7 +63,7 @@ jobs:
 
       - name: Test (web)
         working-directory: bscode/apps/web
-        run: bun run vitest run
+        run: bun run test
 
       - name: Test (worker — if vitest config exists)
         working-directory: bscode/apps/worker
