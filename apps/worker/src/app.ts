@@ -52,6 +52,7 @@ import {
   createListFilesTool,
   createListFileVersionsTool,
   createPatchFileTool,
+  createReadBuildResultTool,
   createReadFileTool,
   createRenameFileTool,
   createRevertFileTool,
@@ -60,10 +61,24 @@ import {
   createSemanticIndexer,
   createSemanticSearchTool,
   createWriteFileTool,
+  importGithubRepo,
   type SemanticIndexer,
 } from "./tools/index.js";
 import { createGitTools, createShellRunner } from "./tools/shell.js";
 import { createWebSearchTool } from "./tools/web-search.js";
+import {
+  type BuildResultSnapshot,
+  clearBuildResult,
+  getBuildResult,
+  putBuildResult,
+} from "./build-results.js";
+import { JobQueue, type JobRunner, type JobSpec } from "./jobs/index.js";
+import {
+  applyApprovalPolicy,
+  ApprovalPolicy,
+  type ApprovalPolicyOptions,
+  PolicyPresets,
+} from "./policies/approvalPolicy.js";
 
 export type { AppConfig } from "./platform.js";
 
@@ -174,6 +189,16 @@ function indexerFor(c: { req: { header: (n: string) => string | undefined } }): 
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {
   const app = new Hono();
+
+  // ── B1 — Job queue (parallel background runs) ────────────────────────────
+  // One queue per createApp instance. The runner self-fetches /run so the
+  // queued path goes through exactly the same agent pipeline as a synchronous
+  // run, eliminating the "two implementations drifted apart" failure mode.
+  const jobQueue = new JobQueue({
+    concurrency: 4,
+    eventTailSize: 100,
+    durableKv: config.sessionsKv, // same KV used for cached run replays
+  });
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   app.use("*", async (c, next) => {
@@ -559,6 +584,187 @@ or {"mode":"tool","framework":null}`;
     return c.json({ count: null, backend: "kv" });
   });
 
+  // ── B2 — Build Result reverse channel ─────────────────────────────────────
+  // The browser-side WebContainer wrapper POSTs install/build/test outcomes
+  // here so the worker-side agent (which is otherwise blind on edge) can
+  // verify its work via the `read_build_result` tool. GET is provided for
+  // diagnostics / dashboards; the agent does not call it directly.
+
+  /**
+   * POST /build-result — body shape mirrors {@link BuildResultSnapshot},
+   * but `ranAtMs` is server-stamped to avoid clock-skew shenanigans.
+   * Returns 400 for malformed payloads; KV mirroring is best-effort.
+   */
+  app.post("/build-result", async (c) => {
+    const sessionId = sessionIdOf(c);
+    let body: Partial<BuildResultSnapshot>;
+    try {
+      body = await c.req.json<Partial<BuildResultSnapshot>>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const status = body.status;
+    if (status !== "success" && status !== "failed" && status !== "running") {
+      return c.json({ error: "status must be one of: success, failed, running" }, 400);
+    }
+    const snap: BuildResultSnapshot = {
+      status,
+      ranAtMs: Date.now(),
+      ...(body.stage ? { stage: body.stage } : {}),
+      ...(typeof body.exitCode === "number" ? { exitCode: body.exitCode } : {}),
+      ...(typeof body.stderr === "string" ? { stderr: body.stderr } : {}),
+      ...(typeof body.wallTimeMs === "number" ? { wallTimeMs: body.wallTimeMs } : {}),
+      ...(typeof body.previewUrl === "string" ? { previewUrl: body.previewUrl } : {}),
+    };
+    await putBuildResult(sessionId, snap, config.buildResultsKv);
+    return c.json({ ok: true });
+  });
+
+  /** GET /build-result — debug readback; the agent uses the tool, not this. */
+  app.get("/build-result", async (c) => {
+    const sessionId = sessionIdOf(c);
+    const snap = await getBuildResult(sessionId, config.buildResultsKv);
+    return c.json(snap);
+  });
+
+  /** DELETE /build-result — clears stale state on session reset. */
+  app.delete("/build-result", async (c) => {
+    const sessionId = sessionIdOf(c);
+    await clearBuildResult(sessionId, config.buildResultsKv);
+    return c.json({ ok: true });
+  });
+
+  // ── B1 — Job queue (parallel background runs) ────────────────────────────
+  // The runner self-fetches /run with the supplied body. That keeps the
+  // queued path bit-identical to the synchronous /run path; if /run grows
+  // a feature, jobs inherit it for free.
+  function jobRunnerFor(body: Record<string, unknown>, headers: Record<string, string>): JobRunner {
+    return async function* (_spec, signal): AsyncIterable<AgentEvent> {
+      const res = await app.fetch(
+        new Request("http://localhost/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify(body),
+          signal,
+        }),
+      );
+      if (!res.body) {
+        throw new Error(`/run returned no body (status ${res.status})`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        // Process complete SSE messages — separated by blank lines.
+        let nl = buf.indexOf("\n\n");
+        while (nl !== -1) {
+          const chunk = buf.slice(0, nl);
+          buf = buf.slice(nl + 2);
+          for (const line of chunk.split("\n")) {
+            if (!line.startsWith("data: ")) continue;
+            const payload = line.slice(6);
+            if (payload === "[DONE]") return;
+            try {
+              yield JSON.parse(payload) as AgentEvent;
+            } catch {
+              // Malformed SSE chunk — skip.
+            }
+          }
+          nl = buf.indexOf("\n\n");
+        }
+      }
+    };
+  }
+
+  /**
+   * POST /jobs — submit one or many tasks for background execution.
+   *
+   * Body shapes accepted:
+   *   { task: "...", agentMode: "tool", ... }                     // single
+   *   { jobs: [{ task: "...", ... }, { task: "...", ... }, ...] } // batch
+   *
+   * Returns `{ jobIds: string[] }` immediately. The agent payload is the same
+   * shape /run accepts, minus `task` which is required at the top level of
+   * each job.
+   */
+  app.post("/jobs", async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json<Record<string, unknown>>();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const sessionHeader = c.req.header("X-Session-Id");
+    const auth = c.req.header("Authorization");
+    const headers: Record<string, string> = {};
+    if (sessionHeader) headers["X-Session-Id"] = sessionHeader;
+    if (auth) headers["Authorization"] = auth;
+
+    // Normalise to a list of {task, payload} jobs.
+    let entries: Array<Record<string, unknown>>;
+    if (Array.isArray((body as { jobs?: unknown }).jobs)) {
+      entries = (body as { jobs: unknown[] }).jobs as Array<Record<string, unknown>>;
+    } else if (typeof (body as { task?: unknown }).task === "string") {
+      entries = [body];
+    } else {
+      return c.json({ error: "Body must contain `task` or a `jobs[]` array" }, 400);
+    }
+    if (entries.length === 0) return c.json({ error: "jobs[] is empty" }, 400);
+    if (entries.length > 20) return c.json({ error: "too many jobs (max 20 per request)" }, 400);
+
+    const jobIds: string[] = [];
+    for (const entry of entries) {
+      const task = entry.task;
+      if (typeof task !== "string" || !task.length) {
+        return c.json({ error: "each job must have a non-empty `task`" }, 400);
+      }
+      const spec: JobSpec = {
+        task,
+        ...(sessionHeader ? { sessionId: sessionHeader } : {}),
+        payload: entry,
+      };
+      const id = jobQueue.submit(spec, jobRunnerFor(entry, headers));
+      jobIds.push(id);
+    }
+    return c.json({ jobIds });
+  });
+
+  /** GET /jobs — list jobs, optionally filtered by status / sessionId. */
+  app.get("/jobs", (c) => {
+    const status = c.req.query("status") as
+      | "queued" | "running" | "done" | "failed" | "aborted" | undefined;
+    const sessionId = c.req.query("sessionId") ?? c.req.header("X-Session-Id");
+    const filter: { status?: typeof status; sessionId?: string } = {};
+    if (status) filter.status = status;
+    if (sessionId) filter.sessionId = sessionId;
+    const jobs = jobQueue.list(filter);
+    return c.json({
+      jobs,
+      stats: {
+        running: jobQueue.runningCount,
+        pending: jobQueue.pendingCount,
+        total: jobs.length,
+      },
+    });
+  });
+
+  /** GET /jobs/:id — full snapshot of one job (with eventTail). */
+  app.get("/jobs/:id", async (c) => {
+    const job = await jobQueue.get(c.req.param("id"));
+    if (!job) return c.json({ error: "job not found" }, 404);
+    return c.json(job);
+  });
+
+  /** DELETE /jobs/:id — cooperative abort. Returns whether the abort took. */
+  app.delete("/jobs/:id", (c) => {
+    const ok = jobQueue.abort(c.req.param("id"));
+    if (!ok) return c.json({ error: "job not found or already finished" }, 404);
+    return c.json({ ok: true });
+  });
+
   // ── Error log (last 50 agent errors for debugging) ────────────────────────
   app.get("/errors", (c) => c.json({ errors: [...errorLog].reverse(), count: errorLog.length }));
 
@@ -684,6 +890,67 @@ or {"mode":"tool","framework":null}`;
     if (!content) return c.json({ error: `Version ${version} not found for ${path}` }, 404);
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
     return c.json({ ok: true, path, version, chars: content.length });
+  });
+
+  // ── B3 — POST /import/github ─────────────────────────────────────────────
+  // Pull every text file in a repository into the worker's KV file store and
+  // (when an indexer is bound) feed each file into the semantic index. The
+  // agent's existing tools (read_file, search_code, semantic_search,
+  // create_github_pr) work on the imported tree without further plumbing.
+  app.post("/import/github", async (c) => {
+    const filesKv = resolveFilesKv(c.req.header("X-Session-Id"), config);
+    if (!filesKv) {
+      return c.json({ error: "files KV not bound on this worker" }, 500);
+    }
+    let body: {
+      owner?: string;
+      repo?: string;
+      ref?: string;
+      token?: string;
+      paths?: string[];
+      textExtensions?: string[];
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    if (!body.owner || !body.repo) {
+      return c.json({ error: "owner and repo are required" }, 400);
+    }
+    const ambientToken = config.githubToken;
+    const indexer = indexerFor(c);
+    try {
+      const result = await importGithubRepo(
+        {
+          owner: body.owner,
+          repo: body.repo,
+          ...(body.ref ? { ref: body.ref } : {}),
+          ...(body.token ?? ambientToken ? { token: body.token ?? ambientToken } : {}),
+          ...(body.paths ? { paths: body.paths } : {}),
+          ...(body.textExtensions ? { textExtensions: body.textExtensions } : {}),
+        },
+        {
+          filesKv,
+          ...(indexer
+            ? {
+                onFileImported: async (path, content) => {
+                  try {
+                    await indexer.upsert(path, content);
+                  } catch (err) {
+                    console.warn(`[import/github] index upsert failed for ${path}:`, err);
+                  }
+                },
+              }
+            : {}),
+        },
+      );
+      return c.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      recordError(`/import/github: ${msg}`);
+      return c.json({ error: msg }, 502);
+    }
   });
 
   app.post("/files", async (c) => {
@@ -866,7 +1133,12 @@ or {"mode":"tool","framework":null}`;
           ...(guardrails?.deniedTools ?? []),
           // Framework mode: block run_command and git tools — WebContainers handles execution
           ...(body.framework ? ["run_command", "git_status", "git_diff", "git_log", "git_commit", "git_checkout"] : []),
-        ], fileTreeFor(c), indexerFor(c));
+        ], fileTreeFor(c), indexerFor(c), sessionId, Boolean(body.framework));
+        // B4 — wrap write tools with the configured approval policy.
+        const approvalPolicy = resolveApprovalPolicy(body.approvalPolicy);
+        const policedTools = approvalPolicy
+          ? applyApprovalPolicy(approvalPolicy, tools)
+          : tools;
         const inputGuardrails = buildInputGuardrails(guardrails);
         const outputGuardrails = buildOutputGuardrails(guardrails);
         // Merge resource budget from request into enhancementPolicy
@@ -925,14 +1197,14 @@ or {"mode":"tool","framework":null}`;
           const aggregation = policy?.parallelForkJoin?.aggregation ?? "summary";
           agentRun = enhancedAgentRun(model, new ParallelForkJoinRunner({ branches, concurrency, aggregation }), finalTask);
         } else if (agentMode === "multi") {
-          agentRun = multiAgentRun(model, tools, finalTask, { maxSteps: agentExtras.maxSteps });
+          agentRun = multiAgentRun(model, policedTools, finalTask, { maxSteps: agentExtras.maxSteps });
         } else if (agentMode === "ptc") {
-          agentRun = ptcAgentRun(model, tools, finalTask, codeLanguage, config);
+          agentRun = ptcAgentRun(model, policedTools, finalTask, codeLanguage, config);
         } else {
           const agent =
             agentMode === "tool"
-              ? createToolAgent(model, tools, agentExtras)
-              : createCodeAgent(model, tools, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
+              ? createToolAgent(model, policedTools, agentExtras)
+              : createCodeAgent(model, policedTools, { ...agentExtras, codeLanguage, e2bApiKey: config.e2bApiKey });
 
           // Inject conversation history as prior user_message + assistant steps
           // so the agent has multi-turn context within its MessageAssembler.
@@ -1085,6 +1357,16 @@ interface RunBody {
   /** Framework mode — activates framework-aware system prompt in ToolAgent */
   framework?: "react" | "vue" | "svelte" | "vanilla" | null;
 
+  // ── B4 — Approval policy ────────────────────────────────────────────────────
+  /**
+   * Per-call approval policy for write tools. Accepts:
+   *   - "permissive" / "balanced" / "strict" — preset name; OR
+   *   - an ApprovalPolicyOptions literal — custom rules
+   * Defaults to "permissive" (no rule overrides), preserving the legacy
+   * behaviour where only `create_github_pr` was HITL-gated.
+   */
+  approvalPolicy?: "permissive" | "balanced" | "strict" | ApprovalPolicyOptions;
+
   // ── Enhancement policy (replaces flat "enhancement" string for new features) ──
   /** Inline enhancement policy — configures runners with custom parameters */
   enhancementPolicy?: import("@agentkit-js/core").EnhancementPolicy;
@@ -1178,7 +1460,11 @@ function buildTools(
   config: AppConfig,
   deniedTools?: string[],
   fileTree?: FileTreeManager,
-  indexer?: SemanticIndexer
+  indexer?: SemanticIndexer,
+  // B2 — session id for the build-result reverse channel. Optional so
+  // out-of-band paths (eg /eval) can keep calling buildTools unchanged.
+  sessionId?: string,
+  isFramework?: boolean,
 ): ToolDefinition[] {
   const shellRunner = createShellRunner(config);
   const tools: ToolDefinition[] = [
@@ -1193,6 +1479,14 @@ function buildTools(
     createWebSearchTool(),
     ...createGitTools(config),
   ];
+  // B2 — read_build_result tool registered in framework mode where the
+  // browser is the only execution surface. Outside framework mode the
+  // agent has run_command, so the build-result channel is redundant.
+  if (isFramework && sessionId) {
+    tools.push(
+      createReadBuildResultTool({ sessionId, kv: config.buildResultsKv }),
+    );
+  }
   // B2 — semantic search registered when an indexer is present.
   if (indexer) tools.push(createSemanticSearchTool(indexer));
   // B4 — versioning tools registered when a per-session FileTreeManager is present.
@@ -1237,6 +1531,18 @@ function buildTools(
     });
   }
   return filteredTools;
+}
+
+/**
+ * B4 — Translate the per-call `approvalPolicy` field into an
+ * ApprovalPolicy instance. Returns `null` for "permissive" / undefined
+ * so the caller can short-circuit and skip the wrap.
+ */
+function resolveApprovalPolicy(spec: RunBody["approvalPolicy"]): ApprovalPolicy | null {
+  if (spec === undefined || spec === "permissive") return null;
+  if (spec === "balanced") return PolicyPresets.balanced();
+  if (spec === "strict") return PolicyPresets.strict();
+  return new ApprovalPolicy(spec);
 }
 
 function buildInputGuardrails(guardrails?: RunBody["guardrails"]) {

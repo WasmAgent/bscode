@@ -19,6 +19,8 @@ export interface Env {
   BSCODE_SESSIONS?: KVNamespace;
   /** B1 — KV namespace for durable agent checkpoints. */
   BSCODE_CHECKPOINTS?: KVNamespace;
+  /** B2 — KV namespace for browser-reported build/install/test outcomes. */
+  BSCODE_BUILD_RESULTS?: KVNamespace;
 }
 
 export default {
@@ -34,6 +36,7 @@ export default {
       filesKv: env.BSCODE_FILES ? kvFromNamespace(env.BSCODE_FILES) : undefined,
       sessionsKv: env.BSCODE_SESSIONS ? kvFromNamespace(env.BSCODE_SESSIONS) : undefined,
       checkpointsKv: env.BSCODE_CHECKPOINTS ? kvFromNamespace(env.BSCODE_CHECKPOINTS) : undefined,
+      buildResultsKv: env.BSCODE_BUILD_RESULTS ? kvFromNamespace(env.BSCODE_BUILD_RESULTS) : undefined,
     };
     const app = createApp(config);
     return app.fetch(request, env, ctx);

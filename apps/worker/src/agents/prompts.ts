@@ -218,6 +218,24 @@ const VANILLA_STANDARDS = `## Code Standards
 - requestAnimationFrame for animations
 - No external dependencies unless explicitly requested`;
 
+// B2 — Closed-loop build validation. Framework agents run on the worker
+// edge with `run_command` disabled; the only way to know whether the
+// project actually compiles is to read what the browser-side WebContainer
+// reports. This fragment teaches the agent to USE the channel and how to
+// interpret the result. Keep it short — it's appended to every framework
+// prompt, so verbosity costs prompt cache hits.
+const BUILD_VALIDATION = `## Verification (build-result reverse channel)
+After all files are written, call **read_build_result** to confirm the project
+compiles in the user's browser:
+- \`status: success\` → done; mention the previewUrl in your summary if present.
+- \`status: failed\` → inspect the stderr tail, fix the offending file (often
+  a missing dep in package.json, a typo in an import path, or a TS error),
+  and call read_build_result AGAIN to confirm the fix landed.
+- \`status: running\` or \`unknown\` → the browser hasn't finished yet; call
+  read_build_result one more time after a short pause. Do NOT loop forever:
+  give up after 2-3 polls and tell the user the build is still in progress.
+- Never claim success without a \`status: success\` reading.`;
+
 const GENERAL_REASONING = `## Approach (Reasoning-First — Lovable pattern)
 Before writing any code:
 1. Read existing files to understand the codebase structure
@@ -243,22 +261,23 @@ export function bscodeFrameworkPrompt(framework: Framework = "general"): string 
           CODE_QUALITY_TYPESCRIPT,
           DIAGRAMS_GENERIC,
           REACT_RULES,
+          BUILD_VALIDATION,
         ],
       });
     case "vue":
       return composePrompt({
         persona: VUE_PERSONA,
-        fragments: [VUE_PLAN, VUE_STANDARDS, DIAGRAMS_GENERIC],
+        fragments: [VUE_PLAN, VUE_STANDARDS, DIAGRAMS_GENERIC, BUILD_VALIDATION],
       });
     case "svelte":
       return composePrompt({
         persona: SVELTE_PERSONA,
-        fragments: [SVELTE_PLAN, SVELTE_STANDARDS, DIAGRAMS_GENERIC],
+        fragments: [SVELTE_PLAN, SVELTE_STANDARDS, DIAGRAMS_GENERIC, BUILD_VALIDATION],
       });
     case "vanilla":
       return composePrompt({
         persona: VANILLA_PERSONA,
-        fragments: [VANILLA_PLAN, VANILLA_STANDARDS, DIAGRAMS_GENERIC],
+        fragments: [VANILLA_PLAN, VANILLA_STANDARDS, DIAGRAMS_GENERIC, BUILD_VALIDATION],
       });
     default:
       return composePrompt({

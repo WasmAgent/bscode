@@ -4,6 +4,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type WcStatus = "idle" | "booting" | "installing" | "starting" | "ready" | "error";
 
+/**
+ * B2 — Build result snapshot we POST back to the worker so the agent can
+ * verify its work via the `read_build_result` tool. Mirrors the worker-side
+ * BuildResultSnapshot type intentionally; we duplicate rather than import
+ * to keep the worker package out of the browser bundle.
+ */
+interface BuildResultPayload {
+  status: "success" | "failed" | "running";
+  stage: "install" | "build" | "dev" | "test";
+  exitCode?: number;
+  stderr?: string;
+  wallTimeMs?: number;
+  previewUrl?: string;
+}
+
 export interface UseWebContainerReturn {
   status: WcStatus;
   previewUrl: string | null;
@@ -43,6 +58,30 @@ export function useWebContainer(): UseWebContainerReturn {
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const devProcessRef = useRef<Awaited<ReturnType<WebContainer["spawn"]>> | null>(null);
   const serverUnsubRef = useRef<(() => void) | null>(null);
+
+  // B2 — POST a build/install/test result back to the worker so agents
+  // calling `read_build_result` see a live snapshot. Best-effort: any
+  // network failure here is logged but never thrown — the WebContainer
+  // path must continue to work even if the worker is unreachable.
+  const reportBuildResult = useCallback(async (payload: BuildResultPayload) => {
+    try {
+      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8788";
+      const sessionId =
+        (typeof window !== "undefined" && window.localStorage.getItem("bscode.sessionId")) ||
+        "default";
+      await fetch(`${workerUrl}/build-result`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Session-Id": sessionId,
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      // Don't surface to UI; the WebContainer flow itself is unaffected.
+      console.warn("[wc] build-result report failed:", err);
+    }
+  }, []);
 
   const appendLine = useCallback((line: string) => {
     // Strip ANSI escape codes (cursor movement, color, etc.) and carriage returns
@@ -90,11 +129,16 @@ export function useWebContainer(): UseWebContainerReturn {
           appendLine(`[wc] Server ready → ${url}`);
           setPreviewUrl(url);
           setStatus("ready");
+          // B2 — broadcast success so the agent's read_build_result tool
+          // can confirm the dev server actually came up.
+          void reportBuildResult({ stage: "dev", status: "success", previewUrl: url });
         });
 
         // npm install — collect output for error reporting
         setStatus("installing");
         appendLine("[wc] Running npm install…");
+        const installStartedAt = Date.now();
+        void reportBuildResult({ stage: "install", status: "running" });
         const installProc = await wc.spawn("npm", ["install"]);
         const installLines: string[] = [];
 
@@ -108,12 +152,27 @@ export function useWebContainer(): UseWebContainerReturn {
         );
 
         const installExit = await installProc.exit;
+        const installWall = Date.now() - installStartedAt;
         if (installExit !== 0) {
           const errMsg = installLines.join("").slice(-1000); // last 1000 chars of output
           setBuildError(errMsg);
+          void reportBuildResult({
+            stage: "install",
+            status: "failed",
+            exitCode: installExit,
+            stderr: errMsg,
+            wallTimeMs: installWall,
+          });
           throw new Error(`npm install failed (exit ${installExit})\n${errMsg}`);
         }
         appendLine("[wc] npm install done.");
+        // Install OK; dev-server step will report its own success/failure.
+        void reportBuildResult({
+          stage: "install",
+          status: "success",
+          exitCode: 0,
+          wallTimeMs: installWall,
+        });
 
         // npm run dev — collect build errors if dev server crashes
         setStatus("starting");
@@ -129,7 +188,15 @@ export function useWebContainer(): UseWebContainerReturn {
               devLines.push(chunk);
               // Detect build errors from Vite output
               if (/error:|Error:|failed to compile/i.test(chunk)) {
-                setBuildError((prev) => (prev ? prev + chunk : chunk).slice(-2000));
+                const merged = (buildError ? buildError + chunk : chunk).slice(-2000);
+                setBuildError(merged);
+                // B2 — report as a failed *build* (the install already succeeded);
+                // the agent will see the stderr tail and try to patch the source.
+                void reportBuildResult({
+                  stage: "build",
+                  status: "failed",
+                  stderr: merged,
+                });
               }
             },
           })
@@ -141,7 +208,7 @@ export function useWebContainer(): UseWebContainerReturn {
         setStatus("error");
       }
     },
-    [reset, appendLine]
+    [reset, appendLine, reportBuildResult, buildError]
   );
 
   /**
@@ -174,24 +241,48 @@ export function useWebContainer(): UseWebContainerReturn {
         devProcessRef.current?.kill();
         devProcessRef.current = null;
 
+        const installStartedAt = Date.now();
+        void reportBuildResult({ stage: "install", status: "running" });
         const installProc = await wc.spawn("npm", ["install"]);
-        installProc.output.pipeTo(new WritableStream({ write: (chunk) => appendLine(chunk) }));
+        const installLines: string[] = [];
+        installProc.output.pipeTo(
+          new WritableStream({
+            write: (chunk) => {
+              appendLine(chunk);
+              installLines.push(chunk);
+            },
+          })
+        );
         const exitCode = await installProc.exit;
+        const installWall = Date.now() - installStartedAt;
 
         if (exitCode !== 0) {
           appendLine("[wc] npm install failed");
           setStatus("error");
+          void reportBuildResult({
+            stage: "install",
+            status: "failed",
+            exitCode,
+            stderr: installLines.join("").slice(-1000),
+            wallTimeMs: installWall,
+          });
           return;
         }
 
         appendLine("[wc] Restarting dev server…");
         setStatus("starting");
+        void reportBuildResult({
+          stage: "install",
+          status: "success",
+          exitCode: 0,
+          wallTimeMs: installWall,
+        });
         const devProc = await wc.spawn("npm", ["run", "dev"]);
         devProcessRef.current = devProc;
         devProc.output.pipeTo(new WritableStream({ write: (chunk) => appendLine(chunk) }));
       }
     },
-    [status, appendLine]
+    [status, appendLine, reportBuildResult]
   );
 
   // Cleanup on unmount

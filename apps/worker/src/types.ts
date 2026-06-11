@@ -35,6 +35,13 @@ export interface AppConfig {
    */
   checkpointsKv?: KvStore;
   /**
+   * B2 — Optional KV store for browser-reported build results. When the
+   * browser-side WebContainer finishes install/build/test it POSTs the
+   * outcome to /build-result; the worker mirrors it here so a recycle does
+   * not drop the snapshot. Falls back to in-memory only when undefined.
+   */
+  buildResultsKv?: KvStore;
+  /**
    * B3 — Optional GitHub personal access token used as a fallback by
    * `create_github_pr`. Per-call `token` in the tool input always wins.
    */

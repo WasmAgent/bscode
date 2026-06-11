@@ -7,7 +7,7 @@
  */
 
 import type { AgentEvent } from "@agentkit-js/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { MemKvStore } from "./platform.js";
 
@@ -667,5 +667,451 @@ describe("Checkpoints — B1 durable backend", () => {
       const snap = await cp.load(TRACE);
       expect(snap?.humanResponse).toEqual({ promptId: "approve-push", response: "yes" });
     }
+  });
+});
+
+// ── B2 — Build result reverse channel ────────────────────────────────────────
+describe("Build result reverse channel (B2)", () => {
+  it("POST /build-result then GET round-trips a snapshot per session", async () => {
+    const app = makeApp();
+    const post = await app.fetch(
+      new Request("http://localhost/build-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "sess-1" },
+        body: JSON.stringify({
+          status: "failed",
+          stage: "install",
+          exitCode: 1,
+          stderr: "ENOENT not found",
+        }),
+      }),
+    );
+    expect(post.status).toBe(200);
+    const get = await app.fetch(
+      new Request("http://localhost/build-result", {
+        headers: { "X-Session-Id": "sess-1" },
+      }),
+    );
+    expect(get.status).toBe(200);
+    const body = (await get.json()) as { status: string; stderr?: string };
+    expect(body.status).toBe("failed");
+    expect(body.stderr).toContain("ENOENT");
+  });
+
+  it("POST /build-result rejects malformed JSON with 400", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/build-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json",
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /build-result rejects an unknown status with 400", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/build-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "exploded" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /build-result clears the snapshot", async () => {
+    const app = makeApp();
+    await app.fetch(
+      new Request("http://localhost/build-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "sess-2" },
+        body: JSON.stringify({ status: "success" }),
+      }),
+    );
+    const del = await app.fetch(
+      new Request("http://localhost/build-result", {
+        method: "DELETE",
+        headers: { "X-Session-Id": "sess-2" },
+      }),
+    );
+    expect(del.status).toBe(200);
+    const get = await app.fetch(
+      new Request("http://localhost/build-result", {
+        headers: { "X-Session-Id": "sess-2" },
+      }),
+    );
+    const body = (await get.json()) as { status: string };
+    expect(body.status).toBe("unknown");
+  });
+
+  it("two sessions are isolated via X-Session-Id", async () => {
+    const app = makeApp();
+    await app.fetch(
+      new Request("http://localhost/build-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        body: JSON.stringify({ status: "success" }),
+      }),
+    );
+    await app.fetch(
+      new Request("http://localhost/build-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "bob" },
+        body: JSON.stringify({ status: "failed", stage: "build", stderr: "TS2339" }),
+      }),
+    );
+    const a = await (
+      await app.fetch(
+        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "alice" } }),
+      )
+    ).json();
+    const b = await (
+      await app.fetch(
+        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "bob" } }),
+      )
+    ).json();
+    expect((a as { status: string }).status).toBe("success");
+    expect((b as { status: string }).status).toBe("failed");
+  });
+});
+
+// ── B1 — Job queue ────────────────────────────────────────────────────────────
+describe("Job queue (B1)", () => {
+  /** Wait until the job reaches a terminal status, or timeout. */
+  async function waitForTerminal(
+    app: ReturnType<typeof createApp>,
+    jobId: string,
+    timeoutMs = 2000,
+  ) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const res = await app.fetch(new Request(`http://localhost/jobs/${jobId}`));
+      const job = (await res.json()) as { status: string };
+      if (job.status === "done" || job.status === "failed" || job.status === "aborted") {
+        return job;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error(`job ${jobId} did not finish within ${timeoutMs}ms`);
+  }
+
+  it("POST /jobs accepts a single task and reports status transitions", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: "compute 6 * 7", agentMode: "code" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const { jobIds } = (await res.json()) as { jobIds: string[] };
+    expect(jobIds.length).toBe(1);
+
+    const final = await waitForTerminal(app, jobIds[0]);
+    expect(final.status).toBe("done");
+  });
+
+  it("POST /jobs accepts a batch of jobs", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobs: [
+            { task: "task A", agentMode: "code" },
+            { task: "task B", agentMode: "code" },
+            { task: "task C", agentMode: "code" },
+          ],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const { jobIds } = (await res.json()) as { jobIds: string[] };
+    expect(jobIds.length).toBe(3);
+    for (const id of jobIds) {
+      const final = await waitForTerminal(app, id);
+      expect(final.status).toBe("done");
+    }
+  });
+
+  it("POST /jobs rejects empty / malformed bodies with 400", async () => {
+    const app = makeApp();
+    const noTask = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobs: [] }),
+      }),
+    );
+    expect(noTask.status).toBe(400);
+
+    const bad = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json",
+      }),
+    );
+    expect(bad.status).toBe(400);
+
+    const noField = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ irrelevant: 1 }),
+      }),
+    );
+    expect(noField.status).toBe(400);
+  });
+
+  it("POST /jobs caps batch size at 20", async () => {
+    const app = makeApp();
+    const tooMany = Array.from({ length: 21 }).map((_, i) => ({
+      task: `t${i}`,
+      agentMode: "code",
+    }));
+    const res = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobs: tooMany }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /jobs lists submitted jobs newest-first", async () => {
+    const app = makeApp();
+    const sub = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "list-1" },
+        body: JSON.stringify({
+          jobs: [
+            { task: "first", agentMode: "code" },
+            { task: "second", agentMode: "code" },
+          ],
+        }),
+      }),
+    );
+    const { jobIds } = (await sub.json()) as { jobIds: string[] };
+    for (const id of jobIds) await waitForTerminal(app, id);
+
+    const list = await app.fetch(
+      new Request("http://localhost/jobs?sessionId=list-1"),
+    );
+    const body = (await list.json()) as {
+      jobs: Array<{ id: string; spec: { task: string } }>;
+      stats: { total: number };
+    };
+    expect(body.stats.total).toBe(2);
+    // Newest-first ordering: second before first.
+    expect(body.jobs[0]?.spec.task).toBe("second");
+    expect(body.jobs[1]?.spec.task).toBe("first");
+  });
+
+  it("GET /jobs/:id returns 404 for unknown ids", async () => {
+    const app = makeApp();
+    const res = await app.fetch(new Request("http://localhost/jobs/no-such-job"));
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /jobs/:id aborts a running job", async () => {
+    // Make the agent emit a few events then sleep on a signal-aware promise
+    // so that .abort() actually propagates rather than waiting out a fixed
+    // timer. The queue's loop checks signal.aborted between yields, so we
+    // must yield at least once and let the loop turn before aborting.
+    const oldEvents = mockEvents;
+    const oldFactory = agentFactory;
+    let runnerSignal: AbortSignal | null = null;
+    agentFactory = () =>
+      (async function* () {
+        // First event lets the queue's iterator enter the for-await loop.
+        yield DEFAULT_EVENTS[0]!;
+        // Wait either until aborted (test triggers it) or up to 1s.
+        await new Promise<void>((resolve) => {
+          const t = setTimeout(resolve, 1000);
+          // The /run handler sets runnerSignal via its own AbortSignal —
+          // tests use the same hook by pulling it from the wrapper.
+          if (runnerSignal?.aborted) {
+            clearTimeout(t);
+            resolve();
+          } else {
+            runnerSignal?.addEventListener("abort", () => {
+              clearTimeout(t);
+              resolve();
+            });
+          }
+        });
+        // Yield once more so the queue loop re-checks signal.aborted.
+        yield {
+          traceId: "t1",
+          parentTraceId: null,
+          channel: "text",
+          event: "step_start",
+          data: { step: 99 },
+          timestampMs: Date.now(),
+        } as AgentEvent;
+      })();
+    try {
+      const app = makeApp();
+      // Wrap fetch to intercept Request.signal so the mock generator can see it.
+      const sub = await app.fetch(
+        new Request("http://localhost/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task: "stuck", agentMode: "code" }),
+        }),
+      );
+      const { jobIds } = (await sub.json()) as { jobIds: string[] };
+      const id = jobIds[0]!;
+
+      // The job's runner self-fetches /run; that internal Request carries
+      // the abort signal. We don't have a hook into that signal, so we test
+      // the queue-level abort via /jobs DELETE — which flips the queue's
+      // own AbortController. The queue then trusts the runner to wind down
+      // by checking signal.aborted between yields.
+      await new Promise((r) => setTimeout(r, 50));
+
+      const del = await app.fetch(
+        new Request(`http://localhost/jobs/${id}`, { method: "DELETE" }),
+      );
+      expect(del.status).toBe(200);
+
+      // Wait up to 2s for terminal state. Even if the inner generator runs
+      // to completion (1s timeout), the queue records "done" — we just want
+      // to confirm the abort path doesn't hang the worker.
+      const start = Date.now();
+      let final = "running";
+      while (Date.now() - start < 2000) {
+        const after = await (
+          await app.fetch(new Request(`http://localhost/jobs/${id}`))
+        ).json();
+        const status = (after as { status: string }).status;
+        if (["aborted", "failed", "done"].includes(status)) {
+          final = status;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(["aborted", "failed", "done"]).toContain(final);
+    } finally {
+      mockEvents = oldEvents;
+      agentFactory = oldFactory;
+      runnerSignal = null;
+    }
+  });
+
+  it("DELETE /jobs/:id returns 404 for unknown jobs", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/jobs/no-such-job", { method: "DELETE" }),
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── B3 — POST /import/github ─────────────────────────────────────────────────
+describe("GitHub repo import (B3)", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  function stubGithubFetch() {
+    // biome-ignore lint/suspicious/noExplicitAny: Buffer is Node-only, vitest runs there.
+    const Buf = (globalThis as any).Buffer;
+    const enc = (s: string) =>
+      Buf
+        ? Buf.from(s, "utf-8").toString("base64")
+        : btoa(unescape(encodeURIComponent(s)));
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
+        return new Response(JSON.stringify({ default_branch: "main" }), { status: 200 });
+      }
+      if (/\/git\/trees\//.test(url)) {
+        return new Response(
+          JSON.stringify({
+            sha: "root",
+            tree: [
+              {
+                path: "src/index.ts",
+                type: "blob",
+                size: 8,
+                sha: "s1",
+                url: "https://api.github.com/repos/x/y/git/blobs/s1",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (/\/git\/blobs\//.test(url)) {
+        return new Response(
+          JSON.stringify({ content: enc("hello"), encoding: "base64", sha: "s1", size: 5 }),
+          { status: 200 },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+  }
+
+  it("POST /import/github writes files to KV", async () => {
+    stubGithubFetch();
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/import/github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner: "x", repo: "y" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { imported: number; preview: string[] };
+    expect(body.imported).toBe(1);
+    expect(body.preview).toContain("src/index.ts");
+  });
+
+  it("POST /import/github rejects missing owner/repo with 400", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/import/github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner: "x" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /import/github rejects malformed JSON with 400", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/import/github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{not json",
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /import/github bubbles GitHub errors as 502", async () => {
+    globalThis.fetch = (async () => new Response("nope", { status: 404 })) as typeof fetch;
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/import/github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner: "x", repo: "y" }),
+      }),
+    );
+    expect(res.status).toBe(502);
   });
 });

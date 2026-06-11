@@ -18,6 +18,14 @@ export type {
   GitHubPrOutput,
 } from "./githubPr.js";
 export { createGitHubPrTool } from "./githubPr.js";
+export type { CreateReadBuildResultToolOptions } from "./build-result.js";
+export { createReadBuildResultTool, formatBuildResult } from "./build-result.js";
+export type {
+  ImportGithubInput,
+  ImportGithubOutput,
+  ImportOptions,
+} from "./githubImport.js";
+export { importGithubRepo } from "./githubImport.js";
 
 // Lock Wrangler dev secrets — specific to BSCode worker deployment
 globalFileLock.lock(".dev.vars", "hard", "Wrangler dev secrets — never overwrite");
