@@ -7,6 +7,16 @@ compatibility_flags = ["nodejs_compat"]
 AGENTKIT_LOG_LEVEL = "info"
 BSCODE_ALLOWED_ORIGIN = "*"
 
+# B3 follow-up — OpenAI-API-shape embedding endpoint. Uncomment AND set
+# the three matching secrets to swap the default TF-IDF embedder for a
+# real-vector one (text-embedding-3-small from OpenAI by default; any
+# OpenAI-compatible server — TEI, Ollama, vLLM — works the same way).
+# When any of the three is missing the worker silently falls back to TF-IDF.
+# Set the API key as a secret (never as a plaintext var):
+#   wrangler secret put EMBEDDING_API_KEY
+# EMBEDDING_BASE_URL = "https://api.openai.com"
+# EMBEDDING_MODEL    = "text-embedding-3-small"
+
 # Virtual file system for the coding assistant
 # Create with: wrangler kv namespace create BSCODE_FILES
 # [[kv_namespaces]]

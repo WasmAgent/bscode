@@ -86,25 +86,25 @@ Returns:
 
 ## True-embedding upgrade
 
-`semanticSearch.ts` accepts an `Embedder` from `@agentkit-js/core` (the
-shape `tools-rag` uses). To swap out TF-IDF:
+The `semanticSearch.ts` indexer accepts an `Embedder` from
+`@agentkit-js/core` (the shape `tools-rag` uses). The bscode worker
+auto-wires `HttpEmbedder` from `@agentkit-js/tools-rag` when these three
+env vars are set (Wrangler secrets / `.dev.vars`):
 
-```ts
-import { HttpEmbedder } from "@agentkit-js/tools-rag";
-
-const embedder = new HttpEmbedder({
-  baseUrl: "https://api.openai.com",
-  path:    "/v1/embeddings",
-  model:   "text-embedding-3-small",
-  apiKey:  config.openaiApiKey,
-});
-
-const indexer = createSemanticIndexer({ kv: filesKv, embedder });
+```bash
+EMBEDDING_API_KEY="sk-..."
+EMBEDDING_BASE_URL="https://api.openai.com"
+EMBEDDING_MODEL="text-embedding-3-small"
 ```
 
-The HttpEmbedder is OpenAI-API-shape compatible, so any open-source
-embedder server (TEI, Ollama with `/v1/embeddings`, vLLM) drops in
-without code changes.
+When any of the three is missing the worker silently falls back to
+TF-IDF — no code change needed to flip between them. Existing in-memory
+TF-IDF indexes for already-active sessions are preserved on switch; new
+sessions pick up the HttpEmbedder, avoiding a re-index storm on
+restart.
+
+Any OpenAI-API-shape embedder server drops in (TEI, Ollama with
+`/v1/embeddings`, vLLM) — point `EMBEDDING_BASE_URL` at it.
 
 ## Limitations & escape hatches
 

@@ -171,7 +171,7 @@ describe("importGithubRepo", () => {
         defaultBranch: "develop",
         tree: [],
       })(input);
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     await importGithubRepo(
       { owner: "x", repo: "y" },
       { filesKv: kv, fetch: fetchMock },

@@ -21,11 +21,13 @@ import type { KvStore } from "../types.js";
 
 // ── GitHub REST helpers ──────────────────────────────────────────────────────
 
-interface GhHeaders {
+// Index signature lets TS treat this as Record<string, string> for fetch's
+// HeadersInit requirement, while still documenting the always-present keys.
+type GhHeaders = {
   Authorization: string;
   Accept: string;
   "Content-Type": string;
-}
+} & Record<string, string>;
 
 async function ghJson<T>(
   url: string,

@@ -30,7 +30,7 @@ import {
 } from "@agentkit-js/core";
 import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
-import { multiAgentRun } from "./agents/multi-agent.js";
+import { multiAgentRun, runPlanFirstExecution, type MultiAgentMode } from "./agents/multi-agent.js";
 import { createToolAgent } from "./agents/tool-agent.js";
 import {
   type CustomModelConfig,
@@ -172,19 +172,10 @@ function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }):
   return tree;
 }
 
-// B2 — per-session semantic indexer. The default in-process TF-IDF embedder
-// keeps zero-deps and works without an external API; pass a real Embedder via
-// AppConfig (future) for cross-session persistence + better recall.
-const sessionIndexers = new Map<string, SemanticIndexer>();
-function indexerFor(c: { req: { header: (n: string) => string | undefined } }): SemanticIndexer {
-  const id = sessionIdOf(c);
-  let idx = sessionIndexers.get(id);
-  if (!idx) {
-    idx = createSemanticIndexer({});
-    sessionIndexers.set(id, idx);
-  }
-  return idx;
-}
+// B2 — per-session semantic indexer state. The Map is module-level only so
+// the closure inside createApp() can carry per-AppConfig embedder choice.
+// Each app instance maintains its own Map below; we rebind via factory.
+type IndexerFor = (c: { req: { header: (n: string) => string | undefined } }) => SemanticIndexer;
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {
@@ -199,6 +190,53 @@ export function createApp(config: AppConfig) {
     eventTailSize: 100,
     durableKv: config.sessionsKv, // same KV used for cached run replays
   });
+
+  // ── B2 / B3 — Semantic indexer factory (per app) ─────────────────────────
+  // Build the embedder once per createApp instance:
+  //   - HttpEmbedder when AppConfig.embedding is fully populated
+  //   - TF-IDF (zero-deps, in-process) otherwise.
+  // Per-session indexers are constructed lazily so each conversation gets
+  // its own vocabulary; the underlying embedder is shared.
+  const sessionIndexers = new Map<string, SemanticIndexer>();
+  let sharedEmbedder: import("@agentkit-js/core").Embedder | undefined;
+  if (config.embedding) {
+    // Lazy import keeps tools-rag out of the bundle when the consumer
+    // never sets EMBEDDING_API_KEY. The dynamic import is awaited inside
+    // the indexerFor() factory the first time it's called.
+    sharedEmbedder = undefined; // resolved on first use
+  }
+  const indexerFor: IndexerFor = (c) => {
+    const id = sessionIdOf(c);
+    let idx = sessionIndexers.get(id);
+    if (!idx) {
+      // Use the embedder if it was already resolved; otherwise fall back to
+      // TF-IDF for this session and lazily upgrade subsequent sessions once
+      // the dynamic import completes (see resolveEmbedder below).
+      idx = createSemanticIndexer({
+        ...(sharedEmbedder ? { embedder: sharedEmbedder } : {}),
+      });
+      sessionIndexers.set(id, idx);
+    }
+    return idx;
+  };
+  // Kick off the dynamic import once if embedding is configured. Failure
+  // logs and falls through to TF-IDF — we never crash the app on this.
+  if (config.embedding) {
+    void (async () => {
+      try {
+        const { HttpEmbedder } = await import("@agentkit-js/tools-rag");
+        sharedEmbedder = new HttpEmbedder({
+          apiKey: config.embedding!.apiKey,
+          baseUrl: config.embedding!.baseUrl,
+          model: config.embedding!.model,
+        });
+        // Existing TF-IDF indexers stay as-is — only NEW sessions pick up
+        // the HttpEmbedder. This avoids a re-index storm on restart.
+      } catch (err) {
+        console.warn("[embedder] failed to load HttpEmbedder, falling back to TF-IDF:", err);
+      }
+    })();
+  }
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   app.use("*", async (c, next) => {
@@ -1197,7 +1235,62 @@ or {"mode":"tool","framework":null}`;
           const aggregation = policy?.parallelForkJoin?.aggregation ?? "summary";
           agentRun = enhancedAgentRun(model, new ParallelForkJoinRunner({ branches, concurrency, aggregation }), finalTask);
         } else if (agentMode === "multi") {
-          agentRun = multiAgentRun(model, policedTools, finalTask, { maxSteps: agentExtras.maxSteps });
+          // B4 resume path — when the client posts a humanResponse + checkpointId
+          // we treat this as the second half of a planFirst flow: restore the
+          // snapshot, extract the plan from the persisted prompt, run the
+          // executor stage with full tools.
+          if (body.humanResponse && body.checkpointId) {
+            const cpId = body.checkpointId;
+            const cp = checkpointerFor(config);
+            const snapshot = await cp.load(cpId);
+            if (!snapshot) {
+              throw new Error(`planFirst resume: no snapshot for checkpointId=${cpId}`);
+            }
+            if (!snapshot.pendingHumanInput) {
+              throw new Error(`planFirst resume: snapshot has no pending human input`);
+            }
+            // Persist the response so future audits can see what the user said.
+            await cp.respond(cpId, body.humanResponse.promptId, body.humanResponse.response);
+            // The prompt body is `Approve this plan?\n\n<planText>` — strip the prefix.
+            const promptText = snapshot.pendingHumanInput.prompt;
+            const planText = promptText.replace(/^Approve this plan\?\s*\n+/i, "").trim();
+            agentRun = runPlanFirstExecution(
+              model,
+              policedTools,
+              snapshot.task,
+              planText,
+              body.humanResponse.response,
+              { maxSteps: agentExtras.maxSteps },
+            );
+          } else {
+            const multiAgentExtras: Parameters<typeof multiAgentRun>[3] = {
+              maxSteps: agentExtras.maxSteps,
+              ...(body.multiAgentMode ? { mode: body.multiAgentMode } : {}),
+              ...(body.multiAgentBranches !== undefined ? { branches: body.multiAgentBranches } : {}),
+              ...(body.multiAgentConcurrency !== undefined ? { concurrency: body.multiAgentConcurrency } : {}),
+            };
+            const baseRun = multiAgentRun(model, policedTools, finalTask, multiAgentExtras);
+            // planFirst suspends mid-stream via await_human_input — wrap with
+            // CheckpointableRun so the snapshot lands in KV before the
+            // generator returns. parallel mode skips this overhead.
+            if (body.multiAgentMode === "planFirst") {
+              const cpId = body.checkpointId ?? finalTask.slice(0, 40);
+              const cpTraceId = `planfirst-${cpId}-${Date.now()}`;
+              // multiAgentRun does not own a MessageAssembler — pass a fresh
+              // one whose .steps[] just records the plan event. CheckpointableRun
+              // only reads `assembler.steps` on snapshot persistence.
+              const { MessageAssembler } = await import("@agentkit-js/core");
+              const planAssembler = new MessageAssembler({ systemPrompt: "", toolsSchema: [] });
+              planAssembler.addStep({ type: "user_message", content: finalTask });
+              const cpRun = new CheckpointableRun(
+                { checkpointer: checkpointerFor(config) },
+                planAssembler,
+              );
+              agentRun = cpRun.run(baseRun, finalTask, cpTraceId);
+            } else {
+              agentRun = baseRun;
+            }
+          }
         } else if (agentMode === "ptc") {
           agentRun = ptcAgentRun(model, policedTools, finalTask, codeLanguage, config);
         } else {
@@ -1366,6 +1459,29 @@ interface RunBody {
    * behaviour where only `create_github_pr` was HITL-gated.
    */
   approvalPolicy?: "permissive" | "balanced" | "strict" | ApprovalPolicyOptions;
+
+  // ── B1+B4 — Multi-agent shape ───────────────────────────────────────────
+  /**
+   * When agentMode === "multi", controls the runner shape:
+   *   - "parallel"  (default) — fork-join draft → reviewer with full tools.
+   *   - "planFirst" — planner → await_human_input → executor with full tools.
+   * The planFirst flow PAUSES the run; the client resumes by re-POSTing
+   * /run with humanResponse + the original checkpointId.
+   */
+  multiAgentMode?: MultiAgentMode;
+  /** Number of fork-join branches in parallel mode (default 3). */
+  multiAgentBranches?: number;
+  /** Concurrency cap for the fork-join (default 2). */
+  multiAgentConcurrency?: number;
+
+  // ── B4 — humanResponse resume payload (planFirst) ───────────────────────
+  /**
+   * Approval / amendment text from the user, posted on the SECOND /run
+   * call when resuming a planFirst run. Must be paired with the original
+   * checkpointId so the worker can locate the snapshot and apply the
+   * response before kicking off the executor stage.
+   */
+  humanResponse?: { promptId: string; response: string };
 
   // ── Enhancement policy (replaces flat "enhancement" string for new features) ──
   /** Inline enhancement policy — configures runners with custom parameters */

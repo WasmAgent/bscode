@@ -16,6 +16,17 @@ import { FsKvStore, MemKvStore } from "./platform.js";
 const port = Number(process.env.PORT ?? 8788);
 const workdir = process.env.BSCODE_WORKDIR ?? process.cwd();
 
+const embedding =
+  process.env.EMBEDDING_API_KEY &&
+  process.env.EMBEDDING_BASE_URL &&
+  process.env.EMBEDDING_MODEL
+    ? {
+        apiKey: process.env.EMBEDDING_API_KEY,
+        baseUrl: process.env.EMBEDDING_BASE_URL,
+        model: process.env.EMBEDDING_MODEL,
+      }
+    : undefined;
+
 const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
@@ -33,6 +44,7 @@ const config = {
   sessionsKv: undefined,
   enableShell: true,
   workdir,
+  ...(embedding ? { embedding } : {}),
 };
 
 const app = createApp(config);
@@ -134,6 +146,11 @@ server.listen(port, () => {
   console.log(`  Files KV : ${join(workdir, ".bscode-files")} (real filesystem)`);
   console.log(`  Shell    : enabled (git tools active)`);
   console.log(`  Model    : ${modelProvider}`);
+  console.log(
+    `  Embedder : ${
+      embedding ? `HttpEmbedder (${embedding.model} @ ${embedding.baseUrl})` : "TF-IDF (in-process)"
+    }`,
+  );
   console.log(`\n  CLI: node ../../scripts/bscode.mjs --url http://localhost:${port} "task"\n`);
 });
 

@@ -21,10 +21,22 @@ export interface Env {
   BSCODE_CHECKPOINTS?: KVNamespace;
   /** B2 — KV namespace for browser-reported build/install/test outcomes. */
   BSCODE_BUILD_RESULTS?: KVNamespace;
+  /** B3 follow-up — OpenAI-API-shape embedding endpoint (api key, base url, model). */
+  EMBEDDING_API_KEY?: string;
+  EMBEDDING_BASE_URL?: string;
+  EMBEDDING_MODEL?: string;
 }
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const embedding =
+      env.EMBEDDING_API_KEY && env.EMBEDDING_BASE_URL && env.EMBEDDING_MODEL
+        ? {
+            apiKey: env.EMBEDDING_API_KEY,
+            baseUrl: env.EMBEDDING_BASE_URL,
+            model: env.EMBEDDING_MODEL,
+          }
+        : undefined;
     const config: AppConfig = {
       anthropicApiKey: env.ANTHROPIC_API_KEY,
       anthropicBaseUrl: env.ANTHROPIC_BASE_URL,
@@ -37,6 +49,7 @@ export default {
       sessionsKv: env.BSCODE_SESSIONS ? kvFromNamespace(env.BSCODE_SESSIONS) : undefined,
       checkpointsKv: env.BSCODE_CHECKPOINTS ? kvFromNamespace(env.BSCODE_CHECKPOINTS) : undefined,
       buildResultsKv: env.BSCODE_BUILD_RESULTS ? kvFromNamespace(env.BSCODE_BUILD_RESULTS) : undefined,
+      ...(embedding ? { embedding } : {}),
     };
     const app = createApp(config);
     return app.fetch(request, env, ctx);

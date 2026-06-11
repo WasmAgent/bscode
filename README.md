@@ -116,13 +116,14 @@ benchmark, not a marketing line.
 
 | Metric | Verified by | Current value |
 |---|---|---|
-| **Backend test suite** | `apps/worker` vitest | **151 tests, 100% pass** |
+| **Backend test suite** | `apps/worker` vitest | **162 tests, 100% pass** |
 | **Frontend test suite** | `apps/web` vitest | **25 tests, 100% pass** |
 | **Cross-instance checkpoint resume (B1 ①)** | `apps/worker/src/app.test.ts` | snapshot saved by app instance A is loadable by a brand-new instance B sharing the same KV; HITL `pendingHumanInput` survives across three instances (pause / resume / continue) |
 | **Build-result reverse channel (B2)** | `apps/worker/src/build-results.test.ts`, `tools/build-result.test.ts`, `app.test.ts` | 18 unit + 5 route tests cover memory/KV mirror, stderr truncation (≤2000 chars), session isolation via `X-Session-Id`, and graceful fallback on KV outage |
 | **Parallel job queue (B1)** | `apps/worker/src/jobs/queue.test.ts`, `app.test.ts`, `apps/web/src/components/JobsPanel.test.tsx` | 10 queue + 8 route + 5 dashboard tests cover concurrency cap, KV durable mirror across recycle, cooperative abort via `AbortSignal`, batch validation (max 20 per request), newest-first list ordering, and dashboard submit/abort flow |
 | **GitHub repo import (B3)** | `apps/worker/src/tools/githubImport.test.ts`, `app.test.ts` | 8 importer + 4 route tests cover default-branch resolution, extension/path filtering, base64 decoding, oversize/binary skipping, partial-tree propagation, per-file fetch error counters, and the 502 bubble path |
 | **Tiered approval policy (B4)** | `apps/worker/src/policies/approvalPolicy.test.ts` | 12 tests cover default verdict, first-rule-wins ordering, prefix matching, op filtering, size gating, audit `explain()`, and each preset (`permissive` / `balanced` / `strict`) |
+| **Multi-agent shapes (B1+B4)** | `apps/worker/src/agents/multi-agent.test.ts`, `app.test.ts` | 6 unit + 2 route tests cover the new `parallel` (fork-join via `ParallelForkJoinRunner`) and `planFirst` (planner → `await_human_input` → executor) modes plus the resume path that loads a snapshot and runs `runPlanFirstExecution`. The old serial Phase1+Phase2 layout was removed entirely. |
 | **`semantic_search` Top-3 recall vs grep (B2 ①)** | `apps/worker/src/tools/semanticSearch.eval.test.ts` | **70%** (semantic) vs **0%** (grep) on a 50-file synthetic project with paraphrased queries |
 | **Lighthouse desktop snapshot** | `chrome-devtools-mcp` audit | **Accessibility 100 · Best Practices 100 · SEO 100 · Agentic Browsing 100** (24/24 audits passing) |
 | **Cost-display accuracy** | `apps/web/src/components/TokenMeter.tsx` | sums per-call `estimatedUsd` from the worker (computed with the actual model's pricing); no longer mis-bills Haiku/Opus runs as Sonnet |

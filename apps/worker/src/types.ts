@@ -42,6 +42,17 @@ export interface AppConfig {
    */
   buildResultsKv?: KvStore;
   /**
+   * B3 follow-up — Optional embedder configuration. When all three fields
+   * are set, the worker constructs an OpenAI-API-shape HttpEmbedder and
+   * uses it for semantic search instead of the default TF-IDF embedder.
+   * When any field is missing, the worker silently falls back to TF-IDF.
+   */
+  embedding?: {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+  };
+  /**
    * B3 — Optional GitHub personal access token used as a fallback by
    * `create_github_pr`. Per-call `token` in the tool input always wins.
    */

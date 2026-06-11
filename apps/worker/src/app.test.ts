@@ -56,6 +56,24 @@ vi.mock("./agents/multi-agent.js", () => ({
   multiAgentRun: async function* () {
     for (const e of mockEvents) yield e;
   },
+  runPlanFirstExecution: async function* () {
+    yield {
+      traceId: "exec",
+      parentTraceId: null,
+      channel: "text",
+      event: "run_start",
+      data: { task: "executing" },
+      timestampMs: 0,
+    } as AgentEvent;
+    yield {
+      traceId: "exec",
+      parentTraceId: null,
+      channel: "text",
+      event: "final_answer",
+      data: { answer: "executed-after-approval" },
+      timestampMs: 1,
+    } as AgentEvent;
+  },
 }));
 
 vi.mock("./models/registry.js", async (importOriginal) => {
@@ -956,7 +974,7 @@ describe("Job queue (B1)", () => {
           event: "step_start",
           data: { step: 99 },
           timestampMs: Date.now(),
-        } as AgentEvent;
+        } as unknown as AgentEvent;
       })();
     try {
       const app = makeApp();
@@ -1059,7 +1077,7 @@ describe("GitHub repo import (B3)", () => {
         );
       }
       return new Response("not found", { status: 404 });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
   }
 
   it("POST /import/github writes files to KV", async () => {
@@ -1103,7 +1121,7 @@ describe("GitHub repo import (B3)", () => {
   });
 
   it("POST /import/github bubbles GitHub errors as 502", async () => {
-    globalThis.fetch = (async () => new Response("nope", { status: 404 })) as typeof fetch;
+    globalThis.fetch = (async () => new Response("nope", { status: 404 })) as unknown as typeof fetch;
     const app = makeApp();
     const res = await app.fetch(
       new Request("http://localhost/import/github", {
@@ -1113,5 +1131,63 @@ describe("GitHub repo import (B3)", () => {
       }),
     );
     expect(res.status).toBe(502);
+  });
+});
+
+// ── B4 — planFirst resume flow ────────────────────────────────────────────
+describe("planFirst resume (B4)", () => {
+  it("POST /run with humanResponse + checkpointId resumes the executor stage", async () => {
+    const checkpointsKv = new MemKvStore();
+    const app = makeApp({ checkpointsKv });
+
+    // Seed a snapshot the resume code path will load. KvCheckpointer keys
+    // raw by traceId — checkpointId === traceId here for simplicity.
+    const cpId = "demo-plan-1";
+    const snapshot = {
+      traceId: cpId,
+      task: "ship feature X",
+      history: [],
+      stepIndex: 1,
+      savedAtMs: 0,
+      pendingHumanInput: {
+        promptId: "approve-plan",
+        prompt: "Approve this plan?\n\n1. read_file foo.ts\n2. patch_file foo.ts",
+      },
+    };
+    await checkpointsKv.put(cpId, JSON.stringify(snapshot));
+
+    const res = await post(app, {
+      task: "ignored — original task is in the snapshot",
+      agentMode: "multi",
+      multiAgentMode: "planFirst",
+      checkpointId: cpId,
+      humanResponse: { promptId: "approve-plan", response: "yes" },
+    });
+    expect(res.status).toBe(200);
+    const events = await parseSSE(res);
+    const finalAnswers = events.filter((e) => e.event === "final_answer");
+    expect(finalAnswers.length).toBeGreaterThan(0);
+    const last = finalAnswers[finalAnswers.length - 1] as unknown as {
+      data: { answer: string };
+    };
+    expect(last.data.answer).toBe("executed-after-approval");
+  });
+
+  it("POST /run with humanResponse + missing checkpoint throws 4xx-shaped error event", async () => {
+    const app = makeApp();
+    const res = await post(app, {
+      task: "x",
+      agentMode: "multi",
+      multiAgentMode: "planFirst",
+      checkpointId: "no-such-cp",
+      humanResponse: { promptId: "approve-plan", response: "yes" },
+    });
+    // The handler still returns SSE; the error surfaces as an event.
+    expect(res.status).toBe(200);
+    const events = await parseSSE(res);
+    const errEv = events.find((e) => e.event === "error");
+    expect(errEv).toBeTruthy();
+    const errData = (errEv as unknown as { data: { error: string } }).data;
+    expect(errData.error).toMatch(/no snapshot/i);
   });
 });

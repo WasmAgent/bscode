@@ -16,7 +16,7 @@ import { createGitHubPrTool } from "./githubPr.js";
 
 function fakeFetch() {
   const calls: { url: string; method: string; body?: unknown }[] = [];
-  const fakeFn: typeof fetch = async (input, init) => {
+  const fakeFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method ?? "GET").toUpperCase();
     let parsedBody: unknown;
@@ -49,7 +49,7 @@ function fakeFetch() {
       );
     }
     return new Response("not found", { status: 404 });
-  };
+  }) as unknown as typeof fetch;
   return { fakeFn, calls };
 }
 
