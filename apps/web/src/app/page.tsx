@@ -2,6 +2,7 @@
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal, type PreviewContent } from "@/components/Terminal";
+import { SettingsDrawer } from "@/components/SettingsDrawer";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
 import { useGitHub } from "@/hooks/useGitHub";
@@ -650,6 +651,10 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         </div>
       </div>
 
+      {settingsOpen && (
+        <SettingsDrawer onClose={() => setSettingsOpen(false)} />
+      )}
+
       {/* ── Main area ── */}
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
 
@@ -985,7 +990,16 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               ))}
               <button
                 type="button"
-                onClick={() => { resetAll(); setPreview(undefined); wcReset(); }}
+                onClick={() => {
+                  // Reset agent state, drop all conversation turns,
+                  // wipe preview pane, and reset the WebContainers
+                  // mount. The previous behaviour only reset the
+                  // agent + preview, leaving stale turns visible.
+                  resetAll();
+                  setTurns([]);
+                  setPreview(undefined);
+                  wcReset();
+                }}
                 style={{ padding: "3px 8px", borderRadius: 3, border: "none", background: "transparent", color: "#f85149", fontSize: 10, cursor: "pointer" }}
               >
                 Clear
