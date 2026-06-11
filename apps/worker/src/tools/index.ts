@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "@agentkit-js/core";
-import { globalFileLock } from "@agentkit-js/core";
+import { FileTreeManager, globalFileLock } from "@agentkit-js/core";
 import { applyPatch } from "diff";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
@@ -86,7 +86,8 @@ export function createSearchCodeTool(
 }
 
 export function createWriteFileTool(
-  kv: KvStore | undefined
+  kv: KvStore | undefined,
+  fileTree?: FileTreeManager
 ): ToolDefinition<{ path: string; content: string }, string> {
   return {
     name: "write_file",
@@ -113,6 +114,11 @@ export function createWriteFileTool(
 
       if (!kv) return `OK (KV not bound — write to ${path} simulated)`;
       await kv.put(normalizeKey(path), content);
+      // Mirror into the per-session FileTreeManager so version history
+      // accrues for agent-written files (not just user-written via POST
+      // /files). Without this the v0.dev-style checkpoint feature only
+      // works for manual edits, which defeats the point.
+      if (fileTree) fileTree.recordWrite(path.replace(/^\/+/, ""), content);
       return `OK: written ${content.length} chars to ${path}`;
     },
   };

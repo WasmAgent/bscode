@@ -802,7 +802,7 @@ or {"mode":"tool","framework":null}`;
           ...(guardrails?.deniedTools ?? []),
           // Framework mode: block run_command and git tools — WebContainers handles execution
           ...(body.framework ? ["run_command", "git_status", "git_diff", "git_log", "git_commit", "git_checkout"] : []),
-        ]);
+        ], fileTreeFor(c));
         const inputGuardrails = buildInputGuardrails(guardrails);
         const outputGuardrails = buildOutputGuardrails(guardrails);
         // Merge resource budget from request into enhancementPolicy
@@ -1109,14 +1109,15 @@ function buildTools(
   filesKv: KvStore | undefined,
   useMemory: boolean,
   config: AppConfig,
-  deniedTools?: string[]
+  deniedTools?: string[],
+  fileTree?: FileTreeManager
 ): ToolDefinition[] {
   const shellRunner = createShellRunner(config);
   const tools: ToolDefinition[] = [
     createReadFileTool(filesKv),
     createListFilesTool(filesKv),
     createSearchCodeTool(filesKv),
-    createWriteFileTool(filesKv),
+    createWriteFileTool(filesKv, fileTree),
     createPatchFileTool(filesKv),
     createDeleteFileTool(filesKv),
     createRenameFileTool(filesKv),
