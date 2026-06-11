@@ -7,18 +7,38 @@
 }
 
 :root {
+  /* Surfaces */
   --bg: #0d1117;
   --bg2: #161b22;
   --bg3: #21262d;
+  --bg-hover: #1f242c;
+
+  /* Borders */
   --border: #30363d;
-  --text: #c9d1d9;
-  --text-muted: #8b949e;
+  --border-strong: #484f58;
+
+  /* Text — see lib/theme.ts for contrast targets and rationale.
+     Previous palette had --text-muted at #8b949e which failed AA on cost
+     numbers; bumped to #d0d7de + a separate --text-dim for hints. */
+  --text: #e6edf3;
+  --text-primary: #ffffff;
+  --text-muted: #d0d7de;
+  --text-dim: #9ba3af;
+  --text-disabled: #6e7681;
+
+  /* Accents */
   --accent: #58a6ff;
+  --accent-cost: #f1c40f;
+  --accent-new: #bc8cff;
+  --accent-suggestion: #e3b341;
+
+  /* Status */
   --green: #3fb950;
   --yellow: #d29922;
-  --red: #f85149;
-  --purple: #bc8cff;
   --orange: #e3b341;
+  --red: #f85149;
+
+  /* Typography */
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
 }
 

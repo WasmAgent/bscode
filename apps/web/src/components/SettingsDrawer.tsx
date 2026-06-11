@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { theme } from "@/lib/theme";
 
 /**
  * Minimal settings drawer.
@@ -63,7 +64,7 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
           <button
             type="button"
             onClick={onClose}
-            style={{ background: "none", border: "none", color: "#8b949e", cursor: "pointer", fontSize: 16 }}
+            style={{ background: "none", border: "none", color: theme.textMuted, cursor: "pointer", fontSize: 16 }}
             title="Close"
           >
             ✕
@@ -101,7 +102,7 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
           {savedFlash && <span style={{ color: "#3fb950" }}>Saved ✓</span>}
         </div>
 
-        <div style={{ marginTop: 18, paddingTop: 12, borderTop: "1px solid #30363d", color: "#8b949e", lineHeight: 1.6 }}>
+        <div style={{ marginTop: 18, paddingTop: 12, borderTop: "1px solid #30363d", color: theme.textMuted, lineHeight: 1.6 }}>
           <strong style={{ color: "#c9d1d9" }}>Note:</strong> API keys are configured server-side
           via Wrangler secrets (<code style={code}>.dev.vars</code> for local dev, <code style={code}>wrangler secret put</code>
           {" "}for prod). They are intentionally not exposed in the browser.
@@ -113,7 +114,7 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
 
 const fieldLabel: React.CSSProperties = {
   display: "block", marginBottom: 12, fontSize: 11,
-  color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.5,
+  color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.5,
 };
 const fieldInput: React.CSSProperties = {
   display: "block", width: "100%", marginTop: 4, padding: "6px 8px",
@@ -121,7 +122,7 @@ const fieldInput: React.CSSProperties = {
   borderRadius: 4, fontFamily: "inherit", fontSize: 12, boxSizing: "border-box",
 };
 const hint: React.CSSProperties = {
-  display: "block", marginTop: 4, fontSize: 10, color: "#6e7681",
+  display: "block", marginTop: 4, fontSize: 10, color: theme.textDim,
   textTransform: "none", letterSpacing: 0,
 };
 const primaryBtn: React.CSSProperties = {

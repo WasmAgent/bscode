@@ -1,5 +1,6 @@
 "use client";
 import { type CSSProperties, useEffect, useState } from "react";
+import { theme } from "@/lib/theme";
 import { Editor } from "./Editor";
 
 /**
@@ -145,7 +146,7 @@ export function DiffViewer({
     >
       <div style={HEADER}>
         <span style={{ fontWeight: 700 }}>Diff:</span>
-        <span style={{ color: "#8b949e" }}>{path}</span>
+        <span style={{ color: theme.textMuted }}>{path}</span>
         <span style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           {versions.length > 0 && (
             <select

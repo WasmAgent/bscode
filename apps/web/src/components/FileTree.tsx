@@ -1,5 +1,6 @@
 "use client";
 import { type CSSProperties, useMemo } from "react";
+import { theme } from "@/lib/theme";
 
 /**
  * FileTree — hierarchical view of paths.
@@ -202,7 +203,7 @@ export function FileTree({
       }}
     >
       {tree.length === 0 ? (
-        <div style={{ padding: 12, color: "#8b949e", fontSize: 12 }}>No files yet</div>
+        <div style={{ padding: 12, color: theme.textMuted, fontSize: 12 }}>No files yet</div>
       ) : (
         tree.map((c) =>
           c.type === "dir"

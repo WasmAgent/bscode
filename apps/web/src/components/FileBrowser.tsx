@@ -1,5 +1,6 @@
 "use client";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { theme } from "@/lib/theme";
 import { Editor } from "./Editor";
 import { type FileNode, FileTree } from "./FileTree";
 
@@ -35,7 +36,7 @@ const HEADER: CSSProperties = {
   borderBottom: "1px solid #30363d",
   padding: "4px 12px",
   fontSize: 11,
-  color: "#8b949e",
+  color: theme.textMuted,
   textTransform: "uppercase",
   letterSpacing: 0.8,
   fontFamily: "JetBrains Mono, monospace",
@@ -140,7 +141,7 @@ export function FileBrowser({
           <span>Files</span>
           {loading && <span style={{ color: "#e3b341" }}>● loading</span>}
           {error && <span style={{ color: "#f85149" }}>● {error}</span>}
-          <span style={{ marginLeft: "auto", fontSize: 10, color: "#484f58" }}>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: theme.textDim }}>
             {files.length}
           </span>
         </div>

@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal, type PreviewContent } from "@/components/Terminal";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
+import { theme } from "@/lib/theme";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
 import { useGitHub } from "@/hooks/useGitHub";
@@ -70,7 +71,7 @@ function modeLabel(d: ClassifyResult | null): string {
 
 const mono: React.CSSProperties = { fontFamily: "JetBrains Mono, monospace" };
 
-const iconBtn = (color = "#8b949e"): React.CSSProperties => ({
+const iconBtn = (color = theme.textMuted): React.CSSProperties => ({
   padding: "4px 8px",
   borderRadius: 3,
   border: "none",
@@ -629,7 +630,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                 style={{
                   padding: "3px 8px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
                   background: config.agentMode === mode && !config.framework ? "#1f6feb33" : "transparent",
-                  color: config.agentMode === mode && !config.framework ? "#58a6ff" : "#8b949e",
+                  color: config.agentMode === mode && !config.framework ? "#58a6ff" : theme.textMuted,
                   fontWeight: 600,
                 }}
               >
@@ -642,7 +643,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               style={{
                 padding: "3px 8px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
                 background: config.framework ? "#23863622" : "transparent",
-                color: config.framework ? "#3fb950" : "#8b949e",
+                color: config.framework ? "#3fb950" : theme.textMuted,
                 fontWeight: 600,
               }}
             >
@@ -660,7 +661,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                   style={{
                     padding: "2px 7px", borderRadius: 3, fontSize: 10, border: "none", cursor: "pointer",
                     background: config.framework === fw ? "#3fb95022" : "transparent",
-                    color: config.framework === fw ? "#3fb950" : "#8b949e",
+                    color: config.framework === fw ? "#3fb950" : theme.textMuted,
                   }}
                 >
                   {fw === "react" ? "React" : fw === "vue" ? "Vue" : fw === "svelte" ? "Svelte" : "Vanilla"}
@@ -669,7 +670,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             </div>
           )}
           {/* Auto-detect badge */}
-          <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: 10, color: "#8b949e" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: 10, color: theme.textMuted }}>
             <input
               type="checkbox"
               checked={config.autoMode ?? true}
@@ -691,20 +692,20 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             <option value="claude-opus-4-8">Opus 4.8</option>
             <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
           </select>
-          <button type="button" onClick={handleImportDir} disabled={importing} style={iconBtn(importing ? "#8b949e" : "#c9d1d9")} title="Import from directory">⬆ Dir</button>
-          <button type="button" onClick={handleImportZip} disabled={importing} style={iconBtn(importing ? "#8b949e" : "#c9d1d9")} title="Import ZIP">⬆ ZIP</button>
+          <button type="button" onClick={handleImportDir} disabled={importing} style={iconBtn(importing ? theme.textMuted : "#c9d1d9")} title="Import from directory">⬆ Dir</button>
+          <button type="button" onClick={handleImportZip} disabled={importing} style={iconBtn(importing ? theme.textMuted : "#c9d1d9")} title="Import ZIP">⬆ ZIP</button>
           <button type="button" onClick={handleDownloadZip} disabled={isDownloading} style={iconBtn("#58a6ff")} title="Download ZIP">⬇ ZIP</button>
           <button
             type="button"
             onClick={handleGitHub}
             disabled={pushing}
-            style={{ ...iconBtn(user ? "#3fb950" : "#8b949e"), display: "flex", alignItems: "center", gap: 4 }}
+            style={{ ...iconBtn(user ? "#3fb950" : theme.textMuted), display: "flex", alignItems: "center", gap: 4 }}
             title={user ? `Push to GitHub (${user.login})` : "Connect GitHub"}
           >
             {user ? <img src={user.avatar_url} alt={user.login} width={13} height={13} style={{ borderRadius: "50%" }} /> : null}
             {pushing ? "…" : user ? "Push" : "GitHub"}
           </button>
-          <button type="button" onClick={() => setSettingsOpen((o) => !o)} style={iconBtn("#8b949e")} title="Settings">⚙</button>
+          <button type="button" onClick={() => setSettingsOpen((o) => !o)} style={iconBtn(theme.textMuted)} title="Settings">⚙</button>
         </div>
       </div>
 
@@ -720,7 +721,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           {/* Chat scroll area */}
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 24 }}>
             {turns.length === 0 && (
-              <div style={{ color: "#484f58", fontSize: 13, textAlign: "center", marginTop: 60 }}>
+              <div style={{ color: theme.textDim, fontSize: 13, textAlign: "center", marginTop: 60 }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
                 <div>Describe a task to get started.</div>
                 <div style={{ fontSize: 11, marginTop: 6, color: "#30363d" }}>
@@ -796,7 +797,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                       // Use the original task (before inputText was cleared), skipClarify=true
                       handleSubmit(lastSubmittedTask.current || inputText, true);
                     }}
-                      style={{ background: "none", border: "none", color: "#8b949e", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
+                      style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
                     >
                       {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "") ? "跳过，直接运行 →" : "Skip, run anyway →"}
                     </button>
@@ -825,7 +826,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                                   borderRadius: 20,
                                   border: `1px solid ${selected ? "#58a6ff" : "#30363d"}`,
                                   background: selected ? "#1f6feb22" : "transparent",
-                                  color: selected ? "#58a6ff" : "#8b949e",
+                                  color: selected ? "#58a6ff" : theme.textMuted,
                                   fontSize: 11,
                                   cursor: "pointer",
                                   fontFamily: "inherit",
@@ -845,7 +846,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                               borderRadius: 20,
                               border: `1px solid ${clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : "#30363d"}`,
                               background: clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#1f6feb22" : "transparent",
-                              color: clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : "#8b949e",
+                              color: clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : theme.textMuted,
                               fontSize: 11,
                               cursor: "pointer",
                               fontFamily: "inherit",
@@ -891,7 +892,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                       borderRadius: 6,
                       border: "none",
                       background: allAnswered ? "#1f6feb" : "#21262d",
-                      color: allAnswered ? "#fff" : "#8b949e",
+                      color: allAnswered ? "#fff" : theme.textMuted,
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: allAnswered ? "pointer" : "default",
@@ -984,7 +985,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     style={{
                       padding: "10px 16px", borderRadius: 8, border: "none",
                       background: inputText.trim() ? "#1f6feb" : "#21262d",
-                      color: inputText.trim() ? "#fff" : "#8b949e",
+                      color: inputText.trim() ? "#fff" : theme.textMuted,
                       fontSize: 12, fontWeight: 700, cursor: inputText.trim() ? "pointer" : "default",
                       fontFamily: "inherit", transition: "background 0.15s",
                     }}
@@ -996,7 +997,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             </div>
             <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 10, color: "#484f58" }}>Cmd+Enter · @file to reference</span>
+                <span style={{ fontSize: 10, color: theme.textDim }}>Cmd+Enter · @file to reference</span>
                 {/* Enhance Prompt button (bolt.new pattern) */}
                 {inputText.trim() && !isRunning && !classifying && (
                   <button
@@ -1006,7 +1007,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                     title="Enhance prompt — expand into detailed spec (bolt.new ✨)"
                     style={{
                       padding: "2px 8px", borderRadius: 3, border: "1px solid #30363d",
-                      background: "transparent", color: enhancing ? "#8b949e" : "#bc8cff",
+                      background: "transparent", color: enhancing ? theme.textMuted : "#bc8cff",
                       fontSize: 10, cursor: enhancing ? "wait" : "pointer", fontFamily: "inherit",
                     }}
                   >
@@ -1025,7 +1026,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "0 12px", height: 36, background: "#161b22",
-            borderBottom: "1px solid #30363d", flexShrink: 0, fontSize: 11, color: "#8b949e",
+            borderBottom: "1px solid #30363d", flexShrink: 0, fontSize: 11, color: theme.textMuted,
           }}>
             <span style={{ textTransform: "uppercase", letterSpacing: 0.8 }}>
               Preview
@@ -1042,7 +1043,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                   style={{
                     padding: "3px 8px", borderRadius: 3, border: "none",
                     background: previewView === v ? "#1f6feb33" : "transparent",
-                    color: previewView === v ? "#58a6ff" : (v === "preview" && hasPreview && previewView !== "preview") ? "#e3b341" : "#8b949e",
+                    color: previewView === v ? "#58a6ff" : (v === "preview" && hasPreview && previewView !== "preview") ? "#e3b341" : theme.textMuted,
                     fontSize: 10, cursor: "pointer",
                     fontWeight: previewView === v ? 600 : 400,
                   }}
@@ -1152,7 +1153,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                 color: MODE_COLORS[label] ?? "#58a6ff",
               }}>{label}</span>
             )}
-            <span style={{ fontSize: 10, color: "#484f58", marginLeft: "auto" }}>
+            <span style={{ fontSize: 10, color: theme.textDim, marginLeft: "auto" }}>
               {new Date(turn.timestamp).toLocaleTimeString()}
             </span>
           </div>
@@ -1190,7 +1191,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
               {(!thinkingCollapsed || isActive) && (
                 <div style={{
                   background: "#0d1b2a", border: "1px solid #1f6feb33", borderRadius: 5,
-                  padding: "8px 10px", fontSize: 11, color: "#8b949e", lineHeight: 1.7,
+                  padding: "8px 10px", fontSize: 11, color: theme.textMuted, lineHeight: 1.7,
                   whiteSpace: "pre-wrap", wordBreak: "break-word" as const, marginTop: 4,
                 }}>
                   {turn.planText}
@@ -1202,7 +1203,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
           {/* File write progress — shown during framework-mode runs */}
           {isActive && turn.writtenFiles.length > 0 && (
             <div style={{ marginBottom: 8, background: "#0d1117", border: "1px solid #30363d", borderRadius: 5, padding: "6px 10px" }}>
-              <div style={{ fontSize: 10, color: "#8b949e", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.6 }}>
+              <div style={{ fontSize: 10, color: theme.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.6 }}>
                 Writing files ({turn.writtenFiles.length})
               </div>
               {turn.writtenFiles.map((f, i) => (
@@ -1235,7 +1236,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                 style={{
                   display: "flex", alignItems: "center", gap: 4,
                   background: "none", border: "none", padding: "2px 0",
-                  color: "#8b949e", fontSize: 10, cursor: "pointer",
+                  color: theme.textMuted, fontSize: 10, cursor: "pointer",
                   fontFamily: "JetBrains Mono, monospace",
                 }}
               >
@@ -1246,7 +1247,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
               {!thinkingCollapsed && (
                 <div style={{
                   background: "#0d1117", border: "1px solid #21262d", borderRadius: 5,
-                  padding: "8px 10px", fontSize: 11, color: "#8b949e", lineHeight: 1.6,
+                  padding: "8px 10px", fontSize: 11, color: theme.textMuted, lineHeight: 1.6,
                   whiteSpace: "pre-wrap", wordBreak: "break-word" as const,
                   maxHeight: 200, overflowY: "auto", marginTop: 4,
                 }}>
@@ -1303,7 +1304,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#c9d1d9", fontFamily: "inherit" }}>
                             {seg.card.meta ?? label}
                           </div>
-                          <div style={{ fontSize: 11, color: "#8b949e", fontFamily: "JetBrains Mono, monospace" }}>
+                          <div style={{ fontSize: 11, color: theme.textMuted, fontFamily: "JetBrains Mono, monospace" }}>
                             card:{seg.card.type} · {seg.card.content.split("\n").length} lines · click to view
                           </div>
                         </div>
@@ -1339,7 +1340,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
               )}
             </div>
           ) : isActive && !thinkingText ? (
-            <div style={{ color: "#8b949e", fontSize: 12 }}>
+            <div style={{ color: theme.textMuted, fontSize: 12 }}>
               <span style={{ animation: "pulse 1.2s infinite" }}>Thinking…</span>
             </div>
           ) : null}
@@ -1365,7 +1366,7 @@ function TurnBlock({ turn, isActive, streamingText, onFix, onRetry, onPreviewCar
                 onClick={onRetry}
                 style={{
                   padding: "4px 10px", borderRadius: 4, border: "1px solid #30363d",
-                  background: "transparent", color: "#8b949e", fontSize: 11,
+                  background: "transparent", color: theme.textMuted, fontSize: 11,
                   cursor: "pointer", fontFamily: "JetBrains Mono, monospace",
                 }}
               >

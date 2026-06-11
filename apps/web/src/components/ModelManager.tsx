@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { theme } from "@/lib/theme";
 
 interface ModelEntry {
   id: string;
@@ -33,7 +34,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   vllm: "#06b6d4",
   localai: "#22c55e",
   tgi: "#f59e0b",
-  custom: "#8b949e",
+  custom: theme.textMuted,
 };
 
 const _SOURCE_LABELS: Record<string, string> = {
@@ -138,7 +139,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
     border: "none",
     borderBottom: `2px solid ${active ? "#58a6ff" : "transparent"}`,
     background: "transparent",
-    color: active ? "#58a6ff" : "#8b949e",
+    color: active ? "#58a6ff" : theme.textMuted,
     fontSize: 12,
     cursor: "pointer",
     fontFamily: "inherit",
@@ -161,7 +162,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
     width: 8,
     height: 8,
     borderRadius: "50%",
-    background: PROVIDER_COLORS[provider] ?? "#8b949e",
+    background: PROVIDER_COLORS[provider] ?? theme.textMuted,
     flexShrink: 0,
   });
 
@@ -176,7 +177,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
 
   const providerTagStyle = (provider: string): React.CSSProperties => ({
     fontSize: 9,
-    color: PROVIDER_COLORS[provider] ?? "#8b949e",
+    color: PROVIDER_COLORS[provider] ?? theme.textMuted,
     opacity: 0.8,
   });
 
@@ -223,7 +224,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
     closeBtn: {
       background: "none",
       border: "none",
-      color: "#8b949e",
+      color: theme.textMuted,
       fontSize: 16,
       cursor: "pointer",
       padding: "0 4px",
@@ -236,7 +237,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
     section: { marginBottom: 16 },
     sectionLabel: {
       fontSize: 10,
-      color: "#8b949e",
+      color: theme.textMuted,
       textTransform: "uppercase",
       letterSpacing: 1,
       marginBottom: 8,
@@ -245,13 +246,13 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
     deleteBtn: {
       background: "none",
       border: "none",
-      color: "#8b949e",
+      color: theme.textMuted,
       cursor: "pointer",
       fontSize: 11,
       padding: "0 4px",
     },
     inputRow: { display: "flex", flexDirection: "column" as const, gap: 6, marginBottom: 12 },
-    label: { fontSize: 11, color: "#8b949e" },
+    label: { fontSize: 11, color: theme.textMuted },
     input: {
       padding: "6px 8px",
       background: "#0d1117",
@@ -262,7 +263,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
       fontSize: 12,
       outline: "none",
     },
-    hint: { fontSize: 10, color: "#8b949e" },
+    hint: { fontSize: 10, color: theme.textMuted },
     footer: {
       padding: "12px 20px",
       borderTop: "1px solid #30363d",
@@ -367,10 +368,10 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
         <div style={s.body}>
           {tab === "select" &&
             (loading ? (
-              <div style={{ color: "#8b949e", fontSize: 12 }}>Scanning local services…</div>
+              <div style={{ color: theme.textMuted, fontSize: 12 }}>Scanning local services…</div>
             ) : (
               <>
-                <div style={{ color: "#8b949e", fontSize: 11, marginBottom: 12 }}>
+                <div style={{ color: theme.textMuted, fontSize: 11, marginBottom: 12 }}>
                   Click a model to set as <span style={{ color: "#58a6ff" }}>Primary</span>. Toggle{" "}
                   <span style={{ color: "#3fb950" }}>+Economy</span> for low-cost tasks.
                 </div>
@@ -393,7 +394,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
                   </div>
                 )}
                 {models.length === 0 && (
-                  <div style={{ color: "#8b949e", fontSize: 12 }}>
+                  <div style={{ color: theme.textMuted, fontSize: 12 }}>
                     No models available. Add a custom model or configure API keys in .dev.vars
                   </div>
                 )}
@@ -402,7 +403,7 @@ export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: Mode
 
           {tab === "add" && (
             <>
-              <div style={{ color: "#8b949e", fontSize: 11, marginBottom: 16 }}>
+              <div style={{ color: theme.textMuted, fontSize: 11, marginBottom: 16 }}>
                 Add any OpenAI-compatible endpoint — Ollama, LM Studio, vLLM, OpenRouter, etc.
               </div>
               <div style={s.inputRow}>

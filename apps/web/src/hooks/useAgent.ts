@@ -7,6 +7,14 @@ export interface TokenStats {
   outputTokens: number;
   cacheReadTokens: number;
   calls: number;
+  /**
+   * Accumulated USD cost as reported by the worker's per-call `estimatedUsd`.
+   * The worker computes this with the actual model's pricing (Haiku is much
+   * cheaper than Sonnet, etc.), so we sum rather than recompute here.
+   */
+  accumulatedUsd: number;
+  /** Last modelId seen — informational, surfaced as a tooltip. */
+  lastModelId?: string;
 }
 
 export interface AgentConfig {
@@ -71,6 +79,7 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
     outputTokens: 0,
     cacheReadTokens: 0,
     calls: 0,
+    accumulatedUsd: 0,
   });
   const [rawEvents, setRawEvents] = useState<AgentEventMinimal[]>([]);
   const [classifying, setClassifying] = useState(false);
@@ -83,6 +92,7 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
     setRawEvents((prev) => [...prev, ev]);
     if (ev.event === "model_done") {
       const d = ev.data as {
+        modelId?: string;
         inputTokens?: number;
         outputTokens?: number;
         cacheReadTokens?: number;
@@ -92,11 +102,16 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
         calls?: number;
       };
       setTokenStats((prev) => {
-        const next = {
+        const next: TokenStats = {
           inputTokens: prev.inputTokens + (d.inputTokens ?? 0),
           outputTokens: prev.outputTokens + (d.outputTokens ?? 0),
           cacheReadTokens: prev.cacheReadTokens + (d.cacheReadTokens ?? 0),
           calls: prev.calls + 1,
+          // Sum the worker's per-call cost (computed with the actual model
+          // pricing — Haiku ≠ Sonnet ≠ Opus). Old behaviour recomputed
+          // locally with hardcoded Sonnet rates, mis-reporting Haiku 4×.
+          accumulatedUsd: prev.accumulatedUsd + (d.estimatedUsd ?? 0),
+          ...(d.modelId !== undefined && { lastModelId: d.modelId }),
         };
         statsRef.current = next;
         return next;
@@ -215,7 +230,7 @@ export function useAgent(config: AgentConfig, onConfigUpdate?: (update: Partial<
     setRawEvents([]);
     setDetectedMode(null);
     setClarifyingQuestions(null);
-    setTokenStats({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, calls: 0 });
+    setTokenStats({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, calls: 0, accumulatedUsd: 0 });
   }, [reset]);
 
   /** Dismiss clarifying questions and proceed with the run as-is */

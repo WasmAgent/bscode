@@ -1,6 +1,7 @@
 "use client";
 import type { CSSProperties } from "react";
 import type { TokenStats } from "@/hooks/useAgent";
+import { theme } from "@/lib/theme";
 
 interface TokenMeterProps {
   stats: TokenStats;
@@ -8,9 +9,12 @@ interface TokenMeterProps {
   compact?: boolean;
 }
 
+// All colours sourced from the central theme module — see lib/theme.ts for
+// rationale and contrast targets. Resist the urge to reintroduce inline hex.
+
 function hitStyle(pct: number): CSSProperties {
   return {
-    color: pct > 50 ? "#3fb950" : pct > 20 ? "#e3b341" : "#8b949e",
+    color: pct > 50 ? theme.statusOk : pct > 20 ? theme.statusWarn : theme.textMuted,
     fontWeight: 600,
   };
 }
@@ -19,7 +23,7 @@ function fillStyle(pct: number): CSSProperties {
   return {
     height: "100%",
     width: `${pct}%`,
-    background: pct > 50 ? "#3fb950" : pct > 20 ? "#e3b341" : "#8b949e",
+    background: pct > 50 ? theme.statusOk : pct > 20 ? theme.statusWarn : theme.textMuted,
     borderRadius: 2,
     transition: "width 0.3s ease",
   };
@@ -30,18 +34,18 @@ const barStyle: CSSProperties = {
   alignItems: "center",
   gap: 16,
   padding: "6px 16px",
-  background: "#161b22",
-  borderTop: "1px solid #30363d",
+  background: theme.bgPanel,
+  borderTop: `1px solid ${theme.borderDefault}`,
   fontSize: 11,
-  color: "#8b949e",
+  color: theme.textMuted,
   flexWrap: "wrap",
 };
 const statStyle: CSSProperties = { display: "flex", gap: 4, alignItems: "center" };
-const valStyle: CSSProperties = { color: "#c9d1d9", fontWeight: 600 };
+const valStyle: CSSProperties = { color: theme.textPrimary, fontWeight: 600 };
 const trackStyle: CSSProperties = {
   width: 60,
   height: 4,
-  background: "#30363d",
+  background: theme.borderDefault,
   borderRadius: 2,
   overflow: "hidden",
 };
@@ -49,17 +53,43 @@ const trackStyle: CSSProperties = {
 export function TokenMeter({ stats, compact }: TokenMeterProps) {
   const total = stats.inputTokens + stats.cacheReadTokens;
   const hitRate = total > 0 ? Math.round((stats.cacheReadTokens / total) * 100) : 0;
+  const usd = stats.accumulatedUsd ?? 0;
 
-  // Compact inline mode — shows just key stats in one short line
+  // Compact inline mode — shows just key stats in one short line.
   if (compact) {
     if (!stats.calls) return null;
     return (
-      <span style={{ fontSize: 10, color: "#484f58", display: "flex", gap: 8, alignItems: "center" }}>
-        <span>{stats.calls} call{stats.calls !== 1 ? "s" : ""}</span>
-        <span>{(stats.inputTokens + stats.outputTokens).toLocaleString()} tok</span>
-        {hitRate > 0 && <span style={{ color: hitRate > 50 ? "#3fb950" : "#e3b341" }}>{hitRate}% cache</span>}
-        {stats.inputTokens > 0 && (
-          <span>~${((stats.inputTokens * 3 + stats.outputTokens * 15) / 1_000_000).toFixed(4)}</span>
+      <span
+        style={{
+          fontSize: 10,
+          color: theme.textMuted,
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+        }}
+      >
+        <span>
+          {stats.calls} call{stats.calls !== 1 ? "s" : ""}
+        </span>
+        <span style={{ color: theme.textPrimary }}>
+          {(stats.inputTokens + stats.outputTokens).toLocaleString()} tok
+        </span>
+        {hitRate > 0 && (
+          <span style={{ color: hitRate > 50 ? theme.statusOk : theme.statusWarn }}>
+            {hitRate}% cache
+          </span>
+        )}
+        {usd > 0 && (
+          <span
+            title={
+              stats.lastModelId
+                ? `Cost computed with ${stats.lastModelId} pricing`
+                : "Cumulative cost across calls"
+            }
+            style={{ color: theme.accentCost, fontWeight: 600 }}
+          >
+            ~${usd.toFixed(4)}
+          </span>
         )}
       </span>
     );
@@ -90,9 +120,16 @@ export function TokenMeter({ stats, compact }: TokenMeterProps) {
           <span style={fillStyle(hitRate)} />
         </span>
       </span>
-      {stats.inputTokens > 0 && (
-        <span style={{ ...statStyle, marginLeft: "auto", color: "#8b949e" }}>
-          est. ~${((stats.inputTokens * 3 + stats.outputTokens * 15) / 1_000_000).toFixed(4)}
+      {usd > 0 && (
+        <span
+          title={
+            stats.lastModelId
+              ? `Cost computed with ${stats.lastModelId} pricing`
+              : "Cumulative cost across calls"
+          }
+          style={{ ...statStyle, marginLeft: "auto", color: theme.accentCost, fontWeight: 600 }}
+        >
+          est. ~${usd.toFixed(4)}
         </span>
       )}
     </div>

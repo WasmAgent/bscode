@@ -3,6 +3,7 @@ import type { AgentMessage } from "@agentkit-js/react";
 import type { CardBlock } from "@agentkit-js/ui-cards";
 import { useEffect, useRef, useCallback } from "react";
 import { ChatMessage, CardRenderer } from "@agentkit-js/ui-cards-react";
+import { theme } from "@/lib/theme";
 
 interface AgentEventMinimal {
   event: string;
@@ -11,16 +12,16 @@ interface AgentEventMinimal {
 
 const EVENT_COLORS: Record<string, string> = {
   run_start: "#58a6ff",
-  step_start: "#8b949e",
+  step_start: theme.textMuted,
   thinking_delta: "#bc8cff",
   planning: "#bc8cff",
   tool_call: "#e3b341",
   tool_result: "#3fb950",
-  model_start: "#8b949e",
-  model_done: "#8b949e",
+  model_start: theme.textMuted,
+  model_done: theme.textMuted,
   final_answer: "#3fb950",
   error: "#f85149",
-  status: "#8b949e",
+  status: theme.textMuted,
 };
 
 const EVENT_PREFIXES: Record<string, string> = {
@@ -104,7 +105,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
   };
 
   const empty: React.CSSProperties = {
-    color: "#8b949e",
+    color: theme.textMuted,
     fontStyle: "italic",
     textAlign: "center",
     marginTop: 40,
@@ -119,7 +120,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
       return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#f8fafc" }}>
           <div style={{ background: "#161b22", borderBottom: "1px solid #30363d", padding: "4px 12px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span style={{ ...mono, fontSize: 10, color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.8 }}>Card Preview</span>
+            <span style={{ ...mono, fontSize: 10, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>Card Preview</span>
             <span style={{ ...mono, fontSize: 10, color: "#58a6ff" }}>card:{preview.card.type}{preview.card.meta ? ` — ${preview.card.meta}` : ""}</span>
           </div>
           {/* flex: 1 + overflow: hidden lets the card fill remaining height */}
@@ -151,7 +152,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
         return (
           <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div style={{ background: "#161b22", borderBottom: "1px solid #30363d", padding: "4px 12px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-              <span style={{ ...mono, fontSize: 10, color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.8 }}>WebContainers</span>
+              <span style={{ ...mono, fontSize: 10, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>WebContainers</span>
               <span style={{ ...mono, fontSize: 10, color: "#e3b341", animation: "pulse 1.2s ease-in-out infinite" }}>● building…</span>
             </div>
             <div style={{ ...container, flex: 1 }}>
@@ -167,9 +168,9 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
       return (
         <div style={{ ...container, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
           <div style={{ fontSize: 24 }}>🖥️</div>
-          <div style={{ color: "#8b949e", textAlign: "center" }}>
+          <div style={{ color: theme.textMuted, textAlign: "center" }}>
             Preview will appear here after the agent finishes.<br />
-            <span style={{ fontSize: 11, color: "#484f58" }}>
+            <span style={{ fontSize: 11, color: theme.textDim }}>
               HTML → live render · JS/Python → execution output · Framework → WebContainers
             </span>
           </div>
@@ -182,7 +183,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
       return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
           <div style={{ background: "#161b22", borderBottom: "1px solid #30363d", padding: "4px 12px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span style={{ ...mono, fontSize: 10, color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.8 }}>Live Preview</span>
+            <span style={{ ...mono, fontSize: 10, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>Live Preview</span>
             <span style={{ ...mono, fontSize: 10, color: "#3fb950" }}>● WebContainers</span>
             <a href={preview.url} target="_blank" rel="noreferrer" style={{ ...mono, fontSize: 10, color: "#58a6ff", marginLeft: "auto", textDecoration: "none" }}>
               ↗ {preview.url}
@@ -225,7 +226,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
       return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
           <div style={{ background: "#161b22", borderBottom: "1px solid #30363d", padding: "4px 12px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <span style={{ ...mono, fontSize: 10, color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.8 }}>Live Preview</span>
+            <span style={{ ...mono, fontSize: 10, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>Live Preview</span>
             <span style={{ ...mono, fontSize: 10, color: "#3fb950" }}>● HTML</span>
           </div>
           <div style={{ flex: 1, overflow: "hidden", background: "#fff" }}>
@@ -245,7 +246,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <div style={{ background: "#161b22", borderBottom: "1px solid #30363d", padding: "4px 12px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <span style={{ ...mono, fontSize: 10, color: "#8b949e", textTransform: "uppercase", letterSpacing: 0.8 }}>Execution Output</span>
+          <span style={{ ...mono, fontSize: 10, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }}>Execution Output</span>
           {preview?.error
             ? <span style={{ ...mono, fontSize: 10, color: "#f85149" }}>● Error</span>
             : <span style={{ ...mono, fontSize: 10, color: "#3fb950" }}>● Done</span>
@@ -286,7 +287,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
             {/* Tool and error messages stay in terminal style */}
             {(msg.role === "tool" || msg.role === "error") ? (
               <div style={{ wordBreak: "break-word", whiteSpace: "pre-wrap", color: msgColor(msg.role), fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
-                <span style={{ color: "#8b949e" }}>{msgPrefix(msg.role, msg.toolName)}</span>{" "}
+                <span style={{ color: theme.textMuted }}>{msgPrefix(msg.role, msg.toolName)}</span>{" "}
                 {msg.content}
               </div>
             ) : (
@@ -333,7 +334,7 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
       {rawEvents.map((ev, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: event log display, no stable ID
         <div key={i} style={{ marginBottom: 2, wordBreak: "break-word", whiteSpace: "pre-wrap", color: EVENT_COLORS[ev.event] ?? "#c9d1d9" }}>
-          <span style={{ color: "#8b949e", marginRight: 8 }}>{String(i).padStart(3, "0")}</span>
+          <span style={{ color: theme.textMuted, marginRight: 8 }}>{String(i).padStart(3, "0")}</span>
           <span style={{ marginRight: 8 }}>{EVENT_PREFIXES[ev.event] ?? ev.event}</span>
           <span style={{ color: "#c9d1d9" }}>{formatEventData(ev)}</span>
         </div>

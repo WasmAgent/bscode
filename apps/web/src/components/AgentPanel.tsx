@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { ModelManager } from "@/components/ModelManager";
 import type { AgentConfig } from "@/hooks/useAgent";
+import { theme } from "@/lib/theme";
 
 // Static fallback models (shown before /models loads)
 const DEFAULT_MODELS = [
@@ -20,7 +21,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   llamacpp: "#eab308",
   vllm: "#06b6d4",
   localai: "#22c55e",
-  custom: "#8b949e",
+  custom: theme.textMuted,
 };
 
 interface AgentPanelProps {
@@ -50,7 +51,7 @@ const panelStyle: CSSProperties = {
 };
 const labelStyle: CSSProperties = {
   fontSize: 11,
-  color: "#8b949e",
+  color: theme.textMuted,
   marginBottom: 4,
   textTransform: "uppercase",
   letterSpacing: 1,
@@ -100,7 +101,7 @@ const titleStyle: CSSProperties = {
   fontSize: 16,
   letterSpacing: 1,
 };
-const subtitleStyle: CSSProperties = { color: "#8b949e", fontSize: 11, marginTop: 2 };
+const subtitleStyle: CSSProperties = { color: theme.textMuted, fontSize: 11, marginTop: 2 };
 
 function btnStyle(primary: boolean, danger = false): CSSProperties {
   return {
@@ -123,7 +124,7 @@ function modeBtnStyle(active: boolean): CSSProperties {
     borderRadius: 4,
     border: `1px solid ${active ? "#58a6ff" : "#30363d"}`,
     background: active ? "#1f6feb22" : "#21262d",
-    color: active ? "#58a6ff" : "#8b949e",
+    color: active ? "#58a6ff" : theme.textMuted,
     fontSize: 11,
     fontWeight: 600,
     textTransform: "uppercase",
@@ -137,7 +138,7 @@ function providerDotStyle(provider: string): CSSProperties {
     width: 8,
     height: 8,
     borderRadius: "50%",
-    background: PROVIDER_COLORS[provider] ?? "#8b949e",
+    background: PROVIDER_COLORS[provider] ?? theme.textMuted,
     marginRight: 6,
   };
 }
@@ -209,7 +210,7 @@ export function AgentPanel({
               onChange={(e) => onChange({ ...config, autoMode: e.target.checked })}
               style={{ accentColor: "#58a6ff" }}
             />
-            <span style={{ fontSize: 10, color: "#8b949e" }}>Auto-detect</span>
+            <span style={{ fontSize: 10, color: theme.textMuted }}>Auto-detect</span>
           </label>
         </div>
 
@@ -234,10 +235,10 @@ export function AgentPanel({
                       ? "Code + WASM"
                       : "Tool + DAG"}
                 </span>
-                <span style={{ fontSize: 10, color: "#484f58" }}>auto-detected</span>
+                <span style={{ fontSize: 10, color: theme.textDim }}>auto-detected</span>
               </>
             ) : (
-              <span style={{ fontSize: 11, color: "#484f58" }}>Will auto-detect on Run</span>
+              <span style={{ fontSize: 11, color: theme.textDim }}>Will auto-detect on Run</span>
             )}
           </div>
         ) : (
@@ -318,7 +319,7 @@ export function AgentPanel({
               background: "transparent",
               border: "1px solid #30363d",
               borderRadius: 3,
-              color: "#8b949e",
+              color: theme.textMuted,
               padding: "1px 6px",
               cursor: "pointer",
             }}
@@ -341,7 +342,7 @@ export function AgentPanel({
           style={{
             marginTop: 4,
             fontSize: 11,
-            color: "#8b949e",
+            color: theme.textMuted,
             display: "flex",
             gap: 8,
             alignItems: "center",
@@ -410,7 +411,7 @@ export function AgentPanel({
             alignItems: "center",
             gap: 6,
             fontSize: 11,
-            color: "#8b949e",
+            color: theme.textMuted,
             cursor: "pointer",
           }}
         >
@@ -437,7 +438,7 @@ export function AgentPanel({
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isRunning) onSubmit();
           }}
         />
-        <div style={{ fontSize: 11, color: "#8b949e", marginTop: 4 }}>Cmd+Enter to run</div>
+        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 4 }}>Cmd+Enter to run</div>
       </div>
 
       <div style={rowStyle}>
