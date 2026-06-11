@@ -202,6 +202,25 @@ export function Terminal({ messages, rawEvents, isRunning, viewMode, preview, wc
     }
 
     // Static HTML document → iframe via srcDoc
+    //
+    // SECURITY: this iframe combines `allow-scripts` + `allow-same-origin`,
+    // which Chrome warns is a sandbox-bypass risk. The combination is
+    // necessary because:
+    //   - allow-scripts: agent-generated previews include real JS (toy
+    //     calculators, todo apps, canvas animations) — without it the
+    //     preview is a static screenshot.
+    //   - allow-same-origin: Monaco-style apps and any code that uses
+    //     localStorage / IndexedDB / fetch-relative URLs needs the
+    //     iframe to *have* an origin (sandbox without it produces
+    //     `null` origin → those APIs throw).
+    //   - allow-forms / allow-modals: agent demos commonly include
+    //     `<form>` submissions and `confirm()` calls.
+    //
+    // The HTML source is the agent's output, which is itself shaped by
+    // bscode prompts and the user's task. Trust boundary: the user is
+    // running their own agent, so executing the agent's code in their
+    // own browser is the *intended* behaviour, not a vulnerability.
+    // See SECURITY.md → "HTML preview iframe sandbox".
     if (preview?.html) {
       return (
         <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
