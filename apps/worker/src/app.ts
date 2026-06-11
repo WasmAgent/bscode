@@ -1438,6 +1438,14 @@ or {"mode":"tool","framework":null}`;
           // a thin adapter over the per-session files KV; the resolver caches
           // the catalogue, so the cost is one list per /run.
           projectInstructions: filesKv ? await loadProjectInstructions(filesKv) : "",
+          // B4 — always wire a checkpointer so write-class tools whose
+          // `needsApproval` evaluates true actually pause for HITL. Without
+          // this, agentkit-core silently skips the gate (see the
+          // `if (this.#checkpointer)` guard in core/ToolCallingAgent.ts).
+          // checkpointerFor(config) is cached per-config and falls back to
+          // InMemoryCheckpointer when no KV is bound — strict-policy gating
+          // works in any deployment shape.
+          checkpointer: checkpointerFor(config),
         };
 
         let agentRun: AsyncGenerator<AgentEvent>;
@@ -1505,11 +1513,14 @@ or {"mode":"tool","framework":null}`;
               snapshot.task,
               planText,
               body.humanResponse.response,
-              { maxSteps: agentExtras.maxSteps }
+              { maxSteps: agentExtras.maxSteps, checkpointer: agentExtras.checkpointer }
             );
           } else {
             const multiAgentExtras: Parameters<typeof multiAgentRun>[3] = {
               maxSteps: agentExtras.maxSteps,
+              // B4 — pass the checkpointer through so any inner createToolAgent
+              // (reviewer / executor) gates write tools whose needsApproval fires.
+              checkpointer: agentExtras.checkpointer,
               ...(body.multiAgentMode ? { mode: body.multiAgentMode } : {}),
               ...(body.multiAgentBranches !== undefined
                 ? { branches: body.multiAgentBranches }

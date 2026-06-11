@@ -1,4 +1,5 @@
 import type {
+  Checkpointer,
   EnhancementPolicy,
   InputGuardrail,
   Model,
@@ -37,6 +38,21 @@ export interface ToolAgentExtras {
    * (kept in the prompt-cache prefix region so it doesn't blow the cache).
    */
   projectInstructions?: string;
+  /**
+   * B4 — Checkpointer used by `ToolCallingAgent` to gate tools whose
+   * `needsApproval` evaluates true. Without one, agentkit-core silently
+   * skips the gate (see core/ToolCallingAgent.ts L683 — the
+   * `if (this.#checkpointer)` guard). bscode therefore wires
+   * `checkpointerFor(config)` here unconditionally so the policy presets
+   * exposed via `approvalPolicy: "strict" | "balanced"` actually fire
+   * regardless of whether the run opts into multiAgentMode=planFirst.
+   *
+   * The InMemoryCheckpointer fallback is sufficient: HITL pauses for
+   * write_file/patch_file/etc. only need to survive the lifetime of a
+   * single /run; KV-backed checkpoints (B1 cross-recycle resume) ride
+   * the same instance when bound, so wiring it always is free.
+   */
+  checkpointer?: Checkpointer;
 }
 
 /** Parse a stop-condition descriptor string into a StopCondition instance. */
@@ -96,5 +112,9 @@ export function createToolAgent(
     stopWhen: stopConditions,
     systemPrompt,
     outputSchemaRetries: extras.outputSchemaRetries,
+    // B4 — pass the checkpointer through so `needsApproval` actually fires.
+    // See the docstring on ToolAgentExtras.checkpointer for why this is
+    // unconditional rather than gated on agentMode.
+    checkpointer: extras.checkpointer,
   });
 }

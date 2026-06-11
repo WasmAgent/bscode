@@ -8,6 +8,9 @@ dist/
 *.env
 .turbo/
 apps/worker/.bscode-files/
+.bscode-files/
+.bscode-checkpoints/
+.bscode-build-results/
 
 
 # Build cache

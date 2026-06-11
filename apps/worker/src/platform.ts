@@ -56,7 +56,11 @@ export class FsKvStore implements KvStore {
   constructor(private readonly root: string) {}
 
   #toPath(key: string): string {
-    // Strip "file:" prefix, prevent path traversal
+    // Strip "file:" prefix, prevent path traversal. Keys may legitimately
+    // contain `:` (e.g. "session:abc:file:foo.ts" from the SessionKvStore
+    // wrapping a "file:..." key). We strip ONLY the leading `file:` token —
+    // the rest, including embedded `:`, is preserved verbatim so the on-disk
+    // filename round-trips through list().
     const rel = key.replace(/^file:/, "").replace(/\.\.\//g, "");
     return join(this.root, rel);
   }
@@ -76,11 +80,29 @@ export class FsKvStore implements KvStore {
   }
 
   async list(opts: { prefix: string }): Promise<{ keys: { name: string }[] }> {
-    const prefix = opts.prefix.replace(/^file:/, "");
-    const base = join(this.root, prefix.replace(/\/$/, ""));
+    // FsKvStore stores keys as flat filenames, with one leading `file:`
+    // token stripped by `#toPath` for path-mapping efficiency. The original
+    // key is therefore the filename plus, conditionally, a `file:` prefix.
+    //
+    // Two listing modes need to coexist:
+    //   - Plain calls (`list({prefix:"file:"})`) match every stored filename
+    //     and return `file:<filename>` keys.
+    //   - SessionKvStore-wrapped calls (`list({prefix:"session:abc:file:"})`)
+    //     match filenames that already begin with `session:abc:file:` —
+    //     these were put through `put("session:abc:file:...")` whose
+    //     `#toPath` did NOT strip a `file:` token (none at the start), so
+    //     the on-disk filename is the key verbatim.
+    //
+    // The original implementation tried to derive a base directory from
+    // the prefix and walk it; that breaks for any prefix containing `:`.
+    // The correct algorithm walks the whole tree once and string-prefixes,
+    // re-prepending `file:` only when the stored filename does NOT already
+    // start with the prefix on its own.
+    const root = this.root;
     const keys: { name: string }[] = [];
+    const prefix = opts.prefix;
 
-    async function walk(dir: string) {
+    async function walk(dir: string, relParts: string[]) {
       let entries: { name: string | Buffer; isDirectory(): boolean }[];
       try {
         entries = (await readdir(dir, { withFileTypes: true })) as {
@@ -91,23 +113,32 @@ export class FsKvStore implements KvStore {
         return;
       }
       for (const e of entries) {
-        const full = join(dir, String(e.name));
+        const name = String(e.name);
+        const full = join(dir, name);
         if (e.isDirectory()) {
-          await walk(full);
+          await walk(full, [...relParts, name]);
         } else {
-          // Reconstruct KV key from path
-          const rel = full.slice(base.length).replace(/^\//, "");
-          keys.push({ name: `file:${prefix}${rel}` });
+          // Reconstruct the relative key — nested writes (`file:src/foo.ts`)
+          // became real subdirectories, so we join with "/" the same way
+          // `#toPath` mapped them in.
+          const stored = [...relParts, name].join("/");
+          // Two candidate forms: filename verbatim, or with `file:` re-prepended.
+          // Prefer the one that matches the requested prefix.
+          if (stored.startsWith(prefix)) {
+            keys.push({ name: stored });
+          } else {
+            const withFile = `file:${stored}`;
+            if (withFile.startsWith(prefix)) keys.push({ name: withFile });
+          }
         }
       }
     }
 
     try {
-      const s = await stat(base);
-      if (s.isDirectory()) await walk(base);
-      else keys.push({ name: `file:${prefix}` });
+      const s = await stat(root);
+      if (s.isDirectory()) await walk(root, []);
     } catch {
-      // directory doesn't exist yet — return empty
+      // root doesn't exist yet — return empty
     }
 
     return { keys };

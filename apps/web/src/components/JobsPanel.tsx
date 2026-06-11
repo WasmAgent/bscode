@@ -15,6 +15,29 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getWorkerUrl } from "@/lib/workerUrl";
+import { theme } from "@/lib/theme";
+
+// Reusable inline-style fragments so the JSX below stays scannable.
+const inputStyle = {
+  width: "100%",
+  fontFamily: "ui-monospace, monospace",
+  fontSize: 12,
+  background: theme.bgInput,
+  color: theme.textSecondary,
+  border: `1px solid ${theme.borderDefault}`,
+  borderRadius: 4,
+  padding: "6px 8px",
+  resize: "vertical" as const,
+} as const;
+const buttonStyle = {
+  background: theme.bgPanel,
+  color: theme.textSecondary,
+  border: `1px solid ${theme.borderDefault}`,
+  borderRadius: 4,
+  padding: "4px 10px",
+  cursor: "pointer",
+  fontSize: 12,
+} as const;
 
 interface JobRecord {
   id: string;
@@ -36,17 +59,19 @@ interface ListResponse {
 const POLL_INTERVAL_MS = 2000;
 
 function statusColor(s: JobRecord["status"]): string {
+  // All values must reach ≥ 4.5:1 contrast against white badge text — Lighthouse
+  // failed on the lighter shades (#888, #0a7, #08c) at the 11px badge size.
   switch (s) {
     case "queued":
-      return "#888";
+      return "#5a5a5a"; // gray
     case "running":
-      return "#0a7";
+      return "#0e7c4c"; // forest green
     case "done":
-      return "#08c";
+      return "#1a5fb4"; // deep blue
     case "failed":
-      return "#c33";
+      return "#a32525"; // brick red
     case "aborted":
-      return "#a60";
+      return "#8a4500"; // dark orange
   }
 }
 
@@ -77,6 +102,11 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
   const [tasks, setTasks] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror of the latest jobs[] for the polling driver, kept up to date by
+  // the same setter that updates state. Reading state from the timer
+  // callback would race with React's render queue; reading from a ref is
+  // synchronous and consistent.
+  const liveCountRef = useRef(0);
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -87,22 +117,54 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
       const body = (await res.json()) as ListResponse;
       setJobs(body.jobs);
       setStats(body.stats);
+      // Update the polling driver's live-count without touching reactive deps.
+      liveCountRef.current = body.jobs.filter(
+        (j) => j.status === "queued" || j.status === "running"
+      ).length;
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [base, sessionId]);
 
-  // Poll while any job is non-terminal; idle otherwise.
+  // Self-rescheduling poller. The effect runs ONCE per (base, sessionId) —
+  // it does NOT depend on `jobs`, so a state update from the previous poll
+  // cannot retrigger the effect (the cause of the runaway-request bug
+  // surfaced by Chrome DevTools E2E: 34k requests in 60s when the deps were
+  // `[fetchJobs, jobs]`). The timer fires every POLL_INTERVAL_MS while at
+  // least one job is non-terminal, then naturally idles when all are done.
   useEffect(() => {
-    fetchJobs();
-    const hasLive = jobs.some((j) => j.status === "queued" || j.status === "running");
-    if (!hasLive) return;
-    pollTimerRef.current = setTimeout(fetchJobs, POLL_INTERVAL_MS);
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await fetchJobs();
+      if (cancelled) return;
+      // Reschedule only while there is something to watch. The next user
+      // submit will call fetchJobs() directly, which sets liveCountRef and
+      // (via the submit() handler below) restarts the loop.
+      if (liveCountRef.current > 0) {
+        pollTimerRef.current = setTimeout(tick, POLL_INTERVAL_MS);
+      }
+    };
+    tick();
     return () => {
+      cancelled = true;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [fetchJobs, jobs]);
+  }, [fetchJobs]);
+
+  // Restart the poller after a manual fetch (submit / abort / refresh) when
+  // there are live jobs to watch. Idempotent — clears any previous timer
+  // first so we never end up with two concurrent ticks.
+  const ensurePolling = useCallback(() => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    if (liveCountRef.current > 0) {
+      pollTimerRef.current = setTimeout(async () => {
+        await fetchJobs();
+        if (liveCountRef.current > 0) ensurePolling();
+      }, POLL_INTERVAL_MS);
+    }
+  }, [fetchJobs]);
 
   const submit = useCallback(async () => {
     const lines = tasks
@@ -126,12 +188,14 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
       if (!res.ok) throw new Error(body.error ?? `POST /jobs ${res.status}`);
       setTasks("");
       await fetchJobs();
+      // Newly-submitted jobs are queued/running — kick the poller back on.
+      ensurePolling();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
-  }, [base, sessionId, tasks, fetchJobs]);
+  }, [base, sessionId, tasks, fetchJobs, ensurePolling]);
 
   const abort = useCallback(
     async (id: string) => {
@@ -141,11 +205,12 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
           headers: { "X-Session-Id": sessionId },
         });
         await fetchJobs();
+        ensurePolling();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [base, sessionId, fetchJobs]
+    [base, sessionId, fetchJobs, ensurePolling]
   );
 
   const sortedJobs = useMemo(() => jobs, [jobs]);
@@ -153,17 +218,21 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
   return (
     <div data-testid="jobs-panel" style={{ fontFamily: "ui-sans-serif, system-ui" }}>
       <div style={{ marginBottom: 8, display: "flex", gap: 12, alignItems: "baseline" }}>
-        <strong>Jobs</strong>
-        <span style={{ color: "#666", fontSize: 12 }}>
+        <strong style={{ color: theme.textPrimary }}>Jobs</strong>
+        <span style={{ color: theme.textMuted, fontSize: 12 }}>
           {stats.running} running · {stats.pending} queued · {stats.total} total
         </span>
-        <button type="button" onClick={fetchJobs} style={{ marginLeft: "auto" }}>
+        <button
+          type="button"
+          onClick={fetchJobs}
+          style={{ ...buttonStyle, marginLeft: "auto" }}
+        >
           Refresh
         </button>
       </div>
 
       {error ? (
-        <div role="alert" style={{ color: "#c33", fontSize: 12, marginBottom: 8 }}>
+        <div role="alert" style={{ color: theme.statusError, fontSize: 12, marginBottom: 8 }}>
           {error}
         </div>
       ) : null}
@@ -175,17 +244,24 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
         value={tasks}
         onChange={(e) => setTasks(e.target.value)}
         disabled={submitting}
-        style={{ width: "100%", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+        style={inputStyle}
       />
       <div style={{ marginTop: 6, marginBottom: 12 }}>
-        <button type="button" onClick={submit} disabled={submitting}>
+        <button type="button" onClick={submit} disabled={submitting} style={buttonStyle}>
           {submitting ? "Submitting…" : "Submit batch"}
         </button>
       </div>
 
-      <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+      <table
+        style={{
+          width: "100%",
+          fontSize: 12,
+          borderCollapse: "collapse",
+          color: theme.textSecondary,
+        }}
+      >
         <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
+          <tr style={{ textAlign: "left", borderBottom: `1px solid ${theme.borderDefault}` }}>
             <th>Status</th>
             <th>Task</th>
             <th>Events</th>
@@ -196,13 +272,13 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
         <tbody>
           {sortedJobs.length === 0 ? (
             <tr>
-              <td colSpan={5} style={{ color: "#888", padding: 8 }}>
+              <td colSpan={5} style={{ color: theme.textDim, padding: 8 }}>
                 No jobs yet — paste tasks above and click Submit.
               </td>
             </tr>
           ) : (
             sortedJobs.map((j) => (
-              <tr key={j.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
+              <tr key={j.id} style={{ borderBottom: `1px solid ${theme.borderDefault}` }}>
                 <td>
                   <span
                     style={{
@@ -235,7 +311,7 @@ export function JobsPanel({ workerUrl, sessionId }: JobsPanelProps) {
                 </td>
                 <td>
                   {j.status === "queued" || j.status === "running" ? (
-                    <button type="button" onClick={() => abort(j.id)}>
+                    <button type="button" onClick={() => abort(j.id)} style={buttonStyle}>
                       Abort
                     </button>
                   ) : null}

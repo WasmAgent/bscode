@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from "react";
 import { JobsPanel } from "@/components/JobsPanel";
+import { theme } from "@/lib/theme";
 
 export default function JobsPage() {
   const [sessionId, setSessionId] = useState<string>("default");
@@ -27,8 +28,8 @@ export default function JobsPage() {
   return (
     <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
       <header style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 18, marginBottom: 2 }}>BSCode Jobs</h1>
-        <p style={{ color: "#666", fontSize: 12, margin: 0 }}>
+        <h1 style={{ fontSize: 18, marginBottom: 2, color: theme.textPrimary }}>BSCode Jobs</h1>
+        <p style={{ color: theme.textMuted, fontSize: 12, margin: 0 }}>
           Submit batches of independent tasks; the worker runs them in parallel. Session:{" "}
           <code>{sessionId}</code>
         </p>

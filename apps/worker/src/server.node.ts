@@ -40,6 +40,20 @@ const config = {
   // survive worker restarts (within the same process) and cause hard-to-diagnose
   // bugs when agent logic changes. On Cloudflare, a real KV namespace is used.
   sessionsKv: undefined,
+  // checkpointsKv backs B1 (durable jobs across recycle), C1 (SSE
+  // Last-Event-ID resume) and the planFirst HITL pause. Wire an FsKvStore
+  // so local E2E suites and the CLI exercise the durable paths the same
+  // way Cloudflare KV does in prod. Set BSCODE_NO_CHECKPOINTS=1 to fall
+  // back to the unbound (in-memory only) shape.
+  ...(process.env.BSCODE_NO_CHECKPOINTS
+    ? {}
+    : { checkpointsKv: new FsKvStore(join(workdir, ".bscode-checkpoints")) }),
+  // buildResultsKv mirrors the B2 build-result snapshot. In-memory works
+  // for single-process dev, but FsKvStore lets a worker restart and a
+  // separate CLI smoke test see the same snapshot.
+  ...(process.env.BSCODE_NO_BUILD_RESULTS_KV
+    ? {}
+    : { buildResultsKv: new FsKvStore(join(workdir, ".bscode-build-results")) }),
   enableShell: true,
   workdir,
   ...(embedding ? { embedding } : {}),

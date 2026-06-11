@@ -35,6 +35,14 @@ export interface MultiAgentExtras {
    * payload after applyHumanResponse(). The default is "approve-plan".
    */
   planPromptId?: string;
+  /**
+   * B4 — Checkpointer threaded through to the inner executor / reviewer
+   * so write tools whose `needsApproval` evaluates true can pause for
+   * human approval. Optional only because some test paths construct a
+   * multi-agent run without a checkpointer; in production the worker
+   * always passes one.
+   */
+  checkpointer?: import("@agentkit-js/core").Checkpointer;
 }
 
 const DEFAULT_BRANCHES = 3;
@@ -138,6 +146,7 @@ async function* runParallel(
 
   const reviewer = createToolAgent(model, tools, {
     maxSteps: extras.maxSteps ?? DEFAULT_REVIEW_MAX_STEPS,
+    checkpointer: extras.checkpointer,
   });
   for await (const ev of reviewer.run(reviewTask, traceId)) {
     yield ev;
@@ -243,7 +252,7 @@ export async function* runPlanFirstExecution(
   task: string,
   plan: string,
   approvalResponse: string,
-  extras: { maxSteps?: number } = {}
+  extras: { maxSteps?: number; checkpointer?: import("@agentkit-js/core").Checkpointer } = {}
 ): AsyncGenerator<AgentEvent> {
   const traceId = `multi-planfirst-exec-${Date.now()}`;
   yield {
@@ -265,6 +274,7 @@ export async function* runPlanFirstExecution(
 
   const executor = createToolAgent(model, tools, {
     maxSteps: extras.maxSteps ?? DEFAULT_REVIEW_MAX_STEPS,
+    checkpointer: extras.checkpointer,
   });
   for await (const ev of executor.run(executorTask, traceId)) {
     yield ev;
