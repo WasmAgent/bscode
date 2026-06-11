@@ -24,6 +24,7 @@
     "@agentkit-js/model-deepseek": "workspace:*",
     "@agentkit-js/model-doubao": "workspace:*",
     "@agentkit-js/model-openai": "workspace:*",
+    "@agentkit-js/tools-browser": "workspace:*",
     "@agentkit-js/tools-rag": "workspace:*",
     "@hono/node-server": "^2.0.4",
     "@jitl/quickjs-wasmfile-release-sync": "0.32.0",

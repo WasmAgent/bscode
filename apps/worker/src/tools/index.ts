@@ -26,6 +26,8 @@ export {
   createSemanticIndexer,
   createSemanticSearchTool,
 } from "./semanticSearch.js";
+export type { CreateVisualToolsOptions } from "./visual.js";
+export { createVisualInteractTool, createVisualVerifyTool } from "./visual.js";
 // ── Re-export type so callers can use KvStore directly ────────────────────────
 export type { KvStore };
 

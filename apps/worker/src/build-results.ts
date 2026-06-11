@@ -70,18 +70,46 @@ export interface BuildResultSnapshot {
 }
 
 /**
- * Visual check report — what the browser observed about the rendered preview.
- * Kept JSON-shaped (no Blob / DataURL bytes inside) so it round-trips through
- * KV cleanly. The agent uses these signals to decide whether to investigate
- * the rendered UI; full image comparison is intentionally out of scope here.
+ * Visual check report — what the browser (or the worker-side CDP visual
+ * verifier) observed about the rendered preview. Kept JSON-shaped (no Blob /
+ * DataURL bytes inside) so it round-trips through KV cleanly. The agent uses
+ * these signals to decide whether to investigate the rendered UI.
+ *
+ * Two complementary populations of this struct co-exist:
+ *
+ *   1. **Browser-side passive observer** (`useWebContainer.ts`) — fills in
+ *      `consoleErrors`/`uncaughtErrors` from the parent-page event bus and
+ *      may receive opt-in `bscode:visual-check` postMessages with probes.
+ *      This is best-effort context: it can never see *into* the cross-origin
+ *      preview iframe.
+ *
+ *   2. **Worker-side CDP visual verifier** (`visualVerifier.ts`, C3
+ *      complete) — drives a Chrome DevTools Protocol session that sees the
+ *      preview from the *inside*: real screenshot bytes, real DOM probes,
+ *      real Runtime.consoleAPICalled events, and a vision-judge verdict.
+ *      The agent invokes this through the `visual_verify` tool.
+ *
+ * Both populations write into the same struct so the formatter and the
+ * `read_build_result` tool stay one code path.
  */
 export interface VisualCheckSnapshot {
-  /** When the check ran (browser-side wall clock). */
+  /** When the check ran (browser-side or worker-side wall clock). */
   ranAtMs: number;
+  /**
+   * Source of the snapshot. `"browser"` = passive parent-page observer;
+   * `"cdp"` = worker-side CDP verifier (richer signals). Defaults to
+   * `"browser"` on legacy POSTs that omit it.
+   */
+  source?: "browser" | "cdp";
   /**
    * Optional screenshot. Stored as a data URL so the channel stays JSON-only
    * — capped to the lower-resolution 256×256 thumbnail browsers can produce
    * cheaply. Absent on environments without canvas access.
+   *
+   * The `read_build_result` formatter never inlines this into the agent
+   * context — it would burn tens of KB per call. Vision-capable downstream
+   * tools (the worker-side judge, an explicit screenshot tool the agent
+   * could invoke later) request the bytes through other channels.
    */
   thumbnailDataUrl?: string;
   /** Console errors observed during the check window. Capped to 20 entries. */
@@ -89,14 +117,37 @@ export interface VisualCheckSnapshot {
   /** Uncaught exceptions observed during the check window. Capped to 10. */
   uncaughtErrors?: Array<{ message: string; source?: string }>;
   /**
-   * Lightweight DOM probes the host can run. Each probe gets a name and a
-   * boolean — the agent decides what to do with "missing" probes.
-   * Use sparingly: too many probes turn this into a UI test framework
-   * masquerading as a heuristic.
+   * Lightweight DOM probes — selector / textContains assertions the host
+   * (or the agent, via `visual_verify`) ran. Each probe gets a name and a
+   * boolean. Use sparingly: too many probes turn this into a UI test
+   * framework masquerading as a heuristic.
    */
   domProbes?: Array<{ name: string; ok: boolean; detail?: string }>;
-  /** True when the page rendered above-the-fold non-empty pixel content. */
+  /**
+   * True when the page rendered above-the-fold non-empty pixel content.
+   * From CDP we approximate this by checking `document.body.innerText.length`
+   * after navigation (since the parent page can't read into the iframe);
+   * from the browser observer this is supplied via opt-in postMessage.
+   */
   rendersNonEmpty?: boolean;
+  /**
+   * C3 — vision-judge verdict on whether the rendered page matches the
+   * agent's stated intent. Populated only by the CDP verifier when an
+   * intent string is supplied. Absent → no judgement was attempted.
+   */
+  verdict?: {
+    /** Did the rendered output match the intent? */
+    matchesIntent: boolean;
+    /** Short natural-language reason (capped to ~400 chars). */
+    reason: string;
+    /** The intent the judge was given, echoed for audit. */
+    intent: string;
+  };
+  /**
+   * C3 — page title captured during navigation. Helps the agent tell
+   * "real app" from "Vite error overlay" / "404" / blank tab.
+   */
+  pageTitle?: string;
 }
 
 /** Cap on stderr length. Anything longer is tail-truncated by the reader. */

@@ -59,4 +59,16 @@ export interface AppConfig {
   githubToken?: string;
   enableShell?: boolean;
   workdir?: string;
+  /**
+   * C3 — Optional Chrome DevTools Protocol WebSocket endpoint. When set,
+   * `visual_verify` and `visual_interact` drive a CDP session against the
+   * preview URL to capture screenshots / DOM probes / console events.
+   * When unset, both tools degrade to a "not configured" snapshot rather
+   * than throwing — the agent loop keeps working.
+   *
+   * Cloudflare Browser Rendering, a Docker-hosted Chromium with
+   * `--remote-debugging-port`, or `chrome --remote-debugging-port=9222`
+   * locally all qualify.
+   */
+  cdpWsEndpoint?: string;
 }

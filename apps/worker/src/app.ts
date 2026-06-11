@@ -82,6 +82,8 @@ import {
   createSearchCodeTool,
   createSemanticIndexer,
   createSemanticSearchTool,
+  createVisualInteractTool,
+  createVisualVerifyTool,
   createWriteFileTool,
   importGithubRepo,
   type SemanticIndexer,
@@ -1942,6 +1944,31 @@ function buildTools(
   // agent has run_command, so the build-result channel is redundant.
   if (isFramework && sessionId) {
     tools.push(createReadBuildResultTool({ sessionId, kv: config.buildResultsKv }));
+    // C3 — visual_verify / visual_interact pair. Always registered when
+    // we're in framework mode + have a sessionId, even when no CDP
+    // endpoint is configured: the tools degrade to a "not configured"
+    // snapshot rather than throwing, and the agent learns it can't rely
+    // on visual checks via the same channel as everything else.
+    const resolvePreviewUrl = async () => {
+      const snap = await getBuildResult(sessionId, config.buildResultsKv);
+      return snap.previewUrl;
+    };
+    tools.push(
+      createVisualVerifyTool({
+        sessionId,
+        ...(config.buildResultsKv ? { buildResultsKv: config.buildResultsKv } : {}),
+        ...(config.cdpWsEndpoint ? { cdpWsEndpoint: config.cdpWsEndpoint } : {}),
+        resolvePreviewUrl,
+      }) as ToolDefinition
+    );
+    tools.push(
+      createVisualInteractTool({
+        sessionId,
+        ...(config.buildResultsKv ? { buildResultsKv: config.buildResultsKv } : {}),
+        ...(config.cdpWsEndpoint ? { cdpWsEndpoint: config.cdpWsEndpoint } : {}),
+        resolvePreviewUrl,
+      }) as ToolDefinition
+    );
   }
   // B2 — semantic search registered when an indexer is present.
   if (indexer) tools.push(createSemanticSearchTool(indexer));

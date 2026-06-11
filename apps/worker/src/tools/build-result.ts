@@ -56,10 +56,16 @@ export function formatBuildResult(snap: BuildResultSnapshot): string {
     // context — that would burn 10–50KB per call. The agent that wants the
     // image must request it explicitly via a vision-capable downstream tool.
     lines.push("--- visual ---");
+    if (snap.visual.source) lines.push(`source: ${snap.visual.source}`);
+    if (snap.visual.pageTitle) lines.push(`pageTitle: ${snap.visual.pageTitle}`);
     if (snap.visual.rendersNonEmpty === false) {
       lines.push("rendersNonEmpty: false (page appears blank)");
     } else if (snap.visual.rendersNonEmpty === true) {
       lines.push("rendersNonEmpty: true");
+    }
+    if (snap.visual.verdict) {
+      lines.push(`verdict.matchesIntent: ${snap.visual.verdict.matchesIntent}`);
+      lines.push(`verdict.reason: ${snap.visual.verdict.reason}`);
     }
     if (snap.visual.consoleErrors && snap.visual.consoleErrors.length > 0) {
       lines.push(`consoleErrors: ${snap.visual.consoleErrors.length}`);
