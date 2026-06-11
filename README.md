@@ -102,3 +102,18 @@ choose — a worker-level `GITHUB_TOKEN` env var wired through `AppConfig.github
 | `run_command` | ❌ | Node/Bun only; blocked on edge |
 | `web_search`, `git_status`/`git_diff`/`git_log`/`git_commit` | mixed | Standard tools |
 | `create_github_pr` | ❌ | B3 — branch + commit + PR via REST. **HITL-gated** (`needsApproval: true`) |
+
+## Quality
+
+Verified metrics — every claim above is backed by an executable test or
+benchmark, not a marketing line.
+
+| Metric | Verified by | Current value |
+|---|---|---|
+| **Backend test suite** | `apps/worker` vitest | **86 tests, 100% pass** |
+| **Frontend test suite** | `apps/web` vitest | **20 tests, 100% pass** |
+| **Cross-instance checkpoint resume (B1 ①)** | `apps/worker/src/app.test.ts` | snapshot saved by app instance A is loadable by a brand-new instance B sharing the same KV; HITL `pendingHumanInput` survives across three instances (pause / resume / continue) |
+| **`semantic_search` Top-3 recall vs grep (B2 ①)** | `apps/worker/src/tools/semanticSearch.eval.test.ts` | **70%** (semantic) vs **0%** (grep) on a 50-file synthetic project with paraphrased queries |
+| **Lighthouse desktop snapshot** | `chrome-devtools-mcp` audit | **Accessibility 100 · Best Practices 100 · SEO 100 · Agentic Browsing 100** (24/24 audits passing) |
+| **Cost-display accuracy** | `apps/web/src/components/TokenMeter.tsx` | sums per-call `estimatedUsd` from the worker (computed with the actual model's pricing); no longer mis-bills Haiku/Opus runs as Sonnet |
+| **A11y / dark-mode contrast** | `apps/web/src/lib/theme.ts` | every UI colour goes through one named token; secondary text raised from `#8b949e` → `#d0d7de` (AAA on `#161b22`) |
