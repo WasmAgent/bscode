@@ -140,7 +140,7 @@ const server = createCodeModeServer({
   tools, kernel: new QuickJSKernel(),
   capabilities: { allowedHosts: ["api.github.com"], cpuMs: 5_000 },
 });
-export default { fetch: createFetchHandler({ server, path: "/mcp" }) };`,
+export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
   },
   {
     feature: "Local Studio (cost / latency / errors)",
