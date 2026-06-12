@@ -174,11 +174,24 @@ agentkit evals run \\
   {
     feature: "5-min Claude Desktop / Cursor path (B-D2)",
     describe:
-      "Stand up a code-mode MCP server in front of any tool registry — paste the URL into Claude Desktop / Cursor / VS Code Copilot and the host calls your tools through one execute_code surface.",
+      "bscode's worker mounts a code-mode MCP server at /mcp. Paste the URL into Claude Desktop / Cursor / VS Code Copilot and the host calls bscode's read-only file tools through one execute_code surface.",
     api: "createCodeModeServer + createFetchHandler",
     pkg: "@agentkit-js/mcp-server",
     docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/code-mode.md",
-    snippet: `// 1. Build the server in any Workers / Node entry:
+    snippet: `// 1. The bscode worker already mounts /mcp — see apps/worker/src/mcp.ts.
+//    Read-only tools only: read_file, list_files, search_code.
+
+// 2. In Claude Desktop's mcp settings:
+// {
+//   "mcpServers": {
+//     "bscode-files": { "url": "http://localhost:8787/mcp" }
+//   }
+// }
+
+// 3. The host now sees ONE tool (execute_code). Bench: ≤14% of direct
+//    tool-use tokens at N=30 tools (examples/benchmarks/code-mode-tokens.mjs).
+
+// To stand up a separate MCP server for your own tools, paste this:
 import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
 import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
 
@@ -187,15 +200,7 @@ const server = createCodeModeServer({
   tools, kernel: new QuickJSKernel(),
   capabilities: { allowedHosts: [], cpuMs: 5_000 },
 });
-export default { fetch: createFetchHandler(server, { path: "/mcp" }) };
-
-// 2. In Claude Desktop's mcp settings:
-// {
-//   "mcpServers": { "my-tools": { "url": "https://YOUR-DEPLOY/mcp" } }
-// }
-
-// 3. The host now sees ONE tool (execute_code). Bench: ≤14% of direct
-// tool-use tokens at N=30 tools (examples/benchmarks/code-mode-tokens.mjs).`,
+export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
   },
 ];
 

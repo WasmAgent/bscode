@@ -139,3 +139,15 @@ of the two above will be redirected, per CONTRIBUTING's
 Refresh this file every quarter or whenever a tool moves from
 EVALUATE → UPLIFT. Stale audits are worse than no audit because they
 suggest the discipline is in place when it is not.
+
+## Changelog
+
+- **2026-06-12 (initial)** — first audit run; verdicts above.
+- **2026-06-12 (B-D2 follow-up)** — `apps/worker/src/mcp.ts` now
+  mounts a code-mode MCP server at `/mcp` exposing the three KEEP
+  read-only file tools (`read_file`, `list_files`, `search_code`)
+  through one `execute_code` surface. The mount is product-shaped
+  (it ties `filesKv` to a Worker route), so it stays in bscode and
+  is **not** lifted upstream. The strict allow-list in `mcp.ts`
+  prevents drift: a future write tool added to `buildTools` will
+  not silently appear on `/mcp`.

@@ -196,6 +196,49 @@ describe("GET /health", () => {
   });
 });
 
+// ── /mcp (B-D2 follow-up) ─────────────────────────────────────────────────────
+
+describe("POST /mcp — code-mode MCP server", () => {
+  it("answers an MCP tools/list request with execute_code + docs_search", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/list",
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      result?: { tools?: Array<{ name: string }> };
+    };
+    const names = body.result?.tools?.map((t) => t.name) ?? [];
+    expect(names).toContain("execute_code");
+    expect(names).toContain("docs_search");
+  });
+
+  it("answers OPTIONS /mcp with CORS preflight 204", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/mcp", { method: "OPTIONS" }),
+    );
+    expect(res.status).toBe(204);
+  });
+
+  it("rejects non-POST/OPTIONS verbs with 405 (Method Not Allowed)", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/mcp", { method: "GET" }),
+    );
+    // The MCP fetch handler returns 405 for non-POST/OPTIONS verbs.
+    expect(res.status).toBe(405);
+  });
+});
+
 // ── Capabilities ──────────────────────────────────────────────────────────────
 
 describe("GET /capabilities", () => {

@@ -20,6 +20,7 @@
     "@agentkit-js/kernel-pyodide": "workspace:*",
     "@agentkit-js/kernel-quickjs": "workspace:*",
     "@agentkit-js/kernel-remote": "workspace:*",
+    "@agentkit-js/mcp-server": "workspace:*",
     "@agentkit-js/model-anthropic": "workspace:*",
     "@agentkit-js/model-deepseek": "workspace:*",
     "@agentkit-js/model-doubao": "workspace:*",

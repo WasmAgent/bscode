@@ -123,10 +123,48 @@ Cursor, VS Code Copilot) talks MCP to a server that exposes one
 `execute_code` surface, and the host's tools live behind that surface
 as code the agent calls. agentkit-js ships
 [`@agentkit-js/mcp-server`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/mcp-server)
-for that, with the same `CapabilityManifest` you already use for the
-WASM kernel inside bscode.
+for that, with the same `CapabilityManifest` the WASM kernel inside
+bscode already honours.
 
-To put bscode-style tools in front of Claude Desktop:
+### Use bscode's worker as the MCP server (no extra deploy)
+
+The bscode worker now mounts a code-mode MCP server at `/mcp`. The
+read-only tools `read_file`, `list_files`, `search_code` are exposed
+through one `execute_code` surface (see
+[`apps/worker/src/mcp.ts`](apps/worker/src/mcp.ts) for the strict
+allow-list and the deny-network capability manifest).
+
+In Claude Desktop's `mcp` settings (or any MCP host that speaks
+Streamable HTTP):
+
+```jsonc
+{
+  "mcpServers": {
+    "bscode-files": {
+      "url": "https://YOUR-WORKER-DEPLOY/mcp"
+    }
+  }
+}
+```
+
+For `pnpm dev:worker` running locally, that's `http://localhost:8787/mcp`.
+
+The host now sees one tool — `execute_code` — and the model's snippet
+calls bscode's read-only file tools via `callTool(name, args)`. Write
+tools (`write_file`, `patch_file`, `delete_file`, `run_command`,
+`create_github_pr`, …) are deliberately **not** exposed through this
+mount because they need approval/state that does not translate cleanly
+across an MCP transport boundary; expose them on a fork that owns the
+access policy.
+
+The token-savings benchmark in agentkit-js CI shows ≤14% of direct
+tool-use tokens at N=30 tools (`examples/benchmarks/code-mode-tokens.mjs`).
+
+### Or stand up a separate MCP server for your own tools
+
+If you want a different tool list — your own search backend, your own
+file index — write a Worker entry that calls
+`createCodeModeServer + createFetchHandler` directly:
 
 ```ts
 // my-mcp-server.ts — paste into a Worker entry, deploy, take the URL.
@@ -145,27 +183,6 @@ const server = createCodeModeServer({
 
 export default { fetch: createFetchHandler(server, { path: "/mcp" }) };
 ```
-
-In Claude Desktop's `mcp` settings:
-
-```jsonc
-{
-  "mcpServers": {
-    "my-tools": { "url": "https://YOUR-DEPLOY/mcp" }
-  }
-}
-```
-
-The host now sees one tool — `execute_code` — and the model's snippet
-calls your real tools via `callTool(name, args)`. The token-savings
-benchmark in agentkit-js CI shows ≤14% of direct tool-use tokens at
-N=30 tools (`examples/benchmarks/code-mode-tokens.mjs`).
-
-The bscode app does **not** mount its in-process tools at `/mcp`
-itself — bscode is a thin template, and serving production MCP from
-the same Worker that serves the demo UI is product-shaped surface
-that belongs on a fork. Open an issue tagged `mcp:mount-template`
-if you'd like a turn-key mount of the same tools the bscode UI uses.
 
 ---
 

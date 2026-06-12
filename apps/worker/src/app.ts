@@ -39,6 +39,7 @@ import {
   putBuildResult,
 } from "./build-results.js";
 import { JobQueue, type JobRunner, type JobSpec } from "./jobs/index.js";
+import { createMcpFetchHandler } from "./mcp.js";
 import {
   deriveJobSessionId,
   diffSessions,
@@ -299,6 +300,28 @@ export function createApp(config: AppConfig) {
   app.get("/health", (c) =>
     c.json({ status: "ok", version: "0.2.0", timestamp: new Date().toISOString() })
   );
+
+  // ── /mcp — code-mode MCP server (B-D2 follow-up, 2026-06) ─────────────────
+  // Read-only tool subset (read_file / list_files / search_code / web_search)
+  // surfaced to MCP hosts (Claude Desktop, Cursor, VS Code Copilot) through
+  // one execute_code surface. The kernel is the same QuickJS variant used by
+  // /run-ptc; the variant module is loaded lazily and cached so cold-start
+  // for /mcp matches the rest of the worker. See apps/worker/src/mcp.ts.
+  let mcpHandler: ((req: Request) => Promise<Response>) | null = null;
+  const ensureMcpHandler = async () => {
+    if (mcpHandler) return mcpHandler;
+    const variantMod = await import("@jitl/quickjs-wasmfile-release-sync");
+    const loaderMod = await import("quickjs-emscripten-core");
+    mcpHandler = createMcpFetchHandler(config, {
+      quickjsVariant: variantMod.default,
+      quickjsVariantLoader: loaderMod.newQuickJSWASMModuleFromVariant,
+    });
+    return mcpHandler;
+  };
+  app.all("/mcp", async (c) => {
+    const handler = await ensureMcpHandler();
+    return handler(c.req.raw);
+  });
 
   // ── Capabilities ──────────────────────────────────────────────────────────
   app.get("/capabilities", (c) =>
