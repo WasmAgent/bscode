@@ -3,7 +3,7 @@
 > **Edge-native agent runtime showcase** — Cloudflare Workers + Pages, ships in 5 minutes.
 > The reference deployment for [agentkit-js](https://github.com/telleroutlook/agentkit-js).
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode&utm_source=bscode-readme-deploy-button)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![agentkit-js](https://img.shields.io/badge/built%20on-agentkit--js-646cff.svg)](https://github.com/telleroutlook/agentkit-js)
 
@@ -18,8 +18,14 @@ If you want the **framework**, head to
 If you want the **template**, you're in the right place.
 
 ```bash
-npm install @agentkit-js/core   # the framework itself, on npm
+npm add @agentkit-js/core   # the framework itself, on npm
 ```
+
+> The same `npm add` string lives in the running app's top-left navbar
+> pill so the two surfaces send identical signal. Click attribution:
+> README's deploy button is tagged `utm_source=bscode-readme-deploy-button`,
+> the UI pill carries `?source=bscode-ui-pill`, and the in-app
+> "Feature → API map" deep-links carry `data-source="bscode-feature-map"`.
 
 ---
 
@@ -106,6 +112,60 @@ Or run the end-to-end async-agent demo (G1):
 ```bash
 node scripts/demo-async-agent.mjs   # imports a small repo → multi-agent fix → PR (dry-run)
 ```
+
+---
+
+## 5-minute path to Claude Desktop / Cursor (B-D2)
+
+Cloudflare's *Code Mode MCP* and Anthropic's *Code execution with MCP*
+both converged on the same shape in 2026: a host (Claude Desktop,
+Cursor, VS Code Copilot) talks MCP to a server that exposes one
+`execute_code` surface, and the host's tools live behind that surface
+as code the agent calls. agentkit-js ships
+[`@agentkit-js/mcp-server`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/mcp-server)
+for that, with the same `CapabilityManifest` you already use for the
+WASM kernel inside bscode.
+
+To put bscode-style tools in front of Claude Desktop:
+
+```ts
+// my-mcp-server.ts — paste into a Worker entry, deploy, take the URL.
+import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
+import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import type { ToolDefinition } from "@agentkit-js/core";
+
+const tools: ToolDefinition[] = [/* … your tool list … */];
+
+const server = createCodeModeServer({
+  serverInfo: { name: "my-tools", version: "1.0.0" },
+  tools,
+  kernel: new QuickJSKernel(),
+  capabilities: { allowedHosts: [], cpuMs: 5_000 },
+});
+
+export default { fetch: createFetchHandler(server, { path: "/mcp" }) };
+```
+
+In Claude Desktop's `mcp` settings:
+
+```jsonc
+{
+  "mcpServers": {
+    "my-tools": { "url": "https://YOUR-DEPLOY/mcp" }
+  }
+}
+```
+
+The host now sees one tool — `execute_code` — and the model's snippet
+calls your real tools via `callTool(name, args)`. The token-savings
+benchmark in agentkit-js CI shows ≤14% of direct tool-use tokens at
+N=30 tools (`examples/benchmarks/code-mode-tokens.mjs`).
+
+The bscode app does **not** mount its in-process tools at `/mcp`
+itself — bscode is a thin template, and serving production MCP from
+the same Worker that serves the demo UI is product-shaped surface
+that belongs on a fork. Open an issue tagged `mcp:mount-template`
+if you'd like a turn-key mount of the same tools the bscode UI uses.
 
 ---
 

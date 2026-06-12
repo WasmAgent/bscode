@@ -68,6 +68,21 @@ that another agentkit-js user would want, it's `request-changes` with
 a link to file the upstream PR. We will revisit and merge once the
 upstream API is published.
 
+For tool PRs specifically, the *generic-first* three-question test
+from agentkit-js's CONTRIBUTING applies:
+
+1. *Is the logic specific to this product, or would another agent
+   project want it?*
+2. *Does it depend only on already-published `@agentkit-js/*` APIs?*
+3. *Is there a comparable feature already in `agentkit-js` you would
+   otherwise duplicate?*
+
+The current verdict for every tool under `apps/worker/src/tools/`
+lives in [`docs/tools-audit-2026-06-12.md`](docs/tools-audit-2026-06-12.md);
+new tool PRs must either cite a KEEP entry that justifies why the
+new tool is product-shaped, or open a corresponding `agentkit-js`
+issue and reference its number.
+
 ## See also
 
 - [agentkit-js ROADMAP](https://github.com/telleroutlook/agentkit-js/blob/main/ROADMAP.md)
@@ -75,3 +90,5 @@ upstream API is published.
   a funnel, not a product").
 - [agentkit-js CONTRIBUTING](https://github.com/telleroutlook/agentkit-js/blob/main/CONTRIBUTING.md)
   — for changes that should land upstream first.
+- [Tools audit (2026-06-12)](docs/tools-audit-2026-06-12.md) — the
+  current UPLIFT / KEEP / EVALUATE verdict for every bscode tool.

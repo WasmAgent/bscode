@@ -772,6 +772,28 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           <span style={{ color: "#58a6ff", fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>
             BSCode
           </span>
+          {/* B-D1 (2026-06): unified funnel CTA. The same string lives in
+              README.md so both surfaces send the same signal. The
+              source=ui-pill query param distinguishes UI clicks from
+              README-link / deploy-button traffic in any aggregation. */}
+          <a
+            href="https://www.npmjs.com/package/@agentkit-js/core?source=bscode-ui-pill"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="bscode is a thin template; the framework lives at @agentkit-js/core"
+            style={{
+              fontSize: 10,
+              padding: "2px 7px",
+              borderRadius: 999,
+              background: "#3fb95022",
+              color: "#3fb950",
+              textDecoration: "none",
+              border: "1px solid #3fb95044",
+              whiteSpace: "nowrap",
+            }}
+          >
+            npm add @agentkit-js/core →
+          </a>
           {/* Mode toggle */}
           <div style={{ display: "flex", gap: 3 }}>
             {(["code", "tool"] as const).map((mode) => (

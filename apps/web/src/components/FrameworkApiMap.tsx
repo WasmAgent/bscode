@@ -171,6 +171,32 @@ agentkit evals run \\
   --seeds=0,1,2 \\
   --report-file=./eval.md`,
   },
+  {
+    feature: "5-min Claude Desktop / Cursor path (B-D2)",
+    describe:
+      "Stand up a code-mode MCP server in front of any tool registry — paste the URL into Claude Desktop / Cursor / VS Code Copilot and the host calls your tools through one execute_code surface.",
+    api: "createCodeModeServer + createFetchHandler",
+    pkg: "@agentkit-js/mcp-server",
+    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/code-mode.md",
+    snippet: `// 1. Build the server in any Workers / Node entry:
+import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
+import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+
+const server = createCodeModeServer({
+  serverInfo: { name: "my-tools", version: "1.0.0" },
+  tools, kernel: new QuickJSKernel(),
+  capabilities: { allowedHosts: [], cpuMs: 5_000 },
+});
+export default { fetch: createFetchHandler(server, { path: "/mcp" }) };
+
+// 2. In Claude Desktop's mcp settings:
+// {
+//   "mcpServers": { "my-tools": { "url": "https://YOUR-DEPLOY/mcp" } }
+// }
+
+// 3. The host now sees ONE tool (execute_code). Bench: ≤14% of direct
+// tool-use tokens at N=30 tools (examples/benchmarks/code-mode-tokens.mjs).`,
+  },
 ];
 
 interface FrameworkApiMapProps {
@@ -313,6 +339,12 @@ export function FrameworkApiMap({ open, onClose }: FrameworkApiMapProps) {
                     href={entry.docs}
                     target="_blank"
                     rel="noreferrer"
+                    // B-D1 (2026-06): source-attribution for the funnel.
+                    // GitHub doesn't honour query params on blob URLs, so we
+                    // tag the click here. Any analytics layer (or a sniffing
+                    // service worker) can read data-source in the future.
+                    data-source="bscode-feature-map"
+                    data-feature={entry.feature}
                     style={{
                       fontSize: 11,
                       color: theme.accentLink,
