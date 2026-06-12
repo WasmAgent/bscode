@@ -153,6 +153,24 @@ export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
 npx agentkit devtools --events-file ./events.ndjson --port 4317
 # → http://localhost:4317`,
   },
+  {
+    feature: "Multi-model evaluation (Pareto)",
+    describe:
+      "Compare two or more models on memory/long-context/tool-sequence/cost suites; report flags Pareto-front winners on (acc, cost, p95 wall).",
+    api: "runEvaluation + agentkit evals",
+    pkg: "@agentkit-js/evals-runner",
+    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/evals-runner.md",
+    snippet: `# List the 6 reference suites:
+agentkit evals list
+
+# Compare two local Ollama models with 3 seeds:
+agentkit evals run \\
+  --suite=multi-turn-memory,cost-per-correct \\
+  --models="qwen2.5:0.5b,llama3.2:1b" \\
+  --base-url=http://localhost:11434/v1 \\
+  --seeds=0,1,2 \\
+  --report-file=./eval.md`,
+  },
 ];
 
 interface FrameworkApiMapProps {
@@ -245,7 +263,7 @@ export function FrameworkApiMap({ open, onClose }: FrameworkApiMapProps) {
           <div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>What you see ↔ what you can copy</div>
             <div style={{ color: theme.textMuted, fontSize: 12, marginTop: 2 }}>
-              bscode demonstrates seven differentiated agentkit-js capabilities. Star the ones you
+              bscode demonstrates eight differentiated agentkit-js capabilities. Star the ones you
               want and click <em>Export minimal project</em> below to download a starter that drops
               into <code>pnpm dev</code>.
             </div>

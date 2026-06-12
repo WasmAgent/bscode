@@ -164,8 +164,8 @@ docs/       Per-capability deep dives (B1–C4)
 
 | Metric | Verified by | Current value |
 |---|---|---|
-| Backend test suite | `apps/worker` vitest | **199 tests, 100% pass** |
-| Frontend test suite | `apps/web` vitest | **25 tests, 100% pass** |
+| Backend test suite | `apps/worker` vitest | **222 tests, 100% pass** |
+| Frontend test suite | `apps/web` vitest | **27 tests, 100% pass** |
 | Lighthouse desktop | `chrome-devtools-mcp` audit | **Accessibility 100 · Best Practices 100 · SEO 100 · Agentic Browsing 100** |
 
 The pre-restructure commits in this repo include extensive per-capability
