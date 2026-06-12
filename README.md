@@ -90,14 +90,18 @@ The framework's [Getting started](https://telleroutlook.github.io/agentkit-js/gu
 and [Comparison](https://telleroutlook.github.io/agentkit-js/compare) pages
 explain the broader picture.
 
-> 🔁 **Already on a different framework?** bscode also documents
-> "their framework + our kernel" recipes — Vercel AI SDK 6,
-> Cloudflare codemode, Mastra, Anthropic Claude Agent SDK, OpenAI
-> Agents JS — at
+> 🔁 **Already on a different framework?** bscode also has a live
+> reverse-funnel landing — visit
+> **[`/recipes`](https://bscode.dev/recipes?source=bscode-readme-recipes-link)**
+> on a running deployment to copy the snippet, run a live patch
+> against the worker, and jump out to the agentkit-js framework
+> docs. The five recipes (Vercel AI SDK 6 / Cloudflare codemode /
+> Mastra / Anthropic Claude Agent SDK / OpenAI Agents JS) also
+> ship as prose at
 > [`docs/their-framework-our-kernel.md`](./docs/their-framework-our-kernel.md).
 > The agentkit kernels slot in as one tool / one executor / one
 > provider; you keep your existing framework. Direction 6 of the
-> agentkit-js [2026-06-12 strategic
+> agentkit-js [2026-06 strategic
 > brief](https://github.com/telleroutlook/agentkit-js/blob/main/docs/strategy/2026-06-competitiveness.md).
 
 ---

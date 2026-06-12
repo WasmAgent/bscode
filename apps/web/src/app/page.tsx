@@ -794,6 +794,27 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           >
             npm add @agentkit-js/core →
           </a>
+          {/* Direction 6 reverse-funnel entry: "their framework + our kernel".
+              Visible alongside the npm pill so a visitor on Vercel AI SDK 6 /
+              Cloudflare codemode / Mastra / Anthropic / OpenAI Agents JS
+              sees the runtime pitch immediately, not only after exploring
+              the CodeAgent demo. */}
+          <a
+            href="/recipes?source=bscode-ui-recipes-pill"
+            title="Drop the agentkit kernel into the framework you already use"
+            style={{
+              fontSize: 10,
+              padding: "2px 7px",
+              borderRadius: 999,
+              background: "#9b9bff22",
+              color: "#9b9bff",
+              textDecoration: "none",
+              border: "1px solid #9b9bff44",
+              whiteSpace: "nowrap",
+            }}
+          >
+            their framework + our kernel →
+          </a>
           {/* Mode toggle */}
           <div style={{ display: "flex", gap: 3 }}>
             {(["code", "tool"] as const).map((mode) => (

@@ -56,9 +56,11 @@ Why bother: AI SDK 6 ships best-in-class chat-UI primitives but
 *does not* ship a sandboxed code-exec tool. `sandboxedJsTool` plugs
 that hole without leaving the AI SDK world.
 
-Walk-through: [`/integrations/aisdk`](./integrations/aisdk) (link
-appears in the nav once you fork bscode locally; remote viewers
-see this doc directly).
+Walk-through: [`/recipes`](/recipes) on any running bscode deployment
+shows this snippet alongside a "try a live patch" button that
+exercises the kernel end-to-end on the host you're looking at.
+Locally that's `http://localhost:3000/recipes` after `pnpm dev:web`;
+remote viewers can use the deployed instance.
 
 UTM tag for click attribution: `?source=bscode-aisdk-recipe`.
 
