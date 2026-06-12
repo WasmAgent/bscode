@@ -4,6 +4,7 @@ import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
+import { FrameworkApiMap } from "@/components/FrameworkApiMap";
 import { type PreviewContent, Terminal } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
@@ -133,6 +134,7 @@ export default function Home() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [apiMapOpen, setApiMapOpen] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIsRunning = useRef(false);
@@ -942,6 +944,14 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           </button>
           <button
             type="button"
+            onClick={() => setApiMapOpen(true)}
+            style={iconBtn(theme.textMuted)}
+            title="What you see ↔ what you can copy (B1, 2026-06)"
+          >
+            ?
+          </button>
+          <button
+            type="button"
             onClick={() => setSettingsOpen((o) => !o)}
             style={iconBtn(theme.textMuted)}
             title="Settings"
@@ -952,6 +962,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       </div>
 
       {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
+      <FrameworkApiMap open={apiMapOpen} onClose={() => setApiMapOpen(false)} />
 
       {/* ── Main area ── */}
       {/* On narrow viewports collapse to a single column so neither pane gets squeezed

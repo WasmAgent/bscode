@@ -22,7 +22,12 @@
  * `chrome --remote-debugging-port=9222` all work.
  */
 
-import { type BrowserSession, openCdpSession } from "@agentkit-js/tools-browser";
+import {
+  type BrowserRunOpenable,
+  type BrowserSession,
+  openBrowserRunSession,
+  openCdpSession,
+} from "@agentkit-js/tools-browser";
 import type { VisualCheckSnapshot } from "./build-results.js";
 import { judgeRender, type VisionJudge } from "./visionJudge.js";
 
@@ -45,6 +50,19 @@ export interface RunVisualVerificationOptions {
    * agent's read path is uniform.
    */
   cdpWsEndpoint?: string;
+  /**
+   * B2 (2026-06): Cloudflare Browser Run binding. When supplied (and
+   * `cdpWsEndpoint` is absent), the verifier opens a Browser Run session
+   * via the binding and uses it as the BrowserSession instead of dialling
+   * CDP directly. Pass `await puppeteer.launch(env.BROWSER)` here, or any
+   * object satisfying {@link BrowserRunOpenable}.
+   *
+   * Precedence: explicit `sessionFactory` > `browserRunBinding` >
+   * `cdpWsEndpoint`. We document this so a worker can configure both
+   * (binding for production, ws endpoint as a local-debugging fallback)
+   * and the production path always wins.
+   */
+  browserRunBinding?: BrowserRunOpenable;
   /** Probes the agent wants asserted on the rendered page. */
   probes?: VisualProbeSpec[];
   /**
@@ -85,7 +103,7 @@ function noEndpointSnapshot(): VisualCheckSnapshot {
 export async function runVisualVerification(
   opts: RunVisualVerificationOptions
 ): Promise<VisualCheckSnapshot> {
-  if (!opts.cdpWsEndpoint && !opts.sessionFactory) {
+  if (!opts.cdpWsEndpoint && !opts.sessionFactory && !opts.browserRunBinding) {
     return noEndpointSnapshot();
   }
 
@@ -94,12 +112,22 @@ export async function runVisualVerification(
   const probeResults: Array<{ name: string; ok: boolean; detail?: string }> = [];
 
   try {
-    session = opts.sessionFactory
-      ? await opts.sessionFactory()
-      : await openCdpSession({
-          wsEndpoint: opts.cdpWsEndpoint as string,
-          ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
-        });
+    if (opts.sessionFactory) {
+      session = await opts.sessionFactory();
+    } else if (opts.browserRunBinding) {
+      // B2: Cloudflare Browser Run path. The binding owns the Chromium
+      // lifetime; openBrowserRunSession wraps close() so the BR resource
+      // is released when the session is closed by the verifier below.
+      session = await openBrowserRunSession({
+        binding: opts.browserRunBinding,
+        ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+      });
+    } else {
+      session = await openCdpSession({
+        wsEndpoint: opts.cdpWsEndpoint as string,
+        ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+      });
+    }
 
     // 1) Navigate. If the page never loads, surface that as a console error
     //    rather than throwing — the agent should still see *something*.
