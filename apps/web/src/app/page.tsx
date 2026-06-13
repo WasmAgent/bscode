@@ -4,7 +4,16 @@ import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
-import { FrameworkApiMap } from "@/components/FrameworkApiMap";
+// FrameworkApiMap is a 535-line modal that only renders when the user
+// clicks the navbar button. Lazy-loading it (Direction 4 of the
+// 2026-06 strategic brief — "bscode漏斗成本控制") removes ~535 LOC of
+// modal markup from the / first-paint chunk; the import only fires
+// on actual click.
+import dynamic from "next/dynamic";
+const FrameworkApiMap = dynamic(
+  () => import("@/components/FrameworkApiMap").then((m) => m.FrameworkApiMap),
+  { ssr: false, loading: () => null }
+);
 import { type PreviewContent, Terminal } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
@@ -1005,7 +1014,10 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       </div>
 
       {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
-      <FrameworkApiMap open={apiMapOpen} onClose={() => setApiMapOpen(false)} />
+      {/* Only mount the API-map modal when it's actually open — combined
+          with the dynamic() wrapper this defers both the chunk download
+          AND the React tree until the user clicks. */}
+      {apiMapOpen && <FrameworkApiMap open={true} onClose={() => setApiMapOpen(false)} />}
 
       {/* ── Main area ── */}
       {/* On narrow viewports collapse to a single column so neither pane gets squeezed
