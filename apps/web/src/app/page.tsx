@@ -3,6 +3,7 @@ import type { CardBlock } from "@agentkit-js/ui-cards";
 import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
 import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DifferentiatorBand } from "@/components/DifferentiatorBand";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 // FrameworkApiMap is a 535-line modal that only renders when the user
 // clicks the navbar button. Lazy-loading it (Direction 4 of the
@@ -1012,6 +1013,26 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           </button>
         </div>
       </div>
+
+      {/* D6 (2026-06-13) — three differentiated demos. Sits below the
+          navbar so first-paint includes the funnel signals; collapses
+          on dismissal (localStorage `bscode:diffband:dismissed`). The
+          handleTryDemo callback dispatches a UTM event AND scrolls /
+          opens the matching subsection of the existing UI. */}
+      <DifferentiatorBand
+        onTry={(demoId) => {
+          // Each demo is a *signal*, not a full tutorial. We surface a
+          // toast that points the visitor at the matching part of the
+          // existing UI; the funnel-tracking event has already fired
+          // inside the band itself.
+          const toastMessages: Record<typeof demoId, string> = {
+            portal: "Try: prompt 'federate fs + github MCP servers and list the agentkit-js repos'",
+            resume: "Try: start any run, then DevTools → Network → throttle Offline; the run resumes when you go back online",
+            fork: "Try: run any task, then click the EventLog timeline → Fork from this step",
+          };
+          addToast(toastMessages[demoId], "info");
+        }}
+      />
 
       {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
       {/* Only mount the API-map modal when it's actually open — combined
