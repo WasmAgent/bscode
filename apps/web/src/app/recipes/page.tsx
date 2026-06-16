@@ -40,8 +40,7 @@ const RECIPES: Recipe[] = [
     framework: "Vercel AI SDK 6",
     blurb:
       "streamText({ tools }) keeps every primitive you have. Replace your sandboxed code-exec tool with one backed by an agentkit kernel — no Docker / E2B server.",
-    npmInstall:
-      "npm add @agentkit-js/aisdk @agentkit-js/kernel-quickjs @agentkit-js/core",
+    npmInstall: "npm add @agentkit-js/aisdk @agentkit-js/kernel-quickjs @agentkit-js/core",
     code: `import { streamText } from "ai";
 import { sandboxedJsTool } from "@agentkit-js/aisdk";
 import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
@@ -65,8 +64,7 @@ await streamText({
     framework: "Cloudflare codemode",
     blurb:
       "DynamicWorkerExecutor binds you to Workers. agentkitCodemodeExecutor runs the same codemode shape on Node / Bun / Vercel / Lambda, plus optional Python via PyodideKernel.",
-    npmInstall:
-      "npm add @agentkit-js/aisdk @agentkit-js/kernel-quickjs @agentkit-js/core",
+    npmInstall: "npm add @agentkit-js/aisdk @agentkit-js/kernel-quickjs @agentkit-js/core",
     code: `import { Agent } from "@cloudflare/agents/codemode";
 import { agentkitCodemodeExecutor } from "@agentkit-js/aisdk";
 import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
@@ -87,8 +85,7 @@ const agent = new Agent({
     framework: "Mastra",
     blurb:
       "Mastra's sandbox provider takes any backend. agentkit-js gives you WASM isolation (in-process or remote) without Blaxel / E2B service standoff.",
-    npmInstall:
-      "npm add @agentkit-js/mastra-sandbox @agentkit-js/kernel-quickjs @agentkit-js/core",
+    npmInstall: "npm add @agentkit-js/mastra-sandbox @agentkit-js/kernel-quickjs @agentkit-js/core",
     code: `import { Mastra } from "@mastra/core";
 import { agentkitMastraSandbox } from "@agentkit-js/mastra-sandbox";
 import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
@@ -135,8 +132,7 @@ await client.messages.create({
     framework: "OpenAI Agents JS",
     blurb:
       "@openai/agents takes Tool<T> with a Zod parameters schema and execute(). sandboxedJsAgentTool wires that to an agentkit kernel.",
-    npmInstall:
-      "npm add @agentkit-js/openai-agents @agentkit-js/kernel-quickjs @agentkit-js/core",
+    npmInstall: "npm add @agentkit-js/openai-agents @agentkit-js/kernel-quickjs @agentkit-js/core",
     code: `import { Agent, run } from "@openai/agents";
 import { sandboxedJsAgentTool } from "@agentkit-js/openai-agents";
 import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
@@ -170,7 +166,10 @@ function RecipeCard({ recipe }: RecipeCardProps): JSX.Element {
     | { kind: "error"; message: string }
   >({ kind: "idle" });
 
-  const copyToClipboard = async (text: string, which: "code-copied" | "npm-copied"): Promise<void> => {
+  const copyToClipboard = async (
+    text: string,
+    which: "code-copied" | "npm-copied"
+  ): Promise<void> => {
     try {
       await navigator.clipboard.writeText(text);
       setCopyState(which);
@@ -247,7 +246,11 @@ function RecipeCard({ recipe }: RecipeCardProps): JSX.Element {
       </pre>
 
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-        <button type="button" onClick={() => void copyToClipboard(recipe.code, "code-copied")} style={btn()}>
+        <button
+          type="button"
+          onClick={() => void copyToClipboard(recipe.code, "code-copied")}
+          style={btn()}
+        >
           {copyState === "code-copied" ? "✓ copied code" : "copy code"}
         </button>
         <button
@@ -277,7 +280,9 @@ function RecipeCard({ recipe }: RecipeCardProps): JSX.Element {
       {tryState.kind === "done" ? (
         <div style={resultBox("ok")}>
           <strong>patch ({tryState.calls} tool call(s)):</strong>
-          <pre style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{tryState.patch || "(empty)"}</pre>
+          <pre style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>
+            {tryState.patch || "(empty)"}
+          </pre>
         </div>
       ) : null}
       {tryState.kind === "error" ? (
@@ -328,9 +333,9 @@ export default function RecipesPage(): JSX.Element {
         <header style={{ marginBottom: 28 }}>
           <h1 style={{ margin: 0, fontSize: 30 }}>Their framework + our kernel</h1>
           <p style={{ margin: "12px 0 0", color: "#9a9a9a", fontSize: 15, lineHeight: 1.6 }}>
-            You already use Vercel AI SDK 6, Cloudflare codemode, Mastra, the Anthropic Claude
-            Agent SDK, or OpenAI Agents JS — and you want sandboxed code execution without
-            Docker, E2B, or another service. Each recipe below drops an{" "}
+            You already use Vercel AI SDK 6, Cloudflare codemode, Mastra, the Anthropic Claude Agent
+            SDK, or OpenAI Agents JS — and you want sandboxed code execution without Docker, E2B, or
+            another service. Each recipe below drops an{" "}
             <a
               href="https://github.com/telleroutlook/agentkit-js?utm_source=bscode-recipes-page"
               target="_blank"
@@ -339,12 +344,12 @@ export default function RecipesPage(): JSX.Element {
             >
               agentkit-js
             </a>{" "}
-            kernel into your framework as one tool / one executor / one provider — your
-            existing setup keeps working.
+            kernel into your framework as one tool / one executor / one provider — your existing
+            setup keeps working.
           </p>
           <p style={{ margin: "12px 0 0", color: "#777", fontSize: 13 }}>
-            Click <em>try a live patch</em> on any recipe to run the kernel on this deployment;
-            the patch you see is what came back from the worker.
+            Click <em>try a live patch</em> on any recipe to run the kernel on this deployment; the
+            patch you see is what came back from the worker.
           </p>
         </header>
         {RECIPES.map((r) => (

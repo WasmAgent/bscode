@@ -39,7 +39,6 @@ import {
   putBuildResult,
 } from "./build-results.js";
 import { JobQueue, type JobRunner, type JobSpec } from "./jobs/index.js";
-import { createMcpFetchHandler } from "./mcp.js";
 import {
   deriveJobSessionId,
   diffSessions,
@@ -48,6 +47,7 @@ import {
   mergeSessions,
   snapshotSession,
 } from "./jobs/jobBranches.js";
+import { createMcpFetchHandler } from "./mcp.js";
 import {
   type CustomModelConfig,
   discoverLocalModels,

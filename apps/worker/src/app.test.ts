@@ -210,7 +210,7 @@ describe("POST /mcp — code-mode MCP server", () => {
           id: 1,
           method: "tools/list",
         }),
-      }),
+      })
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -223,17 +223,13 @@ describe("POST /mcp — code-mode MCP server", () => {
 
   it("answers OPTIONS /mcp with CORS preflight 204", async () => {
     const app = makeApp();
-    const res = await app.fetch(
-      new Request("http://localhost/mcp", { method: "OPTIONS" }),
-    );
+    const res = await app.fetch(new Request("http://localhost/mcp", { method: "OPTIONS" }));
     expect(res.status).toBe(204);
   });
 
   it("rejects non-POST/OPTIONS verbs with 405 (Method Not Allowed)", async () => {
     const app = makeApp();
-    const res = await app.fetch(
-      new Request("http://localhost/mcp", { method: "GET" }),
-    );
+    const res = await app.fetch(new Request("http://localhost/mcp", { method: "GET" }));
     // The MCP fetch handler returns 405 for non-POST/OPTIONS verbs.
     expect(res.status).toBe(405);
   });

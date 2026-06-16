@@ -43,19 +43,11 @@
  * not always configured).
  */
 
-import {
-  type CapabilityManifest,
-  ToolRegistry,
-  type ToolDefinition,
-} from "@agentkit-js/core";
+import { type CapabilityManifest, type ToolDefinition, ToolRegistry } from "@agentkit-js/core";
 import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
 import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
 import type { AppConfig } from "./platform.js";
-import {
-  createListFilesTool,
-  createReadFileTool,
-  createSearchCodeTool,
-} from "./tools/index.js";
+import { createListFilesTool, createReadFileTool, createSearchCodeTool } from "./tools/index.js";
 
 /** Names of tools we expose on /mcp. Strict allow-list — never derived. */
 const READ_ONLY_TOOLS = ["read_file", "list_files", "search_code"] as const;
@@ -94,7 +86,7 @@ export interface CreateMcpFetchHandlerOptions {
 
 export function createMcpFetchHandler(
   config: AppConfig,
-  opts: CreateMcpFetchHandlerOptions = {},
+  opts: CreateMcpFetchHandlerOptions = {}
 ): (request: Request) => Promise<Response> {
   // Read-only tool subset — built once per worker instance because
   // the registry is stateless beyond the KV references.
@@ -104,16 +96,14 @@ export function createMcpFetchHandler(
     tools.push(
       createReadFileTool(filesKv),
       createListFilesTool(filesKv),
-      createSearchCodeTool(filesKv),
+      createSearchCodeTool(filesKv)
     );
   }
 
   // Defence-in-depth: even if buildTools above were to grow a
   // write-class entry, filter to the strict allow-list before
   // handing the registry to the MCP server.
-  const filtered = tools.filter((t) =>
-    (READ_ONLY_TOOLS as readonly string[]).includes(t.name),
-  );
+  const filtered = tools.filter((t) => (READ_ONLY_TOOLS as readonly string[]).includes(t.name));
   const registry = new ToolRegistry();
   for (const t of filtered) registry.register(t);
 

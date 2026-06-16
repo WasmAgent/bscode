@@ -69,11 +69,7 @@ const DEMOS: Demo[] = [
 
 const STORAGE_KEY = "bscode:diffband:dismissed";
 
-export function DifferentiatorBand({
-  onTry,
-}: {
-  onTry: (demoId: Demo["id"]) => void;
-}) {
+export function DifferentiatorBand({ onTry }: { onTry: (demoId: Demo["id"]) => void }) {
   // SSR safe: read localStorage only after mount. The band ALWAYS renders
   // on first paint (the funnel benefits from the visitor seeing it once,
   // even if they later dismiss it) and only collapses on subsequent loads.
@@ -96,7 +92,7 @@ export function DifferentiatorBand({
       window.dispatchEvent(
         new CustomEvent("bscode:funnel", {
           detail: { step: `differentiator-${demo.id}-click`, source: demo.id },
-        }),
+        })
       );
     }
   }
@@ -112,7 +108,7 @@ export function DifferentiatorBand({
       window.dispatchEvent(
         new CustomEvent("bscode:funnel", {
           detail: { step: "differentiator-dismiss" },
-        }),
+        })
       );
     }
   }

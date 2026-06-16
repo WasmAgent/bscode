@@ -2,19 +2,21 @@
 import type { CardBlock } from "@agentkit-js/ui-cards";
 import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
 import JSZip from "jszip";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { DifferentiatorBand } from "@/components/DifferentiatorBand";
-import { SettingsDrawer } from "@/components/SettingsDrawer";
 // FrameworkApiMap is a 535-line modal that only renders when the user
 // clicks the navbar button. Lazy-loading it (Direction 4 of the
 // 2026-06 strategic brief — "bscode漏斗成本控制") removes ~535 LOC of
 // modal markup from the / first-paint chunk; the import only fires
 // on actual click.
 import dynamic from "next/dynamic";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { DifferentiatorBand } from "@/components/DifferentiatorBand";
+import { SettingsDrawer } from "@/components/SettingsDrawer";
+
 const FrameworkApiMap = dynamic(
   () => import("@/components/FrameworkApiMap").then((m) => m.FrameworkApiMap),
   { ssr: false, loading: () => null }
 );
+
 import { type PreviewContent, Terminal } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
@@ -1027,7 +1029,8 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           // inside the band itself.
           const toastMessages: Record<typeof demoId, string> = {
             portal: "Try: prompt 'federate fs + github MCP servers and list the agentkit-js repos'",
-            resume: "Try: start any run, then DevTools → Network → throttle Offline; the run resumes when you go back online",
+            resume:
+              "Try: start any run, then DevTools → Network → throttle Offline; the run resumes when you go back online",
             fork: "Try: run any task, then click the EventLog timeline → Fork from this step",
           };
           addToast(toastMessages[demoId], "info");
