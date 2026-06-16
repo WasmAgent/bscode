@@ -69,6 +69,7 @@ import {
   PolicyPresets,
 } from "./policies/approvalPolicy.js";
 import {
+  assertWorkspacePath,
   createDeleteFileTool,
   createGitHubPrTool,
   createInitAgentsMdTool,
@@ -88,7 +89,6 @@ import {
   createWriteFileTool,
   importGithubRepo,
   MAX_FILE_BYTES,
-  assertWorkspacePath,
   type SemanticIndexer,
 } from "./tools/index.js";
 import { createGitTools, createShellRunner } from "./tools/shell.js";

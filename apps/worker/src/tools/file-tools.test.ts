@@ -21,6 +21,7 @@ import { FileTreeManager } from "@agentkit-js/core";
 import { describe, expect, it } from "vitest";
 import { MemKvStore } from "../platform.js";
 import {
+  assertWorkspacePath,
   createDeleteFileTool,
   createInitAgentsMdTool,
   createListFilesTool,
@@ -462,5 +463,94 @@ describe("init_agents_md", () => {
     const tool = createInitAgentsMdTool(undefined);
     const draft = (await tool.forward({ scope: "" })) as string;
     expect(draft).toContain("(no files visible to sample)");
+  });
+});
+
+// ── assertWorkspacePath ─────────────────────────────────────────────────────
+//
+// SEC-013 (commit 22791ae) added path validation but the regression
+// fixtures only covered the traversal + absolute-path cases. The control-
+// character / bidi-override branch was never directly tested — and that's
+// the branch most likely to silently regress when refactored. Pin every
+// rejection class so any future change to assertWorkspacePath proves
+// it still rejects each.
+
+describe("assertWorkspacePath", () => {
+  it("accepts ordinary workspace-relative paths", () => {
+    for (const p of ["a.ts", "src/a.ts", "deep/nested/path/file.ts", "weird name.md"]) {
+      expect(() => assertWorkspacePath(p)).not.toThrow();
+    }
+  });
+
+  it("rejects empty / non-string input", () => {
+    expect(() => assertWorkspacePath("")).toThrow(/non-empty string/);
+    // biome-ignore lint/suspicious/noExplicitAny: deliberate bad input for type-edge coverage
+    expect(() => assertWorkspacePath(null as any)).toThrow(/non-empty string/);
+  });
+
+  it("rejects paths exceeding 1024 chars", () => {
+    expect(() => assertWorkspacePath("a".repeat(1025))).toThrow(/exceeds 1024/);
+  });
+
+  it("rejects absolute paths", () => {
+    for (const p of ["/etc/passwd", "/var/log/x", "/"]) {
+      expect(() => assertWorkspacePath(p)).toThrow(/absolute paths are not allowed/);
+    }
+  });
+
+  it("rejects ../ traversal segments (forward + back slashes)", () => {
+    for (const p of ["../etc", "src/../../../etc", "..\\.\\..\\windows"]) {
+      expect(() => assertWorkspacePath(p)).toThrow(/traversal segments are not allowed/);
+    }
+  });
+
+  it("rejects NUL byte and other C0 control codes (regression for bidi/control branch)", () => {
+    // The branch implementing this rejection was rewritten 2026-06-16 from
+    // a regex with raw control bytes to a charCode scan. Pin every class
+    // of codepoint it rejects so the next refactor preserves the security
+    // property. Construct fixtures via String.fromCharCode so the source
+    // file stays free of literal control bytes.
+    const NUL = String.fromCharCode(0x00);
+    const TAB = String.fromCharCode(0x09);
+    const LF = String.fromCharCode(0x0a);
+    const ESC = String.fromCharCode(0x1b);
+    for (const cc of [NUL, TAB, LF, ESC]) {
+      expect(() => assertWorkspacePath(`bad${cc}name.txt`)).toThrow(
+        /control or unicode-override characters/
+      );
+    }
+  });
+
+  it("rejects DEL (U+007F)", () => {
+    const DEL = String.fromCharCode(0x7f);
+    expect(() => assertWorkspacePath(`bad${DEL}name.txt`)).toThrow(/control or unicode-override/);
+  });
+
+  it("rejects bidi formatting overrides (U+202A..U+202E)", () => {
+    // RTL/LRO override marks let an attacker spoof a path that looks like
+    // "report.pdf" but reads as "report.exe" in audit logs. Reject all 5.
+    for (const cc of [0x202a, 0x202b, 0x202c, 0x202d, 0x202e]) {
+      const p = `safe${String.fromCharCode(cc)}name.txt`;
+      expect(() => assertWorkspacePath(p), `expected U+${cc.toString(16)} to be rejected`).toThrow(
+        /control or unicode-override/
+      );
+    }
+  });
+
+  it("rejects bidi isolates (U+2066..U+2069)", () => {
+    for (const cc of [0x2066, 0x2067, 0x2068, 0x2069]) {
+      const p = `safe${String.fromCharCode(cc)}name.txt`;
+      expect(() => assertWorkspacePath(p), `expected U+${cc.toString(16)} to be rejected`).toThrow(
+        /control or unicode-override/
+      );
+    }
+  });
+
+  it("accepts non-control unicode (CJK, accented Latin) — only the override range is forbidden", () => {
+    // Sanity that the rejection isn't over-broad — it must let through
+    // legitimate non-ASCII characters used in real filenames.
+    for (const p of ["报告.md", "café.md", "naïve_test.ts"]) {
+      expect(() => assertWorkspacePath(p)).not.toThrow();
+    }
   });
 });

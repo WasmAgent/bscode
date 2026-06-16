@@ -463,9 +463,20 @@ export function assertWorkspacePath(path: string): void {
   if (segments.some((s) => s === "..")) {
     throw new Error(`InvalidPath: ".." traversal segments are not allowed ("${path}")`);
   }
-  // Reject NUL, control chars, and unicode override marks (RTL/LRO/etc.).
-  if (/[ -‪-‮⁦-⁩]/.test(path)) {
-    throw new Error("InvalidPath: control or unicode-override characters are not allowed");
+  // Reject NUL, ASCII control bytes, DEL, and Unicode bidi-override marks.
+  // Char-code scan rather than a regex: putting these codepoints in a
+  // regex (raw OR via \u escapes) trips noControlCharactersInRegex, and
+  // disabling the rule per-line would lose its protection on FUTURE adds.
+  for (let i = 0; i < path.length; i++) {
+    const cc = path.charCodeAt(i);
+    if (
+      cc <= 0x1f || // C0 controls (NUL, BEL, ESC, etc.)
+      cc === 0x7f || // DEL
+      (cc >= 0x202a && cc <= 0x202e) || // bidi formatting overrides (LRE/RLE/PDF/LRO/RLO)
+      (cc >= 0x2066 && cc <= 0x2069) // bidi isolates (LRI/RLI/FSI/PDI)
+    ) {
+      throw new Error("InvalidPath: control or unicode-override characters are not allowed");
+    }
   }
 }
 
