@@ -160,7 +160,10 @@ describe("ModelManager — initial render", () => {
   });
 
   it("shows the Loading state while /models is in flight", async () => {
-    let resolveFetch: ((r: Response) => void) | null = null;
+    // Explicit `as` annotation avoids TS narrowing the var to `never` after
+    // the initial null assignment — the optional-call below would then fail
+    // typecheck despite the runtime value being a function.
+    let resolveFetch: ((r: Response) => void) | null = null as ((r: Response) => void) | null;
     globalThis.fetch = vi.fn(
       () =>
         new Promise<Response>((resolve) => {
