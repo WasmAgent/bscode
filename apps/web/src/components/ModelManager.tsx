@@ -37,12 +37,6 @@ const PROVIDER_COLORS: Record<string, string> = {
   custom: theme.textMuted,
 };
 
-const _SOURCE_LABELS: Record<string, string> = {
-  builtin: "Built-in",
-  local: "Local",
-  custom: "Custom",
-};
-
 export function ModelManager({ onClose, onApply, currentPrefs, workerUrl }: ModelManagerProps) {
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [prefs, setPrefs] = useState<ModelPreferences>(currentPrefs);

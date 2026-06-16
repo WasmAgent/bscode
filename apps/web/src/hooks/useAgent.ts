@@ -112,6 +112,12 @@ export function useAgent(
       };
       setTokenStats((prev) => {
         const next: TokenStats = {
+          // SEC-017 / UX bug 2026-06-17: previously rebuilt the whole object
+          // from scratch, dropping `lastModelId` whenever a model_done event
+          // arrived without `modelId`. The UI tooltip flickered between the
+          // model name and undefined. Spread `...prev` first so every field
+          // carries forward unless we explicitly overwrite it below.
+          ...prev,
           inputTokens: prev.inputTokens + (d.inputTokens ?? 0),
           outputTokens: prev.outputTokens + (d.outputTokens ?? 0),
           cacheReadTokens: prev.cacheReadTokens + (d.cacheReadTokens ?? 0),
