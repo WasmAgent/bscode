@@ -401,16 +401,18 @@ export function createRunCommandTool(
         return output;
       }
       const output: string[] = [`$ ${command}`];
-      if (code) {
-        try {
-          const result = Function(`"use strict"; return (${code})`)();
-          output.push(String(result));
-        } catch (e) {
-          output.push(`Error: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      } else {
-        output.push("(simulation — real shell unavailable on edge runtime)");
-      }
+      // Simulation mode (shellRunner unavailable). Previously this branch
+      // ran `Function(\`"use strict"; return (${code})\`)()` over the
+      // model-supplied JS, which made the Worker realm itself the
+      // sandbox and let any tool_call exfiltrate KV bindings via
+      // `globalThis.fetch(...)`. Replaced with a no-op simulation
+      // hint — production must wire shellRunner to a sandboxed kernel
+      // (see @agentkit-js/kernel-quickjs). 2026-06-16 SEC-014.
+      output.push(
+        code
+          ? "(simulation — code execution disabled in this build; wire shellRunner to a sandboxed kernel for real eval)"
+          : "(simulation — real shell unavailable on edge runtime)"
+      );
       return output.join("\n");
     },
   };
