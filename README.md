@@ -255,9 +255,15 @@ docs/       Per-capability deep dives (B1–C4)
 
 | Metric | Verified by | Current value |
 |---|---|---|
-| Backend test suite | `apps/worker` vitest | **222 tests, 100% pass** |
-| Frontend test suite | `apps/web` vitest | **27 tests, 100% pass** |
+| Backend test suite | `apps/worker` vitest | **357 tests, 100% pass** (+1 Bun-spawn skipped under Node) |
+| Frontend test suite | `apps/web` vitest | **184 tests, 100% pass** |
+| Lint | `bun lint` (biome) | **0 errors / 105 files** |
+| Typecheck | `bun --filter @bscode/* typecheck` | **0 errors** (worker + web) |
 | Lighthouse desktop | `chrome-devtools-mcp` audit | **Accessibility 100 · Best Practices 100 · SEO 100 · Agentic Browsing 100** |
+
+The 2026-06-16/17 sweep added **301 tests across 12 commits** (240 → 541)
+with 4 real bugs caught and fixed in the process — see git log for the
+SEC-013 / SEC-014 / SEC-015 / SEC-016 / SEC-017 forensic notes.
 
 The pre-restructure commits in this repo include extensive per-capability
 verification tables for B1, B2, B3, B4, C1, C2, C3, C4 — see the

@@ -115,6 +115,36 @@ closed in the cross-project audit:
 - **Playwright extract returning `""` on per-selector errors** — now
   re-throws with a structured per-selector message.
 
+### 2026-06-16/17 sweep (SEC-013 through SEC-017)
+
+Each finding has a regression test pinning it. Re-running `bun test`
+across worker + web confirms all five remain closed.
+
+- **SEC-013** (commit 22791ae) — `assertWorkspacePath` now rejects
+  absolute paths, `..` traversal segments, NUL/C0 control bytes,
+  DEL, and bidi-override marks (U+202A–U+202E + U+2066–U+2069). The
+  earlier code let `write_file("../../etc/passwd")` reach a downstream
+  shell tool that DID interpret the path.
+- **SEC-014** (commit 2ff2a06) — `run_command` simulation branch
+  used to evaluate model-supplied JS via `Function()`, making the
+  Worker realm itself the sandbox. Removed; replaced with a no-op
+  hint that points operators to wire a sandboxed kernel.
+- **SEC-015** (commit 16171b1) — `run_command` block list missed
+  the bare-root form `rm -rf /` because the regex used `\b` (a word
+  boundary), which doesn't match between `/` and EOS. Now anchors
+  on `(?:\s|$|\w)` so the bare root, trailing-space, and trailing-
+  segment forms all block.
+- **SEC-016** (commit fc2aab0) — `useImport.importFromDirectory`
+  feature-detected the File System Access API with `"showDirectoryPicker"
+  in window`, which returns true even when the property is
+  `undefined` (failed polyfill). Replaced with `typeof ... !==
+  "function"` so any non-function value routes to the actionable
+  hint instead of crashing with TypeError mid-call.
+- **SEC-017** (commit 7a4c03d) — `useAgent.onEvent` rebuilt the entire
+  TokenStats object from scratch, dropping `lastModelId` whenever a
+  `model_done` event arrived without a `modelId`. UI tooltip flickered
+  to undefined between calls. Fixed by spreading `...prev` first.
+
 ## Defense in depth recommendations for production
 
 If deploying bscode beyond a single trusted user:
