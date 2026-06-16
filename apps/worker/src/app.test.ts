@@ -1760,6 +1760,364 @@ describe("C2 — per-job session isolation + diff/merge", () => {
   });
 });
 
+// ── E2E P1 — File version history + rollback ────────────────────────────────
+//
+// /files/:path/versions, /files/:path/versions/:version, /files/:path/rollback
+// were entirely uncovered by HTTP tests. The undo UX in the web UI relies on
+// these; without coverage, breakage there ships silently. Pin down:
+//   1. Multiple writes accumulate version snapshots, newest last.
+//   2. GET versions list returns metadata (no content payload).
+//   3. GET versions/:version returns the historical content.
+//   4. POST /rollback recreates a new version equal to the target's content
+//      AND mirrors that content into KV (so subsequent /files reads see it).
+//   5. Bad inputs: non-numeric version → 400, missing version → 404,
+//      rollback to non-existent version → 404.
+//   6. Per-session isolation — versions tracked separately by X-Session-Id.
+//   7. DELETE /files/:path drops the version history (no phantom versions).
+
+describe("E2E P1 — /files versions + rollback", () => {
+  async function writeFile(
+    app: ReturnType<typeof createApp>,
+    path: string,
+    content: string,
+    sessionId?: string
+  ) {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (sessionId) headers["X-Session-Id"] = sessionId;
+    return app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ path, content }),
+      })
+    );
+  }
+
+  it("GET /files/:path/versions returns accumulated snapshots newest-last", async () => {
+    const app = makeApp();
+    await writeFile(app, "src/a.ts", "v1");
+    await writeFile(app, "src/a.ts", "v2");
+    await writeFile(app, "src/a.ts", "v3");
+
+    const res = await app.fetch(new Request("http://localhost/files/src/a.ts/versions"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      path: string;
+      versions: Array<{ version: number; hash: string; savedAtMs: number }>;
+    };
+    expect(body.path).toBe("src/a.ts");
+    expect(body.versions.length).toBe(3);
+    expect(body.versions.map((v) => v.version)).toEqual([1, 2, 3]);
+    // Metadata only — no content key in the list response (saves bandwidth).
+    expect((body.versions[0] as Record<string, unknown>).content).toBeUndefined();
+    // Hashes differ between versions (sanity).
+    const hashes = body.versions.map((v) => v.hash);
+    expect(new Set(hashes).size).toBe(3);
+  });
+
+  it("GET /files/:path/versions returns empty list for unknown file (no 404)", async () => {
+    const app = makeApp();
+    const res = await app.fetch(new Request("http://localhost/files/never/written.ts/versions"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { versions: unknown[] };
+    expect(body.versions).toEqual([]);
+  });
+
+  it("GET /files/:path/versions/:version returns historical content", async () => {
+    const app = makeApp();
+    await writeFile(app, "x.md", "first");
+    await writeFile(app, "x.md", "second");
+
+    const v1 = await app.fetch(new Request("http://localhost/files/x.md/versions/1"));
+    expect(v1.status).toBe(200);
+    const body1 = (await v1.json()) as { version: number; content: string };
+    expect(body1.version).toBe(1);
+    expect(body1.content).toBe("first");
+
+    const v2 = await app.fetch(new Request("http://localhost/files/x.md/versions/2"));
+    expect(v2.status).toBe(200);
+    const body2 = (await v2.json()) as { content: string };
+    expect(body2.content).toBe("second");
+  });
+
+  it("GET /files/:path/versions/:version → 400 when version is not numeric", async () => {
+    const app = makeApp();
+    await writeFile(app, "y.md", "hello");
+    const res = await app.fetch(new Request("http://localhost/files/y.md/versions/notanumber"));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/version must be a number/i);
+  });
+
+  it("GET /files/:path/versions/:version → 404 when version is out of range", async () => {
+    const app = makeApp();
+    await writeFile(app, "z.md", "only one");
+    const res = await app.fetch(new Request("http://localhost/files/z.md/versions/99"));
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /rollback restores prior content AND mirrors it into KV", async () => {
+    const filesKv = new MemKvStore();
+    const app = makeApp({ filesKv });
+    await writeFile(app, "main.ts", "v1");
+    await writeFile(app, "main.ts", "v2");
+    await writeFile(app, "main.ts", "v3");
+
+    const roll = await app.fetch(
+      new Request("http://localhost/files/main.ts/rollback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: 1 }),
+      })
+    );
+    expect(roll.status).toBe(200);
+    const body = (await roll.json()) as { ok: boolean; version: number; chars: number };
+    expect(body.ok).toBe(true);
+    expect(body.version).toBe(1);
+    expect(body.chars).toBe(2); // "v1".length
+
+    // KV reflects the rolled-back content (so subsequent GET /files reads it).
+    const get = await app.fetch(new Request("http://localhost/files/main.ts"));
+    const got = (await get.json()) as { content: string };
+    expect(got.content).toBe("v1");
+
+    // Rollback creates a new version snapshot — list now has 4 entries.
+    const list = await app.fetch(new Request("http://localhost/files/main.ts/versions"));
+    const listBody = (await list.json()) as { versions: Array<{ version: number }> };
+    expect(listBody.versions.length).toBe(4);
+    expect(listBody.versions.at(-1)?.version).toBe(4);
+  });
+
+  it("POST /rollback → 404 for unknown version", async () => {
+    const app = makeApp();
+    await writeFile(app, "p.ts", "only-one");
+    const res = await app.fetch(
+      new Request("http://localhost/files/p.ts/rollback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: 99 }),
+      })
+    );
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/Version 99 not found/);
+  });
+
+  it("version history is per-session — different X-Session-Id keeps timelines isolated", async () => {
+    const app = makeApp();
+    await writeFile(app, "shared.ts", "alpha-1", "alice");
+    await writeFile(app, "shared.ts", "alpha-2", "alice");
+    await writeFile(app, "shared.ts", "bravo-1", "bob");
+
+    const aliceList = await app.fetch(
+      new Request("http://localhost/files/shared.ts/versions", {
+        headers: { "X-Session-Id": "alice" },
+      })
+    );
+    const aliceBody = (await aliceList.json()) as { versions: unknown[] };
+    expect(aliceBody.versions.length).toBe(2);
+
+    const bobList = await app.fetch(
+      new Request("http://localhost/files/shared.ts/versions", {
+        headers: { "X-Session-Id": "bob" },
+      })
+    );
+    const bobBody = (await bobList.json()) as { versions: unknown[] };
+    expect(bobBody.versions.length).toBe(1);
+  });
+
+  it("DELETE /files/:path clears the file's version history", async () => {
+    const app = makeApp();
+    await writeFile(app, "doomed.ts", "first");
+    await writeFile(app, "doomed.ts", "second");
+
+    const before = await app.fetch(new Request("http://localhost/files/doomed.ts/versions"));
+    expect(((await before.json()) as { versions: unknown[] }).versions.length).toBe(2);
+
+    const del = await app.fetch(
+      new Request("http://localhost/files/doomed.ts", { method: "DELETE" })
+    );
+    expect(del.status).toBe(200);
+
+    const after = await app.fetch(new Request("http://localhost/files/doomed.ts/versions"));
+    const afterBody = (await after.json()) as { versions: unknown[] };
+    expect(afterBody.versions).toEqual([]);
+  });
+});
+
+// ── E2E P1 — Remaining /jobs error branches ─────────────────────────────────
+//
+// The Job queue (B1) and C2 blocks above cover the happy paths and the
+// diff/merge happy/conflict branches. These tests fill in the holes:
+//   1. GET /jobs?status=… filters by status.
+//   2. GET /jobs/:id/diff → 503 when no filesKv is bound.
+//   3. GET /jobs/:id/diff → 404 for unknown job id.
+//   4. POST /jobs/:id/merge → 404 for unknown job, 409 if job not done.
+//   5. DELETE /jobs/:id/branch → 404 for unknown job.
+//   6. GET /jobs returns running/pending stats counters in the response.
+
+describe("E2E P1 — /jobs additional error / filter branches", () => {
+  async function waitDone(app: ReturnType<typeof createApp>, id: string, timeoutMs = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const res = await app.fetch(new Request(`http://localhost/jobs/${id}`));
+      const job = (await res.json()) as { status: string };
+      if (["done", "failed", "aborted"].includes(job.status)) return job;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error(`job ${id} did not finish within ${timeoutMs}ms`);
+  }
+
+  it("GET /jobs?status=done returns only done jobs", async () => {
+    const app = makeApp();
+    const sub = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "filter-1" },
+        body: JSON.stringify({ task: "filter test", agentMode: "code" }),
+      })
+    );
+    const { jobIds } = (await sub.json()) as { jobIds: string[] };
+    await waitDone(app, jobIds[0] as string);
+
+    const list = await app.fetch(
+      new Request("http://localhost/jobs?status=done&sessionId=filter-1")
+    );
+    const body = (await list.json()) as {
+      jobs: Array<{ status: string }>;
+      stats: { running: number; pending: number; total: number };
+    };
+    expect(body.jobs.length).toBeGreaterThan(0);
+    for (const j of body.jobs) expect(j.status).toBe("done");
+    expect(body.stats.total).toBe(body.jobs.length);
+    // After the job finished, running/pending counters should be 0.
+    expect(body.stats.running).toBe(0);
+    expect(body.stats.pending).toBe(0);
+
+    // A status filter that no job matches returns an empty list (not 404).
+    const empty = await app.fetch(
+      new Request("http://localhost/jobs?status=failed&sessionId=filter-1")
+    );
+    const emptyBody = (await empty.json()) as { jobs: unknown[] };
+    expect(emptyBody.jobs).toEqual([]);
+  });
+
+  it("GET /jobs/:id/diff → 503 when no filesKv is bound", async () => {
+    // Construct an app WITHOUT filesKv — the route bails out with 503.
+    const app = createApp({
+      anthropicApiKey: "sk-test",
+      allowedOrigin: "*",
+      sessionsKv: new MemKvStore(),
+      // filesKv intentionally omitted
+    });
+    // Submit a job first so we have a real id (the route checks filesKv before
+    // looking up the job, so any id reaches the 503 — we use a real one anyway
+    // to make the test resilient to ordering changes in the handler).
+    const sub = await app.fetch(
+      new Request("http://localhost/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: "diff-no-kv", agentMode: "code" }),
+      })
+    );
+    const { jobIds } = (await sub.json()) as { jobIds: string[] };
+    await waitDone(app, jobIds[0] as string);
+
+    const diff = await app.fetch(new Request(`http://localhost/jobs/${jobIds[0]}/diff`));
+    expect(diff.status).toBe(503);
+    const body = (await diff.json()) as { error: string };
+    expect(body.error).toMatch(/files KV not bound/);
+  });
+
+  it("GET /jobs/:id/diff → 404 for unknown job id", async () => {
+    const app = makeApp();
+    const res = await app.fetch(new Request("http://localhost/jobs/no-such-job/diff"));
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /jobs/:id/merge → 404 for unknown job id", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/jobs/no-such-job/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      })
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /jobs/:id/branch → 404 for unknown job id", async () => {
+    const app = makeApp();
+    const res = await app.fetch(
+      new Request("http://localhost/jobs/no-such-job/branch", { method: "DELETE" })
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /jobs/:id/merge → 409 when job is not yet done", async () => {
+    // Force the agent to hang past the merge attempt so we observe the
+    // not-done branch deterministically. We restore the factory in finally.
+    const oldFactory = agentFactory;
+    // TS otherwise narrows this to `never` after the initial null assignment;
+    // the explicit annotation keeps the optional-call below type-checking.
+    let releaseRunner: (() => void) | null = null as (() => void) | null;
+    agentFactory = () =>
+      (async function* () {
+        // First yield lets the queue mark the job as running.
+        const first = DEFAULT_EVENTS[0];
+        if (first) yield first;
+        // Hold the runner open until the test releases it.
+        await new Promise<void>((resolve) => {
+          releaseRunner = resolve;
+        });
+        // Final answer event so the job moves to "done" after release.
+        const fin = DEFAULT_EVENTS[1];
+        if (fin) yield fin;
+      })();
+
+    try {
+      const app = makeApp();
+      const sub = await app.fetch(
+        new Request("http://localhost/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task: "hang", agentMode: "code" }),
+        })
+      );
+      const { jobIds } = (await sub.json()) as { jobIds: string[] };
+      const id = jobIds[0] as string;
+
+      // Wait until the queue marks the job as running (not yet done).
+      const start = Date.now();
+      let status = "queued";
+      while (Date.now() - start < 1000) {
+        const res = await app.fetch(new Request(`http://localhost/jobs/${id}`));
+        status = ((await res.json()) as { status: string }).status;
+        if (status === "running") break;
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      expect(status).toBe("running");
+
+      // Attempt to merge a still-running job → 409.
+      const merge = await app.fetch(
+        new Request(`http://localhost/jobs/${id}/merge`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        })
+      );
+      expect(merge.status).toBe(409);
+      const body = (await merge.json()) as { error: string };
+      expect(body.error).toMatch(/cannot merge a job in state running/);
+    } finally {
+      // Release the hung runner so the test cleanly tears down.
+      releaseRunner?.();
+      agentFactory = oldFactory;
+    }
+  });
+});
+
 // ── C4: AGENTS.md project instructions ──────────────────────────────────────
 //
 // Pin down:
