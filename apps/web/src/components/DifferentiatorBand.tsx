@@ -51,7 +51,7 @@ const DEMOS: Demo[] = [
     id: "portal",
     headline: "MCP Portal · 3 servers, 1 face",
     pitch: "Federate N MCP servers behind one execute_code surface — bootstrap stays O(1).",
-    badge: "3.1% of direct-MCP @ 150 tools",
+    badge: "≤14% of direct-MCP @ N=30 tools",
   },
   {
     id: "resume",
