@@ -190,7 +190,13 @@ export function useImport(): UseImportReturn {
    * Falls back gracefully if the API is not supported.
    */
   const importFromDirectory = useCallback(async (): Promise<ImportedFile[]> => {
-    if (!("showDirectoryPicker" in window)) {
+    // `"showDirectoryPicker" in window` would also accept the property
+    // existing-but-undefined (e.g. from a failed polyfill / a manual
+    // window.showDirectoryPicker = undefined assignment), which would let
+    // execution reach the call below and surface an unhelpful TypeError.
+    // Use the typeof-function check so the actionable hint always wins.
+    // biome-ignore lint/suspicious/noExplicitAny: File System Access API
+    if (typeof (window as any).showDirectoryPicker !== "function") {
       throw new Error("Directory picker is not supported in this browser. Try Chrome or Edge.");
     }
 
