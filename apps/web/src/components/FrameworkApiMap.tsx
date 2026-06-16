@@ -202,6 +202,92 @@ const server = createCodeModeServer({
 });
 export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
   },
+  {
+    feature: "Vercel AI SDK — sandboxed tool",
+    describe:
+      "Drop an agentkit kernel into Vercel AI SDK 4–6 as a `tool()`. The model emits a tool_call, agentkit runs the script in QuickJS, the result flows back to the SDK loop. No SDK fork, no patches.",
+    api: "sandboxedJsTool + codeModeTool",
+    pkg: "@agentkit-js/aisdk",
+    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/integrate-vercel-ai-sdk.md",
+    snippet: `import { sandboxedJsTool } from "@agentkit-js/aisdk";
+import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { generateText } from "ai";
+
+const sandbox = sandboxedJsTool({
+  kernel: new QuickJSKernel(),
+  capabilities: { allowedHosts: ["api.example.com"], cpuMs: 5_000 },
+});
+
+await generateText({
+  model: openai("gpt-4o"),
+  tools: { sandbox },          // any AI SDK loop now has WASM execution
+  prompt: "Fetch and summarise the example API.",
+});`,
+  },
+  {
+    feature: "Mastra sandbox provider",
+    describe:
+      "Plug an agentkit kernel into Mastra's sandbox-provider contract. Replace E2B / Daytona / Modal with a 3-tier composable kernel — same Workspace API.",
+    api: "agentkitMastraSandbox",
+    pkg: "@agentkit-js/mastra-sandbox",
+    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/integrate-mastra.md",
+    snippet: `import { agentkitMastraSandbox } from "@agentkit-js/mastra-sandbox";
+import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { Workspace } from "@mastra/core";
+
+const workspace = new Workspace({
+  sandbox: agentkitMastraSandbox({
+    kernel: new QuickJSKernel(),
+    capabilities: { allowedHosts: [], cpuMs: 5_000 },
+  }),
+});`,
+  },
+  {
+    feature: "Claude Agent SDK — sandboxed tool",
+    describe:
+      "Wrap a kernel as an Anthropic Claude Agent SDK tool — turns the SDK's tool-call loop into a code-mode loop with WASM-isolated execution.",
+    api: "sandboxedJsClaudeTool",
+    pkg: "@agentkit-js/claude-agent-sdk",
+    docs: "https://github.com/telleroutlook/agentkit-js/tree/main/packages/claude-agent-sdk",
+    snippet: `import { sandboxedJsClaudeTool } from "@agentkit-js/claude-agent-sdk";
+import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { Anthropic } from "@anthropic-ai/sdk";
+
+const sandbox = sandboxedJsClaudeTool({
+  kernel: new QuickJSKernel(),
+  capabilities: { allowedHosts: ["api.example.com"], cpuMs: 5_000 },
+});
+
+const client = new Anthropic();
+await client.messages.create({
+  model: "claude-sonnet-4-6",
+  tools: [sandbox],            // Claude SDK now has WASM execution
+  messages: [{ role: "user", content: "Fetch and summarise the example API." }],
+  max_tokens: 1024,
+});`,
+  },
+  {
+    feature: "OpenAI Agents JS — sandboxed tool",
+    describe:
+      "Wrap a kernel as an OpenAI Agents JS `Tool<T>` — adds WASM-isolated execution to the SDK's agent loop without forking the SDK.",
+    api: "sandboxedJsAgentTool",
+    pkg: "@agentkit-js/openai-agents",
+    docs: "https://github.com/telleroutlook/agentkit-js/tree/main/packages/openai-agents",
+    snippet: `import { sandboxedJsAgentTool } from "@agentkit-js/openai-agents";
+import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { Agent } from "@openai/agents";
+
+const sandbox = sandboxedJsAgentTool({
+  kernel: new QuickJSKernel(),
+  capabilities: { allowedHosts: ["api.example.com"], cpuMs: 5_000 },
+});
+
+const agent = new Agent({
+  name: "researcher",
+  tools: [sandbox],            // OpenAI Agents loop with WASM execution
+  instructions: "Use the sandbox tool to fetch and process API data.",
+});`,
+  },
 ];
 
 interface FrameworkApiMapProps {
