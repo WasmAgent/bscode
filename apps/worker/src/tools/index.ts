@@ -420,6 +420,50 @@ export function createRunCommandTool(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Maximum allowed file size for the workspace KV store. 1 MB matches
+ * Cloudflare KV's per-value soft cap and stops a model from filling
+ * the namespace with one oversized blob (DoS / quota burn). Callers
+ * that legitimately need larger payloads should split into chunks.
+ */
+export const MAX_FILE_BYTES = 1_048_576;
+
+/**
+ * Validate a workspace-relative path before it enters the KV layer.
+ * Cloudflare KV keys are opaque (no real filesystem traversal), but
+ * we still reject `..` segments, absolute paths, NUL bytes, and
+ * unicode control marks so that:
+ *
+ *   1. The same path string is safe to pass to a downstream shell /
+ *      codegen tool that DOES interpret it as a real path.
+ *   2. Cross-session prefix scans like `prefix: ""` or `prefix: "../"`
+ *      can't enumerate other sessions' keys.
+ *   3. Audit trails / logs aren't polluted with confusing keys.
+ *
+ * Throws on rejection so callers (POST /files, write_file tool, etc.)
+ * surface a 400 to the client.
+ */
+export function assertWorkspacePath(path: string): void {
+  if (typeof path !== "string" || path.length === 0) {
+    throw new Error("InvalidPath: path must be a non-empty string");
+  }
+  if (path.length > 1024) {
+    throw new Error("InvalidPath: path exceeds 1024 chars");
+  }
+  if (path.startsWith("/")) {
+    throw new Error(`InvalidPath: absolute paths are not allowed ("${path}")`);
+  }
+  // Detect ../ traversal segments (collapsed before any join).
+  const segments = path.split(/[\\/]+/);
+  if (segments.some((s) => s === "..")) {
+    throw new Error(`InvalidPath: ".." traversal segments are not allowed ("${path}")`);
+  }
+  // Reject NUL, control chars, and unicode override marks (RTL/LRO/etc.).
+  if (/[ -‪-‮⁦-⁩]/.test(path)) {
+    throw new Error("InvalidPath: control or unicode-override characters are not allowed");
+  }
+}
+
 function normalizeKey(path: string): string {
   return `file:${path.replace(/^\/+/, "")}`;
 }

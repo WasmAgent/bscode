@@ -87,6 +87,8 @@ import {
   createVisualVerifyTool,
   createWriteFileTool,
   importGithubRepo,
+  MAX_FILE_BYTES,
+  assertWorkspacePath,
   type SemanticIndexer,
 } from "./tools/index.js";
 import { createGitTools, createShellRunner } from "./tools/shell.js";
@@ -1172,6 +1174,14 @@ or {"mode":"tool","framework":null}`;
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const { path, content } = await c.req.json<{ path: string; content: string }>();
     if (!path || content === undefined) return c.json({ error: "path and content required" }, 400);
+    try {
+      assertWorkspacePath(path);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    if (typeof content === "string" && content.length > MAX_FILE_BYTES) {
+      return c.json({ error: `file exceeds ${MAX_FILE_BYTES} bytes` }, 413);
+    }
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
     // Keep FileTreeManager in sync for conflict detection and context relevance
     fileTreeFor(c).recordWrite(path.replace(/^\/+/, ""), content);
@@ -1181,6 +1191,11 @@ or {"mode":"tool","framework":null}`;
   app.get("/files/:path{.+}", async (c) => {
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const path = c.req.param("path");
+    try {
+      assertWorkspacePath(path);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
     if (!kv) return c.json({ error: "KV not bound" }, 503);
     const content = await kv.get(`file:${path}`);
     if (content === null) return c.json({ error: "not found" }, 404);

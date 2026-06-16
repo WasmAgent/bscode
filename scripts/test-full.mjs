@@ -1183,6 +1183,54 @@ await test("/run with local Ollama model (if available)", "model-registry", asyn
   ];
 });
 
+// ── CATEGORY 28: P0 Security (path validation + payload limits) ─────────────
+// Locks the regression risk on findings from the 2026-06-16 coverage audit:
+// path traversal, absolute paths, oversized payloads, and friends. These
+// were silently writable before the assertWorkspacePath / MAX_FILE_BYTES
+// validators landed in apps/worker/src/tools/index.ts.
+console.log(`\n${c.bold}── P0 Security ────────────────────────────────────────────${c.reset}`);
+
+await test("rejects ../ traversal in POST /files path", "security", async () => {
+  const res = await fetch(`${BASE}/files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "../../etc/passwd", content: "x" }),
+  });
+  return [res.status === 400];
+});
+
+await test("rejects absolute path in POST /files", "security", async () => {
+  const res = await fetch(`${BASE}/files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "/etc/passwd", content: "x" }),
+  });
+  return [res.status === 400];
+});
+
+await test("rejects ../ traversal in GET /files/:path", "security", async () => {
+  const res = await fetch(`${BASE}/files/${encodeURIComponent("../../etc/passwd")}`);
+  return [res.status === 400];
+});
+
+await test("rejects oversized payload (>1MB)", "security", async () => {
+  const res = await fetch(`${BASE}/files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "big.txt", content: "x".repeat(2_000_000) }),
+  });
+  return [res.status === 413];
+});
+
+await test("rejects NUL byte in path", "security", async () => {
+  const res = await fetch(`${BASE}/files`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "test\x00pwn", content: "x" }),
+  });
+  return [res.status === 400];
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Results summary
 // ══════════════════════════════════════════════════════════════════════════════
