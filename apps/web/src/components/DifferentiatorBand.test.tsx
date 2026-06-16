@@ -31,8 +31,10 @@ describe("DifferentiatorBand (D6)", () => {
     expect(screen.getByText(/MCP Portal/)).toBeTruthy();
     expect(screen.getByText(/Kill worker/)).toBeTruthy();
     expect(screen.getByText(/Time-travel debugger/)).toBeTruthy();
-    // Numeric / verifiable badges, not vague marketing.
-    expect(screen.getByText(/3.1% of direct-MCP/)).toBeTruthy();
+    // Numeric / verifiable badges, not vague marketing. Reflects the
+    // 2026-06-13 update (commit 908e7ee) that swapped the floating "3.1%"
+    // for a stable "≤14% @ N=30" envelope.
+    expect(screen.getByText(/≤14% of direct-MCP/)).toBeTruthy();
     expect(screen.getByText(/no other framework ships this/)).toBeTruthy();
     expect(screen.getByText(/LangGraph Studio/)).toBeTruthy();
   });
