@@ -2230,3 +2230,184 @@ describe("C4 — AGENTS.md project instructions", () => {
     expect((draft as string).startsWith("# AGENTS.md")).toBe(true);
   });
 });
+
+// ── E2E P2 — KV half-failure modes + multi-tenant isolation ─────────────────
+//
+// Production KV (Cloudflare KV, R2, Workers KV) can be partially available:
+// `get` returns null but `put` rejects, or `delete` is missing entirely on
+// older KV adapters. Without coverage, a half-failed KV either crashes the
+// worker (5xx) or silently no-ops while reporting success — both worse than
+// a clean error string. Pin down:
+//   1. Two different X-Session-Id headers reading/writing the same path
+//      stay isolated — neither sees the other's content.
+//   2. POST /files with a put-throws KV returns a non-2xx instead of crashing.
+//   3. DELETE /files when the KV adapter has no `delete` method returns 501
+//      with an actionable message (vs. silently appearing to succeed).
+//   4. Concurrent writes to the SAME (session, path) pair both succeed and
+//      the second one wins — last-writer-wins is the documented contract.
+
+describe("E2E P2 — KV failure + multi-tenant isolation", () => {
+  it("two sessions writing the same path stay isolated end-to-end", async () => {
+    const filesKv = new MemKvStore();
+    const app = makeApp({ filesKv });
+
+    // Each session writes its own content to the same logical path.
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        body: JSON.stringify({ path: "shared.ts", content: "alice-content" }),
+      })
+    );
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": "bob" },
+        body: JSON.stringify({ path: "shared.ts", content: "bob-content" }),
+      })
+    );
+
+    const aliceRead = await app.fetch(
+      new Request("http://localhost/files/shared.ts", {
+        headers: { "X-Session-Id": "alice" },
+      })
+    );
+    const bobRead = await app.fetch(
+      new Request("http://localhost/files/shared.ts", {
+        headers: { "X-Session-Id": "bob" },
+      })
+    );
+    expect(((await aliceRead.json()) as { content: string }).content).toBe("alice-content");
+    expect(((await bobRead.json()) as { content: string }).content).toBe("bob-content");
+
+    // A request without X-Session-Id falls through to the un-prefixed namespace
+    // and MUST NOT see either tenant's data — that would be a cross-tenant leak.
+    const anonRead = await app.fetch(new Request("http://localhost/files/shared.ts"));
+    expect(anonRead.status).toBe(404);
+  });
+
+  it("DELETE /files with no-delete-method KV returns 501, not a silent success", async () => {
+    // Build a KV adapter that has put/get/list but no delete method. The
+    // /files DELETE handler explicitly checks for this and returns 501.
+    const inner = new MemKvStore();
+    const noDeleteKv = {
+      get: (k: string) => inner.get(k),
+      put: (k: string, v: string) => inner.put(k, v),
+      list: (opts: { prefix: string }) => inner.list(opts),
+      // delete: intentionally omitted
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: KvStore.delete is declared optional
+    const app = makeApp({ filesKv: noDeleteKv as any });
+    await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "victim.ts", content: "still-here" }),
+      })
+    );
+
+    const del = await app.fetch(
+      new Request("http://localhost/files/victim.ts", { method: "DELETE" })
+    );
+    expect(del.status).toBe(501);
+    const body = (await del.json()) as { error: string };
+    expect(body.error).toMatch(/does not support delete/);
+
+    // The file is still readable (silent no-op would have been OK status →
+    // 404 read; we want to confirm the put-side wasn't tampered with).
+    const get = await app.fetch(new Request("http://localhost/files/victim.ts"));
+    expect(get.status).toBe(200);
+  });
+
+  it("DELETE /files (clear-all) with no-delete-method KV also returns 501", async () => {
+    const inner = new MemKvStore();
+    const noDeleteKv = {
+      get: (k: string) => inner.get(k),
+      put: (k: string, v: string) => inner.put(k, v),
+      list: (opts: { prefix: string }) => inner.list(opts),
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: KvStore.delete is declared optional
+    const app = makeApp({ filesKv: noDeleteKv as any });
+    const res = await app.fetch(new Request("http://localhost/files", { method: "DELETE" }));
+    expect(res.status).toBe(501);
+  });
+
+  it("POST /files crashes loudly (not silently) when KV.put throws", async () => {
+    // A failing KV is not the same as a missing KV — it must surface a 5xx
+    // so the client retries / surfaces the error rather than silently
+    // pretending the write succeeded.
+    const inner = new MemKvStore();
+    const flakyKv = {
+      get: (k: string) => inner.get(k),
+      put: async () => {
+        throw new Error("KV outage");
+      },
+      list: (opts: { prefix: string }) => inner.list(opts),
+      delete: (k: string) => inner.delete(k),
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: KvStore type allows arbitrary impls
+    const app = makeApp({ filesKv: flakyKv as any });
+
+    let res: Response;
+    try {
+      res = await app.fetch(
+        new Request("http://localhost/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: "doomed.ts", content: "x" }),
+        })
+      );
+    } catch (err) {
+      // Some Hono versions surface uncaught handler errors by re-throwing.
+      // Treat that as the same loud-failure contract — the bug we want to
+      // catch is silent success, not the exact transport.
+      expect((err as Error).message).toMatch(/KV outage/);
+      return;
+    }
+    // Hono's default error handler turns thrown errors into 500 — anything
+    // outside the 2xx range is acceptable here. The contract is "not 200".
+    expect(res.status).not.toBe(200);
+    expect(res.status).toBeGreaterThanOrEqual(500);
+  });
+
+  it("concurrent writes to same (session, path) — last-writer-wins, no corruption", async () => {
+    // Two clients with the same X-Session-Id race against each other.
+    // The KV's last-writer-wins contract means the final read returns one
+    // of the two contents intact (not a half-merge or thrown error).
+    const filesKv = new MemKvStore();
+    const app = makeApp({ filesKv });
+    const writes = ["first-content", "second-content", "third-content"].map((content) =>
+      app.fetch(
+        new Request("http://localhost/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Session-Id": "race" },
+          body: JSON.stringify({ path: "race.ts", content }),
+        })
+      )
+    );
+    const responses = await Promise.all(writes);
+    for (const r of responses) expect(r.status).toBe(200);
+
+    const read = await app.fetch(
+      new Request("http://localhost/files/race.ts", { headers: { "X-Session-Id": "race" } })
+    );
+    expect(read.status).toBe(200);
+    const body = (await read.json()) as { content: string };
+    expect(["first-content", "second-content", "third-content"]).toContain(body.content);
+  });
+
+  it("GET /files with KV not bound returns 503 (not undefined-deref)", async () => {
+    // Run an app WITHOUT filesKv. The GET handler bails at 503 instead of
+    // crashing on `kv.get(...)`.
+    const app = createApp({
+      anthropicApiKey: "sk-test",
+      allowedOrigin: "*",
+      sessionsKv: new MemKvStore(),
+      // filesKv intentionally omitted
+    });
+    const res = await app.fetch(new Request("http://localhost/files/anything.ts"));
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/KV not bound/);
+  });
+});

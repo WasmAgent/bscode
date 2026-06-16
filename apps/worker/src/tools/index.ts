@@ -374,8 +374,13 @@ export function createRunCommandTool(
         if (/^mkdir\s+(?!.*-p)/.test(safeCommand)) {
           safeCommand = safeCommand.replace(/^mkdir\s+/, "mkdir -p ");
         }
-        // Block truly destructive commands
-        const blocked = /rm\s+-rf\s+\/\b|DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*;?\s*$/i.test(
+        // Block truly destructive commands.
+        // The `\b` on the rm-pattern previously failed to match `rm -rf /`
+        // when the command ended right at the slash (no following char →
+        // \b sees EOS as non-word and skipped) — only `rm -rf /usr/...`
+        // tripped. Anchor on EOS / next-char so the bare-root form is
+        // also blocked. (SEC-015 2026-06-16.)
+        const blocked = /rm\s+-rf\s+\/(?:\s|$|\w)|DROP\s+TABLE|DELETE\s+FROM\s+\w+\s*;?\s*$/i.test(
           safeCommand
         );
         if (blocked)
