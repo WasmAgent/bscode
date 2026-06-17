@@ -416,6 +416,16 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   // ── Final answer → preview ─────────────────────────────────────────────────
   useEffect(() => {
     if (!finalAnswer) return;
+
+    // Clear any preview state carried over from the previous turn — a new
+    // final answer must not silently inherit the old turn's card / html /
+    // output. The 2026-06-17 user report ("first turn was just '你好',
+    // right pane still showed the previous turn's GDP markdown card")
+    // was caused by us only ever WRITING to preview state below, never
+    // resetting it.
+    setSelectedCard(null);
+    setPreview((prev) => ({ ...prev, card: undefined, html: undefined, output: undefined }));
+
     // 1. card:* blocks — let the Preview tab render them via CardRenderer
     //    so the user sees the same rich rendering as the chat. Pre-fix
     //    they fell through to the `plain` branch and showed raw markdown
@@ -452,11 +462,12 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       setPreviewView("preview");
       return;
     }
-    const plain = finalAnswer.trim();
-    if (plain) {
-      setPreview((prev) => ({ ...prev, output: plain }));
-      setPreviewView("preview");
-    }
+    // 3. Plain text reply — DO NOT push it into preview.output. The chat
+    //    bubble already renders the Markdown inline; populating
+    //    preview.output here would force the right-hand pane to stay
+    //    visible just to repeat what the chat already shows. Leaving
+    //    preview.output undefined keeps `hasPreview` false and lets
+    //    the layout collapse to a single full-width chat column.
   }, [finalAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -731,9 +742,17 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   const lastTurnError = turns.at(-1)?.status === "error" ? turns.at(-1)?.error : null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  // hasPreview drives whether the right-hand Terminal/Preview pane is
+  // visible. We include card + selectedCard explicitly: if all that's in
+  // preview state is a stale `card` from a prior turn (now cleared by
+  // the finalAnswer effect above) but selectedCard is null and no
+  // turn is producing one, the pane should collapse so chat takes the
+  // full width.
   const hasPreview = !!(
     preview?.html ||
     preview?.url ||
+    preview?.card ||
+    selectedCard ||
     (preview?.logs?.length ?? 0) > 0 ||
     preview?.output
   );
@@ -1081,12 +1100,18 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
 
       {/* ── Main area ── */}
       {/* On narrow viewports collapse to a single column so neither pane gets squeezed
-          below readability — chat input and Run button were getting clipped at 375px. */}
+          below readability — chat input and Run button were getting clipped at 375px.
+          When `hasPreview` is false, also collapse to one column on wide
+          viewports — there is nothing to show in the right pane, so chat
+          takes the full width (2026-06-17 fix for the "你好 reply, but
+          right pane still occupied half the screen" report). */}
       <div
         style={{
           flex: 1,
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+          gridTemplateColumns: hasPreview
+            ? "minmax(0, 1fr) minmax(0, 1fr)"
+            : "minmax(0, 1fr)",
           overflow: "hidden",
         }}
         className="bscode-main-grid"
@@ -1554,7 +1579,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           </div>
         </div>
 
-        {/* ── Right: preview ── */}
+        {/* ── Right: preview ──
+            Only render when there is something to show. The grid above
+            collapses to a single column when hasPreview is false, but
+            without this guard React still mounts <Terminal/> + the
+            header chrome on the closed column, which both wastes work
+            and leaves stale event listeners attached. */}
+        {hasPreview && (
         <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Preview header */}
           <div
@@ -1663,6 +1694,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             />
           </div>
         </div>
+        )}
       </div>
 
       <style>{`
@@ -1990,9 +2022,41 @@ function TurnBlock({
           ) : displayText ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {hasCards ? (
-                // Cards found: render each segment as a tile (card) or plain text
+                // Cards found: render each segment as a tile (card) or plain text.
+                //
+                // Special case (2026-06-17 user feedback): when the turn
+                // wrote source files (framework mode produced a real app
+                // that already gets a WebContainer preview), the agent's
+                // companion `card:markdown` recap shouldn't compete with
+                // the live preview by collapsing into a placeholder
+                // button. Inline-render the markdown contents instead.
+                // D2 cards stay as cards regardless — their value IS the
+                // card surface (zoom, full-screen render, export).
                 parsedAnswer?.segments.map((seg, i) => {
                   if (seg.kind === "card") {
+                    const turnWroteFiles = turn.writtenFiles.length > 0;
+                    if (seg.card.type === "markdown" && turnWroteFiles) {
+                      return (
+                        <div
+                          key={seg.card.id}
+                          className="bscode-chat-md"
+                          style={{
+                            background: "#161b22",
+                            border: "1px solid #30363d",
+                            borderRadius: 6,
+                            padding: "10px 12px",
+                            fontSize: 12,
+                            color: "#c9d1d9",
+                            lineHeight: 1.7,
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          <Markdown remarkPlugins={[remarkGfm]}>
+                            {seg.card.content}
+                          </Markdown>
+                        </div>
+                      );
+                    }
                     const cardTypeLabel: Record<string, string> = {
                       d2: "🔷 D2 Diagram",
                       markdown: "📄 Markdown",
