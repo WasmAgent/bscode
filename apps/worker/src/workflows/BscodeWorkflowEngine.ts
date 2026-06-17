@@ -14,14 +14,14 @@
  */
 
 import {
-  LocalWorkflowEngine,
   KvWorkflowStateStore,
+  LocalWorkflowEngine,
   MemoryKvBackend,
+  type ToolDefinition,
   ToolRegistry,
   type WorkflowDefinition,
   type WorkflowRunHandle,
   type WorkflowStateStore,
-  type ToolDefinition,
 } from "@agentkit-js/core";
 import { z } from "zod";
 
@@ -71,8 +71,7 @@ function buildEngineInputs(wf: BscodeWorkflow): {
       outputSchema: z.unknown(),
       readOnly: false,
       idempotent: step.idempotent ?? true,
-      forward: async (args: Record<string, unknown>) =>
-        stepRef.run(args, { stepId: stepRef.id }),
+      forward: async (args: Record<string, unknown>) => stepRef.run(args, { stepId: stepRef.id }),
     } as ToolDefinition);
   }
   const def: WorkflowDefinition = {
@@ -131,7 +130,7 @@ export class BscodeWorkflowEngine {
     opts: { runId?: string; params?: unknown } = {}
   ): Promise<WorkflowRunHandle> {
     const engine = this.#mustGetEngine(workflowId);
-    const def = this.#defs.get(workflowId)!;
+    const def = this.#mustGetDef(workflowId);
     return engine.start(def, opts);
   }
 
@@ -142,7 +141,12 @@ export class BscodeWorkflowEngine {
   }
 
   /** Push an external event to a run (unblocks $waitForEvent steps). */
-  async sendEvent(workflowId: string, runId: string, type: string, payload: unknown): Promise<void> {
+  async sendEvent(
+    workflowId: string,
+    runId: string,
+    type: string,
+    payload: unknown
+  ): Promise<void> {
     const engine = this.#mustGetEngine(workflowId);
     await engine.sendEvent(runId, type, payload);
   }
@@ -153,5 +157,13 @@ export class BscodeWorkflowEngine {
       throw new Error(`workflow not registered: ${workflowId}`);
     }
     return engine;
+  }
+
+  #mustGetDef(workflowId: string): WorkflowDefinition {
+    const def = this.#defs.get(workflowId);
+    if (!def) {
+      throw new Error(`workflow not registered: ${workflowId}`);
+    }
+    return def;
   }
 }
