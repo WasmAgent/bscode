@@ -24,6 +24,14 @@ const FrameworkApiMap = dynamic(
   { ssr: false, loading: () => null }
 );
 
+// Lazy because the model manager is only opened on the first-run probe
+// or when the user clicks the model dropdown — keeps it out of the
+// first-paint chunk.
+const ModelManager = dynamic(
+  () => import("@/components/ModelManager").then((m) => m.ModelManager),
+  { ssr: false, loading: () => null }
+);
+
 // Lazy because the modal only renders on Differentiator-band → "isolation" click.
 // Keeps it out of the first-paint chunk; no UX cost (the click handler awaits
 // the chunk while the click feedback is already showing).
@@ -163,6 +171,25 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiMapOpen, setApiMapOpen] = useState(false);
   const [isolationDemoOpen, setIsolationDemoOpen] = useState(false);
+  // ModelManager is the drawer where the user adds an OpenAI-compatible
+  // endpoint + API key. We keep its open state at the page level so:
+  //   1. The first-run probe (below) can open it directly when no
+  //      models are usable, without prop-drilling through any
+  //      sub-component or relying on a CustomEvent dance.
+  //   2. The same `bscode:open-model-manager` event AgentPanel used to
+  //      listen for still works for any other component that wants to
+  //      pop the drawer (kept for compatibility).
+  const [modelManagerOpen, setModelManagerOpen] = useState(false);
+
+  // Listen for the open-model-manager event — kept for backwards
+  // compatibility with components that may dispatch it (e.g. the
+  // recipes page, future deep-links). The first-run probe below
+  // calls setState directly instead of going through the event.
+  useEffect(() => {
+    const handler = () => setModelManagerOpen(true);
+    window.addEventListener("bscode:open-model-manager", handler);
+    return () => window.removeEventListener("bscode:open-model-manager", handler);
+  }, []);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIsRunning = useRef(false);
@@ -470,13 +497,16 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
   }, [finalAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── First-run model probe ──────────────────────────────────────────────────
-  // If a visitor lands with NO usable models (no local Ollama/LMStudio
-  // running, no built-in API keys configured, no custom models added),
-  // auto-open the ModelManager so they see exactly what they need to do.
-  // This fires once per browser (localStorage `bscode:firstrun:probed`)
-  // and short-circuits when the worker reports any `available: true`
-  // model — visitors with local Ollama / LMStudio etc. already running
-  // never see it.
+  // If a visitor lands with NO usable models (no built-in API keys
+  // configured at the worker, no local Ollama/LMStudio reachable from
+  // the worker, no custom models added), open the ModelManager so they
+  // see exactly what to do. The worker auto-discovers local services,
+  // so users with Ollama already on the SAME network as the worker
+  // don't trigger this. (For a Cloudflare-deployed worker, "local" is
+  // the worker datacentre, not the visitor's machine — visitors with
+  // local-only Ollama won't be detected; they'll see ModelManager
+  // and either point at their public endpoint or pick another
+  // provider.)
   useEffect(() => {
     let cancelled = false;
     async function probe() {
@@ -486,14 +516,11 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         if (!res.ok) return;
         const data = (await res.json()) as { models?: Array<{ available?: boolean }> };
         const usable = (data.models ?? []).some((m) => m.available === true);
-        if (!cancelled && !usable) {
-          // Mark probed FIRST so even if the user closes the manager
-          // without adding anything, we don't re-pop on every refresh.
-          localStorage.setItem("bscode:firstrun:probed", "1");
-          window.dispatchEvent(new CustomEvent("bscode:open-model-manager"));
-        } else if (!cancelled) {
-          localStorage.setItem("bscode:firstrun:probed", "1");
-        }
+        if (cancelled) return;
+        // Mark probed FIRST so even if the user closes the manager
+        // without adding anything, we don't re-pop on every refresh.
+        localStorage.setItem("bscode:firstrun:probed", "1");
+        if (!usable) setModelManagerOpen(true);
       } catch {
         // network / parse / localStorage unavailable — fail silently.
       }
@@ -1131,6 +1158,23 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           AND the React tree until the user clicks. */}
       {apiMapOpen && <FrameworkApiMap open={true} onClose={() => setApiMapOpen(false)} />}
       {isolationDemoOpen && <IsolationDemoModal onClose={() => setIsolationDemoOpen(false)} />}
+      {modelManagerOpen && (
+        <ModelManager
+          workerUrl={getWorkerUrl()}
+          currentPrefs={{ primaryModelId: config.modelId }}
+          onClose={() => setModelManagerOpen(false)}
+          onApply={(prefs) => {
+            setConfig((c) => ({ ...c, modelId: prefs.primaryModelId }));
+            // Persist so the SettingsDrawer dropdown stays in sync.
+            try {
+              localStorage.setItem("bscode:modelPreference", prefs.primaryModelId);
+            } catch {
+              // localStorage may throw in privacy modes; ignore.
+            }
+            setModelManagerOpen(false);
+          }}
+        />
+      )}
 
       {/* ── Main area ── */}
       {/* On narrow viewports collapse to a single column so neither pane gets squeezed
