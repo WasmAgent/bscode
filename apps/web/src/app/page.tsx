@@ -17,7 +17,6 @@ const Markdown = ReactMarkdown as any;
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DifferentiatorBand } from "@/components/DifferentiatorBand";
-import { FirstRunGuide } from "@/components/FirstRunGuide";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 
 const FrameworkApiMap = dynamic(
@@ -469,6 +468,41 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     //    preview.output undefined keeps `hasPreview` false and lets
     //    the layout collapse to a single full-width chat column.
   }, [finalAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── First-run model probe ──────────────────────────────────────────────────
+  // If a visitor lands with NO usable models (no local Ollama/LMStudio
+  // running, no built-in API keys configured, no custom models added),
+  // auto-open the ModelManager so they see exactly what they need to do.
+  // This fires once per browser (localStorage `bscode:firstrun:probed`)
+  // and short-circuits when the worker reports any `available: true`
+  // model — visitors with local Ollama / LMStudio etc. already running
+  // never see it.
+  useEffect(() => {
+    let cancelled = false;
+    async function probe() {
+      try {
+        if (localStorage.getItem("bscode:firstrun:probed") === "1") return;
+        const res = await fetch(`${getWorkerUrl()}/models`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { models?: Array<{ available?: boolean }> };
+        const usable = (data.models ?? []).some((m) => m.available === true);
+        if (!cancelled && !usable) {
+          // Mark probed FIRST so even if the user closes the manager
+          // without adding anything, we don't re-pop on every refresh.
+          localStorage.setItem("bscode:firstrun:probed", "1");
+          window.dispatchEvent(new CustomEvent("bscode:open-model-manager"));
+        } else if (!cancelled) {
+          localStorage.setItem("bscode:firstrun:probed", "1");
+        }
+      } catch {
+        // network / parse / localStorage unavailable — fail silently.
+      }
+    }
+    void probe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   /** Keep the last submitted task text so skip button can reference it */
@@ -1083,13 +1117,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         }}
       />
 
-      {/* First-run guide — shown only when the visitor has zero custom
-          models configured AND hasn't dismissed the banner. The guide
-          renders just under the differentiator band so it's the first
-          thing visitors notice when they actually need to act, rather
-          than competing with the differentiator messaging on every
-          paint. */}
-      <FirstRunGuide />
+      {/* First-run model probe — runs ONCE per browser. If the worker
+          reports zero usable models (no local Ollama/LMStudio running,
+          no built-in keys configured, no custom models added), open
+          the ModelManager directly so the visitor sees what they need
+          to do. The worker auto-discovers local services, so users
+          with Ollama already running don't trigger this — it only
+          fires for true cold-start "I have no model anywhere" cases. */}
 
       {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
       {/* Only mount the API-map modal when it's actually open — combined
