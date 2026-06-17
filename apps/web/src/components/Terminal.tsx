@@ -63,6 +63,14 @@ interface TerminalProps {
   wcLines?: string[];
   /** Streaming artifacts being written (from artifact_delta events) */
   streamingArtifacts?: Map<string, { path?: string; content: string; done: boolean }>;
+  /**
+   * WebContainer lifecycle for the loading skeleton between "agent
+   * finished writing files" and "preview iframe is live". Otherwise
+   * the right pane stays empty for 10–30s with no signal and users
+   * think the demo froze. Mirrors the union exported by
+   * `useWebContainer`.
+   */
+  wcStatus?: "idle" | "booting" | "installing" | "starting" | "ready" | "error";
 }
 
 export function Terminal({
@@ -73,6 +81,7 @@ export function Terminal({
   preview,
   wcLines,
   streamingArtifacts,
+  wcStatus,
 }: TerminalProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -122,6 +131,108 @@ export function Terminal({
   // ── Preview tab ───────────────────────────────────────────────────────────
   if (viewMode === "preview") {
     const allLines = [...(wcLines ?? []), ...(preview?.logs ?? [])];
+
+    // WebContainer is provisioning the live preview but the iframe
+    // URL hasn't resolved yet — show a structured loader so users
+    // know the right pane isn't frozen. Without this, between "agent
+    // finished writing files" and "vite dev is up" (10–30 s on cold
+    // mount) the pane is just blank and users panic.
+    if (
+      !preview?.url &&
+      !preview?.html &&
+      !preview?.card &&
+      wcStatus &&
+      wcStatus !== "idle" &&
+      wcStatus !== "ready" &&
+      wcStatus !== "error"
+    ) {
+      const labelMap: Record<"booting" | "installing" | "starting", { title: string; sub: string }> = {
+        booting: {
+          title: "Booting WebContainer…",
+          sub: "Mounting an in-tab Service Worker filesystem for the generated code.",
+        },
+        installing: {
+          title: "Installing dependencies…",
+          sub: "Running npm install inside the in-tab sandbox. First mount usually takes 10–20 s.",
+        },
+        starting: {
+          title: "Starting dev server…",
+          sub: "Booting Vite / the framework runtime. Almost there.",
+        },
+      };
+      const phase = labelMap[wcStatus as "booting" | "installing" | "starting"] ?? labelMap.booting;
+      const { title, sub } = phase;
+      const recentLines = (wcLines ?? []).slice(-4);
+      return (
+        <div
+          style={{
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            background: "#0d1117",
+            padding: "24px 32px",
+            gap: 14,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
+                background: "#e3b341",
+                animation: "pulse 1.2s ease-in-out infinite",
+              }}
+            />
+            <span
+              style={{
+                ...mono,
+                fontSize: 13,
+                color: "#c9d1d9",
+                fontWeight: 600,
+              }}
+            >
+              {title}
+            </span>
+          </div>
+          <div
+            style={{
+              ...mono,
+              fontSize: 11,
+              color: theme.textMuted,
+              lineHeight: 1.6,
+              maxWidth: 520,
+              textAlign: "center",
+            }}
+          >
+            {sub}
+          </div>
+          {recentLines.length > 0 && (
+            <div
+              style={{
+                ...mono,
+                fontSize: 10,
+                color: theme.textMuted,
+                background: "#161b22",
+                border: "1px solid #21262d",
+                borderRadius: 4,
+                padding: "8px 12px",
+                marginTop: 6,
+                maxWidth: 600,
+                width: "100%",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+                opacity: 0.85,
+              }}
+            >
+              {recentLines.join("\n")}
+            </div>
+          )}
+        </div>
+      );
+    }
 
     // Card selected from conversation → render full-size
     if (preview?.card) {
@@ -292,20 +403,27 @@ export function Terminal({
               Live Preview
             </span>
             <span style={{ ...mono, fontSize: 10, color: "#3fb950" }}>● WebContainers</span>
-            <a
-              href={preview.url}
-              target="_blank"
-              rel="noreferrer"
+            {/* WebContainer preview URLs (`*.local-credentialless.webcontainer-api.io`)
+                are an in-browser sandbox served by a Service Worker — they
+                only resolve inside this tab. Showing the raw URL led
+                users to click it as if it were a public link and land on
+                "DNS_PROBE_FINISHED_NXDOMAIN". Hide it; the green
+                "● WebContainers" indicator already says preview is live.
+                A future "Share / publish" feature would deploy the app
+                to a real Cloudflare Worker subdomain — at that point we'd
+                show that URL here as a copy-link button. */}
+            <span
+              title="Preview is rendered by a WebContainer Service Worker inside this tab. The URL is sandbox-local and not shareable."
               style={{
                 ...mono,
                 fontSize: 10,
-                color: "#58a6ff",
+                color: theme.textMuted,
                 marginLeft: "auto",
-                textDecoration: "none",
+                whiteSpace: "nowrap",
               }}
             >
-              ↗ {preview.url}
-            </a>
+              sandbox preview · in-tab only
+            </span>
           </div>
           <div style={{ flex: 1, overflow: "hidden", background: "#fff" }}>
             {/* No sandbox — WebContainers needs full access for HMR and service workers */}

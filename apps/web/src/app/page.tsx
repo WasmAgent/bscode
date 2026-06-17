@@ -826,7 +826,11 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     preview?.card ||
     selectedCard ||
     (preview?.logs?.length ?? 0) > 0 ||
-    preview?.output
+    preview?.output ||
+    // Show the pane during WebContainer build so the user sees the
+    // loading skeleton instead of nothing for the 10–30 s between
+    // "agent done writing files" and "vite dev server up".
+    (wcStatus && wcStatus !== "idle" && wcStatus !== "ready" && wcStatus !== "error")
   );
 
   return (
@@ -1779,6 +1783,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               viewMode={previewView}
               preview={selectedCard ? { ...preview, card: selectedCard } : preview}
               wcLines={wcLines}
+              wcStatus={wcStatus}
               streamingArtifacts={streamingArtifacts.size > 0 ? streamingArtifacts : undefined}
             />
           </div>
