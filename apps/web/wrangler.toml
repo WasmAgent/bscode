@@ -1,0 +1,34 @@
+# wrangler.toml — Cloudflare Worker config for the bscode web UI.
+#
+# This Worker bundles the Next.js dynamic routes (App Router server
+# components + API routes) AND serves the prerendered static assets via
+# the `[assets]` binding. One deploy unit, one URL.
+#
+# The Worker is built by `bunx opennextjs-cloudflare build` (see
+# package.json `deploy`), which translates the standard Next.js output
+# in `.next/` into `.open-next/worker.js` (Worker entrypoint) and
+# `.open-next/assets/` (static files). `wrangler deploy` then ships
+# both.
+#
+# Custom domain (bscode.byteslim.com) is bound ONCE in the Cloudflare
+# dashboard — it doesn't go here, so anyone forking this repo gets the
+# `bscode-web.workers.dev` default until they add their own domain.
+"$schema" = "./node_modules/wrangler/config-schema.json"
+
+name = "bscode-web"
+main = ".open-next/worker.js"
+
+# Keep this in lockstep with the worker package (apps/worker/wrangler.toml)
+# so a single agentkit-js compat baseline is honoured across both pieces.
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+# Default behaviour: serve `index.html` for `/`, return 404.html for
+# unknown routes that don't match a Next.js dynamic route.
+not_found_handling = "404-page"
+
+[observability]
+enabled = true

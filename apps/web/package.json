@@ -9,13 +9,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "deploy": "npx @cloudflare/next-on-pages && wrangler pages deploy .vercel/output/static --project-name=bscode-web --branch=main --commit-dirty=true"
+    "deploy": "bunx opennextjs-cloudflare build && bunx wrangler deploy",
+    "deploy:dry-run": "bunx opennextjs-cloudflare build && bunx wrangler deploy --dry-run --outdir=.open-next/dry-run",
+    "preview": "bunx opennextjs-cloudflare build && bunx wrangler dev"
   },
   "dependencies": {
     "@agentkit-js/react": "workspace:*",
     "@agentkit-js/ui-cards": "workspace:*",
     "@agentkit-js/ui-cards-react": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
+    "@opennextjs/cloudflare": "^1.19.11",
     "@terrastruct/d2": "^0.1.33",
     "@webcontainer/api": "^1.6.4",
     "docx": "^9.7.1",
