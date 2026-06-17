@@ -457,9 +457,20 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     //    they fell through to the `plain` branch and showed raw markdown
     //    text in the preview iframe, which made the Messages tab look
     //    "more rendered" than Preview.
+    //
+    //    BUT: in framework mode (react/vue/svelte/vanilla), WebContainer
+    //    is about to mount the freshly-written files and produce a real
+    //    live preview URL — that's the artefact the user actually wants
+    //    to see in the right pane. The agent's companion `card:markdown`
+    //    summary should NOT take the preview slot away from the running
+    //    app. Skip the markdown card here; the chat side already inline-
+    //    renders it (TurnBlock checks turn.writtenFiles.length > 0).
+    //    D2 / SVG / HTML cards still claim preview — those are visual
+    //    artefacts in their own right.
     const parsed = parseCardBlocks(finalAnswer);
     const firstCard = parsed.cards[0];
-    if (firstCard) {
+    const isFrameworkRun = !!config.framework;
+    if (firstCard && !(isFrameworkRun && firstCard.type === "markdown")) {
       setPreview((prev) => ({ ...prev, card: firstCard }));
       setPreviewView("preview");
       return;
