@@ -170,6 +170,16 @@ export function AgentPanel({
   const [economyModelId, setEconomyModelId] = useState<string | undefined>(undefined);
   const [showModelManager, setShowModelManager] = useState(false);
 
+  // Listen for the `bscode:open-model-manager` CustomEvent dispatched by
+  // the FirstRunGuide banner (in page.tsx). The indirection keeps
+  // FirstRunGuide loosely coupled — it can render anywhere in the tree
+  // without prop-drilling a callback through the page.
+  useEffect(() => {
+    const handler = () => setShowModelManager(true);
+    window.addEventListener("bscode:open-model-manager", handler);
+    return () => window.removeEventListener("bscode:open-model-manager", handler);
+  }, []);
+
   useEffect(() => {
     fetch(`${workerUrl}/models`)
       .then((r) => r.json())

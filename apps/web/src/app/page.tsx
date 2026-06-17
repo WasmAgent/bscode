@@ -2,6 +2,13 @@
 import type { CardBlock } from "@agentkit-js/ui-cards";
 import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
 import JSZip from "jszip";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+// react-markdown types are not yet updated for React 19. Same compat
+// shim ui-cards-react ships in MarkdownCard.tsx.
+// biome-ignore lint/suspicious/noExplicitAny: type compat shim
+const Markdown = ReactMarkdown as any;
 // FrameworkApiMap is a 535-line modal that only renders when the user
 // clicks the navbar button. Lazy-loading it (Direction 4 of the
 // 2026-06 strategic brief — "bscode漏斗成本控制") removes ~535 LOC of
@@ -10,6 +17,7 @@ import JSZip from "jszip";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DifferentiatorBand } from "@/components/DifferentiatorBand";
+import { FirstRunGuide } from "@/components/FirstRunGuide";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 
 const FrameworkApiMap = dynamic(
@@ -1056,6 +1064,14 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         }}
       />
 
+      {/* First-run guide — shown only when the visitor has zero custom
+          models configured AND hasn't dismissed the banner. The guide
+          renders just under the differentiator band so it's the first
+          thing visitors notice when they actually need to act, rather
+          than competing with the differentiator messaging on every
+          paint. */}
+      <FirstRunGuide />
+
       {settingsOpen && <SettingsDrawer onClose={() => setSettingsOpen(false)} />}
       {/* Only mount the API-map modal when it's actually open — combined
           with the dynamic() wrapper this defers both the chunk download
@@ -2056,21 +2072,27 @@ function TurnBlock({
                     <div
                       // biome-ignore lint/suspicious/noArrayIndexKey: text segments per turn are append-only — i IS identity
                       key={`text-${i}`}
+                      className="bscode-chat-md"
                       style={{
                         fontSize: 12,
                         color: "#c9d1d9",
                         lineHeight: 1.7,
-                        whiteSpace: "pre-wrap",
                         wordBreak: "break-word",
                       }}
                     >
-                      {text}
+                      <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
                     </div>
                   );
                 })
               ) : (
-                // No cards — plain text display
+                // No cards — render as inline Markdown so headings, lists,
+                // bold, tables, code spans all show formatted instead of as
+                // raw `**foo**` / `## bar` text. The 2026-06-17 fix to stop
+                // auto-upgrading rich Markdown into card:markdown blocks
+                // depends on this — chat replies need a real Markdown
+                // renderer here, otherwise users see raw syntax.
                 <div
+                  className="bscode-chat-md"
                   style={{
                     background: "#161b22",
                     border: "1px solid #30363d",
@@ -2079,13 +2101,12 @@ function TurnBlock({
                     fontSize: 12,
                     color: "#c9d1d9",
                     lineHeight: 1.7,
-                    whiteSpace: "pre-wrap",
                     wordBreak: "break-word" as const,
-                    maxHeight: 300,
+                    maxHeight: 600,
                     overflowY: "auto",
                   }}
                 >
-                  {upgradedText}
+                  <Markdown remarkPlugins={[remarkGfm]}>{upgradedText}</Markdown>
                 </div>
               )}
             </div>
@@ -2098,6 +2119,54 @@ function TurnBlock({
           {/* Action buttons */}
           {!isActive && turn.status !== "running" && (
             <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              {displayText && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    // Copy the raw final answer (Markdown source, NOT the
+                    // rendered HTML) — that's what users typically want
+                    // when pasting into a doc/editor. Cards' raw fenced
+                    // syntax is included; the parser on the receiving end
+                    // can render them too.
+                    try {
+                      await navigator.clipboard.writeText(displayText);
+                      // Lightweight inline feedback via the title attr;
+                      // we deliberately don't re-state at the page-level
+                      // toast since this can be a frequent action.
+                      // (No state needed — the button label flips via CSS
+                      // animation if you want it later.)
+                    } catch {
+                      // Clipboard API blocked (insecure context, perm denied).
+                      // Fall back to creating a textarea + execCommand.
+                      const ta = document.createElement("textarea");
+                      ta.value = displayText;
+                      ta.style.position = "fixed";
+                      ta.style.opacity = "0";
+                      document.body.appendChild(ta);
+                      ta.select();
+                      try {
+                        document.execCommand("copy");
+                      } catch {
+                        // best-effort
+                      }
+                      document.body.removeChild(ta);
+                    }
+                  }}
+                  title="Copy reply Markdown to clipboard"
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 4,
+                    border: "1px solid #30363d",
+                    background: "transparent",
+                    color: theme.textMuted,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
+                  📋 Copy
+                </button>
+              )}
               {onFix && (
                 <button
                   type="button"
