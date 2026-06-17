@@ -301,13 +301,22 @@ export async function getBuiltinModels(config: AppConfig, store: KvStore): Promi
       source: "builtin",
     }
   );
-  entries.push({
-    id: "doubao-seed-1-6-251015",
-    label: "Doubao Seed-1.6",
-    provider: "doubao",
-    available: hasDoubao,
-    source: "builtin",
-  });
+  entries.push(
+    {
+      id: "doubao-seed-2-0-pro",
+      label: "Doubao Seed 2.0 Pro",
+      provider: "doubao",
+      available: hasDoubao,
+      source: "builtin",
+    },
+    {
+      id: "doubao-seed-2-0-lite-260215",
+      label: "Doubao Seed 2.0 Lite",
+      provider: "doubao",
+      available: hasDoubao,
+      source: "builtin",
+    }
+  );
 
   // Custom models from persistent store
   const customs = await listCustomModels(store);

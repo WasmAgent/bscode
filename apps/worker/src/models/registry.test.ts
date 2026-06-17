@@ -140,7 +140,7 @@ describe("savePreferences + loadPreferences", () => {
 describe("getBuiltinModels", () => {
   beforeEach(() => vi.resetModules());
 
-  it("always lists 6 builtin entries (3 Claude + 2 DeepSeek + 1 Doubao); without keys all are available:false", async () => {
+  it("always lists 7 builtin entries (3 Claude + 2 DeepSeek + 2 Doubao); without keys all are available:false", async () => {
     // Pre-2026-06-17 we returned [] when no key was configured. The
     // ModelManager then showed "No models available" while the navbar
     // hard-coded a Claude dropdown — visually inconsistent and unhelpful
@@ -149,7 +149,7 @@ describe("getBuiltinModels", () => {
     // `available` flag reflects whether the matching key/baseUrl is set.
     const reg = await freshModule();
     const list = await reg.getBuiltinModels({}, new MemKvStore());
-    expect(list.length).toBe(6);
+    expect(list.length).toBe(7);
     expect(list.every((m) => m.available === false)).toBe(true);
     expect(list.map((m) => m.id).sort()).toEqual([
       "claude-haiku-4-5-20251001",
@@ -157,7 +157,8 @@ describe("getBuiltinModels", () => {
       "claude-sonnet-4-6",
       "deepseek-v4-flash",
       "deepseek-v4-pro",
-      "doubao-seed-1-6-251015",
+      "doubao-seed-2-0-lite-260215",
+      "doubao-seed-2-0-pro",
     ]);
   });
 
@@ -193,11 +194,16 @@ describe("getBuiltinModels", () => {
     expect(ds.every((m) => m.available)).toBe(true);
   });
 
-  it("doubaoApiKey adds 1 Doubao entry", async () => {
+  it("doubaoApiKey adds 2 Doubao entries (Pro + Lite, 2.0 generation)", async () => {
     const reg = await freshModule();
     const list = await reg.getBuiltinModels({ doubaoApiKey: "k" }, new MemKvStore());
     const db = list.filter((m) => m.provider === "doubao");
-    expect(db.length).toBe(1);
+    expect(db.length).toBe(2);
+    expect(db.every((m) => m.available)).toBe(true);
+    expect(db.map((m) => m.id).sort()).toEqual([
+      "doubao-seed-2-0-lite-260215",
+      "doubao-seed-2-0-pro",
+    ]);
   });
 
   it("custom models registered earlier appear with source=custom", async () => {
@@ -252,7 +258,7 @@ describe("resolveModelFromRegistry", () => {
     const reg = await freshModule();
     expect(
       await reg.resolveModelFromRegistry(
-        "doubao-seed-1-6-251015",
+        "doubao-seed-2-0-pro",
         { anthropicApiKey: "sk-ant" },
         new MemKvStore()
       )
