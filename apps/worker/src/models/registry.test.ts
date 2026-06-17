@@ -140,10 +140,25 @@ describe("savePreferences + loadPreferences", () => {
 describe("getBuiltinModels", () => {
   beforeEach(() => vi.resetModules());
 
-  it("returns nothing when no provider keys are configured", async () => {
+  it("always lists 6 builtin entries (3 Claude + 2 DeepSeek + 1 Doubao); without keys all are available:false", async () => {
+    // Pre-2026-06-17 we returned [] when no key was configured. The
+    // ModelManager then showed "No models available" while the navbar
+    // hard-coded a Claude dropdown — visually inconsistent and unhelpful
+    // (users couldn't see which providers exist + which key they'd
+    // need). New contract: builtin entries are always returned; the
+    // `available` flag reflects whether the matching key/baseUrl is set.
     const reg = await freshModule();
     const list = await reg.getBuiltinModels({}, new MemKvStore());
-    expect(list).toEqual([]);
+    expect(list.length).toBe(6);
+    expect(list.every((m) => m.available === false)).toBe(true);
+    expect(list.map((m) => m.id).sort()).toEqual([
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-8",
+      "claude-sonnet-4-6",
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+      "doubao-seed-1-6-251015",
+    ]);
   });
 
   it("anthropicApiKey unlocks all 3 Claude entries marked available", async () => {

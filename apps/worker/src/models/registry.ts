@@ -252,58 +252,62 @@ export async function getBuiltinModels(config: AppConfig, store: KvStore): Promi
   const hasDeepSeek = !!config.deepseekApiKey;
   const hasDoubao = !!config.doubaoApiKey;
 
-  if (hasAnthropic || config.anthropicBaseUrl) {
-    entries.push(
-      {
-        id: "claude-sonnet-4-6",
-        label: "Claude Sonnet 4.6",
-        provider: "anthropic",
-        available: hasAnthropic,
-        source: "builtin",
-      },
-      {
-        id: "claude-opus-4-8",
-        label: "Claude Opus 4.8",
-        provider: "anthropic",
-        available: hasAnthropic,
-        source: "builtin",
-      },
-      {
-        id: "claude-haiku-4-5-20251001",
-        label: "Claude Haiku 4.5",
-        provider: "anthropic",
-        available: hasAnthropic,
-        source: "builtin",
-      }
-    );
-  }
-  if (hasDeepSeek) {
-    entries.push(
-      {
-        id: "deepseek-v4-pro",
-        label: "DeepSeek V4 Pro",
-        provider: "deepseek",
-        available: true,
-        source: "builtin",
-      },
-      {
-        id: "deepseek-v4-flash",
-        label: "DeepSeek V4 Flash",
-        provider: "deepseek",
-        available: true,
-        source: "builtin",
-      }
-    );
-  }
-  if (hasDoubao) {
-    entries.push({
-      id: "doubao-seed-1-6-251015",
-      label: "Doubao Seed-1.6",
-      provider: "doubao",
-      available: true,
+  // Anthropic / DeepSeek / Doubao built-ins are ALWAYS listed so the
+  // ModelManager UI can show users which providers are supported and
+  // which key (if any) they're missing. `available: hasXxx` then drives
+  // the visual cue in the picker — disabled chip when missing, enabled
+  // when the worker has the corresponding env-var key. Pre-2026-06-17
+  // the entries were entirely omitted when the key was missing, which
+  // produced the "ModelManager says No models available even though
+  // the navbar shows Claude Sonnet 4.6" UX bug — Claude appeared to
+  // exist (hard-coded in the navbar dropdown) but couldn't be selected
+  // anywhere else.
+  entries.push(
+    {
+      id: "claude-sonnet-4-6",
+      label: "Claude Sonnet 4.6",
+      provider: "anthropic",
+      available: hasAnthropic,
       source: "builtin",
-    });
-  }
+    },
+    {
+      id: "claude-opus-4-8",
+      label: "Claude Opus 4.8",
+      provider: "anthropic",
+      available: hasAnthropic,
+      source: "builtin",
+    },
+    {
+      id: "claude-haiku-4-5-20251001",
+      label: "Claude Haiku 4.5",
+      provider: "anthropic",
+      available: hasAnthropic,
+      source: "builtin",
+    }
+  );
+  entries.push(
+    {
+      id: "deepseek-v4-pro",
+      label: "DeepSeek V4 Pro",
+      provider: "deepseek",
+      available: hasDeepSeek,
+      source: "builtin",
+    },
+    {
+      id: "deepseek-v4-flash",
+      label: "DeepSeek V4 Flash",
+      provider: "deepseek",
+      available: hasDeepSeek,
+      source: "builtin",
+    }
+  );
+  entries.push({
+    id: "doubao-seed-1-6-251015",
+    label: "Doubao Seed-1.6",
+    provider: "doubao",
+    available: hasDoubao,
+    source: "builtin",
+  });
 
   // Custom models from persistent store
   const customs = await listCustomModels(store);
