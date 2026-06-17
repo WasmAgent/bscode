@@ -5,10 +5,14 @@ import JSZip from "jszip";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { TurnBlock } from "@/components/TurnBlock";
+import type { ConversationTurn } from "@/lib/conversationTypes";
+
 // react-markdown types are not yet updated for React 19. Same compat
 // shim ui-cards-react ships in MarkdownCard.tsx.
 // biome-ignore lint/suspicious/noExplicitAny: type compat shim
 const Markdown = ReactMarkdown as any;
+
 // FrameworkApiMap is a 535-line modal that only renders when the user
 // clicks the navbar button. Lazy-loading it (Direction 4 of the
 // 2026-06 strategic brief — "bscode漏斗成本控制") removes ~535 LOC of
@@ -42,7 +46,7 @@ const IsolationDemoModal = dynamic(
 
 import { type PreviewContent, Terminal } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
-import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
+import { type AgentConfig, useAgent } from "@/hooks/useAgent";
 import { useGitHub } from "@/hooks/useGitHub";
 import { useImport } from "@/hooks/useImport";
 import { toFileSystemTree, useWebContainer } from "@/hooks/useWebContainer";
@@ -57,26 +61,6 @@ interface Toast {
   kind: "info" | "success" | "warn" | "error";
 }
 
-interface ConversationTurn {
-  id: string;
-  task: string;
-  detectedMode: ClassifyResult | null;
-  timestamp: number;
-  /** Accumulated agent output for this turn */
-  agentText: string;
-  /** Structured plan from <boltThinking> tags (shown before files are written) */
-  planText: string | null;
-  /** Tool calls/results summary lines */
-  toolLines: string[];
-  finalAnswer: string | null;
-  error: string | null;
-  status: "running" | "done" | "error";
-  /** Write progress: list of file paths written so far (for framework mode) */
-  writtenFiles: string[];
-  /** Whether the thinking section is collapsed in the UI */
-  thinkingCollapsed: boolean;
-}
-
 let toastId = 0;
 let turnId = 0;
 
@@ -86,22 +70,6 @@ const TOAST_COLORS: Record<Toast["kind"], string> = {
   warn: "#e3b341",
   error: "#f85149",
 };
-
-const MODE_COLORS: Record<string, string> = {
-  "Code + WASM": "#bc8cff",
-  "Tool + DAG": "#58a6ff",
-  "Framework · react": "#3fb950",
-  "Framework · vue": "#3fb950",
-  "Framework · svelte": "#e3b341",
-  "Framework · vanilla": "#58a6ff",
-};
-
-function modeLabel(d: ClassifyResult | null): string {
-  if (!d) return "";
-  if (d.mode === "code") return "Code + WASM";
-  if (d.mode === "tool") return "Tool + DAG";
-  return `Framework · ${d.framework ?? "react"}`;
-}
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -1202,9 +1170,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         style={{
           flex: 1,
           display: "grid",
-          gridTemplateColumns: hasPreview
-            ? "minmax(0, 1fr) minmax(0, 1fr)"
-            : "minmax(0, 1fr)",
+          gridTemplateColumns: hasPreview ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)",
           overflow: "hidden",
         }}
         className="bscode-main-grid"
@@ -1269,6 +1235,8 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                   setSelectedCard(card);
                   setPreviewView("preview");
                 }}
+                isFrameworkMode={!!config.framework}
+                previewUrl={previewUrl ?? undefined}
               />
             ))}
             <div ref={chatBottomRef} />
@@ -1679,115 +1647,115 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             header chrome on the closed column, which both wastes work
             and leaves stale event listeners attached. */}
         {hasPreview && (
-        <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {/* Preview header */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "0 12px",
-              height: 36,
-              background: "#161b22",
-              borderBottom: "1px solid #30363d",
-              flexShrink: 0,
-              fontSize: 11,
-              color: theme.textMuted,
-            }}
-          >
-            <span style={{ textTransform: "uppercase", letterSpacing: 0.8 }}>
-              Preview
-              {!isRunning && wcStatus === "installing" && (
-                <span
-                  style={{
-                    marginLeft: 8,
-                    color: "#e3b341",
-                    animation: "pulse 1.2s ease-in-out infinite",
-                  }}
-                >
-                  ● installing
-                </span>
-              )}
-              {!isRunning && wcStatus === "starting" && (
-                <span
-                  style={{
-                    marginLeft: 8,
-                    color: "#e3b341",
-                    animation: "pulse 1.2s ease-in-out infinite",
-                  }}
-                >
-                  ● starting
-                </span>
-              )}
-              {!isRunning && wcStatus === "ready" && previewUrl && (
-                <span style={{ marginLeft: 8, color: "#3fb950" }}>● live</span>
-              )}
-            </span>
-            <div style={{ display: "flex", gap: 4 }}>
-              {(["preview", "messages", "events"] as const).map((v) => (
+          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Preview header */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "0 12px",
+                height: 36,
+                background: "#161b22",
+                borderBottom: "1px solid #30363d",
+                flexShrink: 0,
+                fontSize: 11,
+                color: theme.textMuted,
+              }}
+            >
+              <span style={{ textTransform: "uppercase", letterSpacing: 0.8 }}>
+                Preview
+                {!isRunning && wcStatus === "installing" && (
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      color: "#e3b341",
+                      animation: "pulse 1.2s ease-in-out infinite",
+                    }}
+                  >
+                    ● installing
+                  </span>
+                )}
+                {!isRunning && wcStatus === "starting" && (
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      color: "#e3b341",
+                      animation: "pulse 1.2s ease-in-out infinite",
+                    }}
+                  >
+                    ● starting
+                  </span>
+                )}
+                {!isRunning && wcStatus === "ready" && previewUrl && (
+                  <span style={{ marginLeft: 8, color: "#3fb950" }}>● live</span>
+                )}
+              </span>
+              <div style={{ display: "flex", gap: 4 }}>
+                {(["preview", "messages", "events"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setPreviewView(v)}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 3,
+                      border: "none",
+                      background: previewView === v ? "#1f6feb33" : "transparent",
+                      color:
+                        previewView === v
+                          ? "#58a6ff"
+                          : v === "preview" && hasPreview && previewView !== "preview"
+                            ? "#e3b341"
+                            : theme.textMuted,
+                      fontSize: 10,
+                      cursor: "pointer",
+                      fontWeight: previewView === v ? 600 : 400,
+                    }}
+                  >
+                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                    {v === "preview" && hasPreview && previewView !== "preview" ? " ●" : ""}
+                  </button>
+                ))}
                 <button
-                  key={v}
                   type="button"
-                  onClick={() => setPreviewView(v)}
+                  onClick={() => {
+                    // Reset agent state, drop all conversation turns,
+                    // wipe preview pane, and reset the WebContainers
+                    // mount. The previous behaviour only reset the
+                    // agent + preview, leaving stale turns visible.
+                    resetAll();
+                    setTurns([]);
+                    setPreview(undefined);
+                    wcReset();
+                  }}
                   style={{
                     padding: "3px 8px",
                     borderRadius: 3,
                     border: "none",
-                    background: previewView === v ? "#1f6feb33" : "transparent",
-                    color:
-                      previewView === v
-                        ? "#58a6ff"
-                        : v === "preview" && hasPreview && previewView !== "preview"
-                          ? "#e3b341"
-                          : theme.textMuted,
+                    background: "transparent",
+                    color: "#f85149",
                     fontSize: 10,
                     cursor: "pointer",
-                    fontWeight: previewView === v ? 600 : 400,
                   }}
                 >
-                  {v.charAt(0).toUpperCase() + v.slice(1)}
-                  {v === "preview" && hasPreview && previewView !== "preview" ? " ●" : ""}
+                  Clear
                 </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  // Reset agent state, drop all conversation turns,
-                  // wipe preview pane, and reset the WebContainers
-                  // mount. The previous behaviour only reset the
-                  // agent + preview, leaving stale turns visible.
-                  resetAll();
-                  setTurns([]);
-                  setPreview(undefined);
-                  wcReset();
-                }}
-                style={{
-                  padding: "3px 8px",
-                  borderRadius: 3,
-                  border: "none",
-                  background: "transparent",
-                  color: "#f85149",
-                  fontSize: 10,
-                  cursor: "pointer",
-                }}
-              >
-                Clear
-              </button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <Terminal
+                messages={messages}
+                rawEvents={rawEvents}
+                isRunning={isRunning}
+                viewMode={previewView}
+                preview={selectedCard ? { ...preview, card: selectedCard } : preview}
+                wcLines={wcLines}
+                wcStatus={wcStatus}
+                streamingArtifacts={streamingArtifacts.size > 0 ? streamingArtifacts : undefined}
+              />
             </div>
           </div>
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            <Terminal
-              messages={messages}
-              rawEvents={rawEvents}
-              isRunning={isRunning}
-              viewMode={previewView}
-              preview={selectedCard ? { ...preview, card: selectedCard } : preview}
-              wcLines={wcLines}
-              wcStatus={wcStatus}
-              streamingArtifacts={streamingArtifacts.size > 0 ? streamingArtifacts : undefined}
-            />
-          </div>
-        </div>
         )}
       </div>
 
@@ -1802,567 +1770,5 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
       `}</style>
     </main>
-  );
-}
-
-// ── TurnBlock component ───────────────────────────────────────────────────────
-
-interface TurnBlockProps {
-  turn: ConversationTurn;
-  isActive: boolean;
-  streamingText?: string;
-  onFix?: () => void;
-  onRetry: () => void;
-  /** Called when user clicks a card tile — sends it to the preview panel */
-  onPreviewCard: (card: CardBlock) => void;
-}
-
-function TurnBlock({
-  turn,
-  isActive,
-  streamingText,
-  onFix,
-  onRetry,
-  onPreviewCard,
-}: TurnBlockProps) {
-  const label = modeLabel(turn.detectedMode);
-  // Hide raw <boltThinking>...</boltThinking> tags from the Thought panel —
-  // the parsed plan is already shown separately above. While streaming, we
-  // also hide an unmatched-open <boltThinking> tag (the closing one hasn't
-  // arrived yet) so the user doesn't briefly see the raw markup.
-  const rawThinking = (isActive ? streamingText : turn.agentText) ?? "";
-  const thinkingText = rawThinking
-    .replace(/<boltThinking>[\s\S]*?<\/boltThinking>/gi, "")
-    .replace(/<boltThinking>[\s\S]*$/i, "")
-    .trim();
-  const displayText = turn.status === "done" && turn.finalAnswer ? turn.finalAnswer : null;
-  const [thinkingCollapsed, setThinkingCollapsed] = useState(turn.thinkingCollapsed);
-
-  // Parse cards out of the final answer
-  // Auto-upgrade: wrap bare D2/Markdown content in card fences if AI missed it
-  const upgradedText = displayText ? upgradeCardSyntax(displayText) : null;
-  const parsedAnswer = upgradedText ? parseCardBlocks(upgradedText) : null;
-  const hasCards = parsedAnswer && parsedAnswer.cards.length > 0;
-
-  useEffect(() => {
-    if (turn.thinkingCollapsed) setThinkingCollapsed(true);
-  }, [turn.thinkingCollapsed]);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* User bubble */}
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <div
-          style={{
-            maxWidth: "80%",
-            background: "#1f6feb22",
-            border: "1px solid #1f6feb44",
-            borderRadius: "12px 12px 3px 12px",
-            padding: "10px 14px",
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#c9d1d9", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-            {turn.task}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-            {label && (
-              <span
-                style={{
-                  fontSize: 10,
-                  padding: "1px 6px",
-                  borderRadius: 3,
-                  background: `${MODE_COLORS[label] ?? "#58a6ff"}22`,
-                  border: `1px solid ${MODE_COLORS[label] ?? "#58a6ff"}44`,
-                  color: MODE_COLORS[label] ?? "#58a6ff",
-                }}
-              >
-                {label}
-              </span>
-            )}
-            <span style={{ fontSize: 10, color: theme.textDim, marginLeft: "auto" }}>
-              {new Date(turn.timestamp).toLocaleTimeString()}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Agent response */}
-      <div style={{ display: "flex", gap: 10 }}>
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: "50%",
-            flexShrink: 0,
-            background: isActive ? "#1f6feb" : turn.status === "error" ? "#b91c1c" : "#238636",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 13,
-            marginTop: 2,
-            animation: isActive ? "pulse 1.2s ease-in-out infinite" : undefined,
-          }}
-        >
-          {isActive ? "⟳" : turn.status === "error" ? "✗" : "✓"}
-        </div>
-        <div style={{ flex: 1 }}>
-          {/* Plan section — bolt.new <boltThinking> pattern: show plan before files are written */}
-          {turn.planText && (
-            <div style={{ marginBottom: 8 }}>
-              <button
-                type="button"
-                onClick={() => setThinkingCollapsed((c) => !c)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  background: "none",
-                  border: "none",
-                  padding: "2px 0",
-                  color: "#58a6ff",
-                  fontSize: 10,
-                  cursor: "pointer",
-                  fontFamily: "JetBrains Mono, monospace",
-                }}
-              >
-                <span
-                  style={{
-                    transform: thinkingCollapsed && !isActive ? "rotate(-90deg)" : "rotate(0)",
-                    display: "inline-block",
-                    transition: "transform 0.15s",
-                  }}
-                >
-                  ▾
-                </span>
-                📋 Plan
-              </button>
-              {(!thinkingCollapsed || isActive) && (
-                <div
-                  style={{
-                    background: "#0d1b2a",
-                    border: "1px solid #1f6feb33",
-                    borderRadius: 5,
-                    padding: "8px 10px",
-                    fontSize: 11,
-                    color: theme.textMuted,
-                    lineHeight: 1.7,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word" as const,
-                    marginTop: 4,
-                  }}
-                >
-                  {turn.planText}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* File write progress — shown during framework-mode runs */}
-          {isActive && turn.writtenFiles.length > 0 && (
-            <div
-              style={{
-                marginBottom: 8,
-                background: "#0d1117",
-                border: "1px solid #30363d",
-                borderRadius: 5,
-                padding: "6px 10px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 10,
-                  color: theme.textMuted,
-                  marginBottom: 4,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.6,
-                }}
-              >
-                Writing files ({turn.writtenFiles.length})
-              </div>
-              {turn.writtenFiles.map((f, i) => (
-                <div
-                  // biome-ignore lint/suspicious/noArrayIndexKey: per-turn file list is append-only — i IS identity
-                  key={i}
-                  style={{
-                    fontSize: 11,
-                    color: "#3fb950",
-                    fontFamily: "JetBrains Mono, monospace",
-                    lineHeight: 1.6,
-                  }}
-                >
-                  ✓ {f}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Tool lines */}
-          {turn.toolLines.length > 0 && (
-            <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 2 }}>
-              {turn.toolLines.map((line, i) => (
-                <div
-                  // biome-ignore lint/suspicious/noArrayIndexKey: per-turn tool log is append-only — i IS identity
-                  key={i}
-                  style={{
-                    fontSize: 11,
-                    color: "#e3b341",
-                    fontFamily: "JetBrains Mono, monospace",
-                  }}
-                >
-                  {line.slice(0, 120)}
-                  {line.length > 120 ? "…" : ""}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Thinking section — collapsible, shown while running or when expanded */}
-          {thinkingText && (
-            <div style={{ marginBottom: displayText ? 8 : 0 }}>
-              <button
-                type="button"
-                onClick={() => setThinkingCollapsed((c) => !c)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  background: "none",
-                  border: "none",
-                  padding: "2px 0",
-                  color: theme.textMuted,
-                  fontSize: 10,
-                  cursor: "pointer",
-                  fontFamily: "JetBrains Mono, monospace",
-                }}
-              >
-                <span
-                  style={{
-                    transform: thinkingCollapsed ? "rotate(-90deg)" : "rotate(0)",
-                    display: "inline-block",
-                    transition: "transform 0.15s",
-                  }}
-                >
-                  ▾
-                </span>
-                {isActive ? "Thinking…" : `Thought (${thinkingText.split(/\s+/).length} words)`}
-                {isActive && (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "#bc8cff",
-                      animation: "pulse 1s infinite",
-                      marginLeft: 2,
-                    }}
-                  />
-                )}
-              </button>
-              {!thinkingCollapsed && (
-                <div
-                  style={{
-                    background: "#0d1117",
-                    border: "1px solid #21262d",
-                    borderRadius: 5,
-                    padding: "8px 10px",
-                    fontSize: 11,
-                    color: theme.textMuted,
-                    lineHeight: 1.6,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word" as const,
-                    maxHeight: 200,
-                    overflowY: "auto",
-                    marginTop: 4,
-                  }}
-                >
-                  {thinkingText}
-                  {isActive && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: 6,
-                        height: 12,
-                        background: "#bc8cff",
-                        animation: "blink 1s step-end infinite",
-                        verticalAlign: "text-bottom",
-                        marginLeft: 2,
-                      }}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Final answer — shown prominently when done */}
-          {turn.status === "error" && turn.error ? (
-            <div
-              style={{
-                background: "#1a0a0a",
-                border: "1px solid #f8514933",
-                borderRadius: 6,
-                padding: "10px 12px",
-                fontSize: 12,
-                color: "#f85149",
-                lineHeight: 1.6,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word" as const,
-              }}
-            >
-              <span style={{ fontWeight: 700 }}>Error: </span>
-              {turn.error}
-            </div>
-          ) : displayText ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {hasCards ? (
-                // Cards found: render each segment as a tile (card) or plain text.
-                //
-                // Special case (2026-06-17 user feedback): when the turn
-                // wrote source files (framework mode produced a real app
-                // that already gets a WebContainer preview), the agent's
-                // companion `card:markdown` recap shouldn't compete with
-                // the live preview by collapsing into a placeholder
-                // button. Inline-render the markdown contents instead.
-                // D2 cards stay as cards regardless — their value IS the
-                // card surface (zoom, full-screen render, export).
-                parsedAnswer?.segments.map((seg, i) => {
-                  if (seg.kind === "card") {
-                    const turnWroteFiles = turn.writtenFiles.length > 0;
-                    if (seg.card.type === "markdown" && turnWroteFiles) {
-                      return (
-                        <div
-                          key={seg.card.id}
-                          className="bscode-chat-md"
-                          style={{
-                            background: "#161b22",
-                            border: "1px solid #30363d",
-                            borderRadius: 6,
-                            padding: "10px 12px",
-                            fontSize: 12,
-                            color: "#c9d1d9",
-                            lineHeight: 1.7,
-                            wordBreak: "break-word",
-                          }}
-                        >
-                          <Markdown remarkPlugins={[remarkGfm]}>
-                            {seg.card.content}
-                          </Markdown>
-                        </div>
-                      );
-                    }
-                    const cardTypeLabel: Record<string, string> = {
-                      d2: "🔷 D2 Diagram",
-                      markdown: "📄 Markdown",
-                    };
-                    const label = cardTypeLabel[seg.card.type] ?? `📎 ${seg.card.type}`;
-                    return (
-                      <button
-                        key={seg.card.id}
-                        type="button"
-                        onClick={() => onPreviewCard(seg.card)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          background: "#161b22",
-                          border: "1px solid #30363d",
-                          borderRadius: 8,
-                          padding: "10px 14px",
-                          cursor: "pointer",
-                          textAlign: "left",
-                          transition: "border-color 0.15s",
-                          width: "100%",
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.borderColor = "#58a6ff";
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.borderColor = "#30363d";
-                        }}
-                      >
-                        <span style={{ fontSize: 22, flexShrink: 0 }}>
-                          {seg.card.type === "d2"
-                            ? "🔷"
-                            : seg.card.type === "markdown"
-                              ? "📄"
-                              : "📎"}
-                        </span>
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: "#c9d1d9",
-                              fontFamily: "inherit",
-                            }}
-                          >
-                            {seg.card.meta ?? label}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 11,
-                              color: theme.textMuted,
-                              fontFamily: "JetBrains Mono, monospace",
-                            }}
-                          >
-                            card:{seg.card.type} · {seg.card.content.split("\n").length} lines ·
-                            click to view
-                          </div>
-                        </div>
-                        <span
-                          style={{
-                            marginLeft: "auto",
-                            fontSize: 16,
-                            color: "#58a6ff",
-                            flexShrink: 0,
-                          }}
-                        >
-                          ›
-                        </span>
-                      </button>
-                    );
-                  }
-                  // Plain text segments (non-empty)
-                  const text = seg.content.trim();
-                  if (!text) return null;
-                  return (
-                    <div
-                      // biome-ignore lint/suspicious/noArrayIndexKey: text segments per turn are append-only — i IS identity
-                      key={`text-${i}`}
-                      className="bscode-chat-md"
-                      style={{
-                        fontSize: 12,
-                        color: "#c9d1d9",
-                        lineHeight: 1.7,
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
-                    </div>
-                  );
-                })
-              ) : (
-                // No cards — render as inline Markdown so headings, lists,
-                // bold, tables, code spans all show formatted instead of as
-                // raw `**foo**` / `## bar` text. The 2026-06-17 fix to stop
-                // auto-upgrading rich Markdown into card:markdown blocks
-                // depends on this — chat replies need a real Markdown
-                // renderer here, otherwise users see raw syntax.
-                <div
-                  className="bscode-chat-md"
-                  style={{
-                    background: "#161b22",
-                    border: "1px solid #30363d",
-                    borderRadius: 6,
-                    padding: "10px 12px",
-                    fontSize: 12,
-                    color: "#c9d1d9",
-                    lineHeight: 1.7,
-                    wordBreak: "break-word" as const,
-                    maxHeight: 600,
-                    overflowY: "auto",
-                  }}
-                >
-                  <Markdown remarkPlugins={[remarkGfm]}>{upgradedText}</Markdown>
-                </div>
-              )}
-            </div>
-          ) : isActive && !thinkingText ? (
-            <div style={{ color: theme.textMuted, fontSize: 12 }}>
-              <span style={{ animation: "pulse 1.2s infinite" }}>Thinking…</span>
-            </div>
-          ) : null}
-
-          {/* Action buttons */}
-          {!isActive && turn.status !== "running" && (
-            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-              {displayText && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    // Copy the raw final answer (Markdown source, NOT the
-                    // rendered HTML) — that's what users typically want
-                    // when pasting into a doc/editor. Cards' raw fenced
-                    // syntax is included; the parser on the receiving end
-                    // can render them too.
-                    try {
-                      await navigator.clipboard.writeText(displayText);
-                      // Lightweight inline feedback via the title attr;
-                      // we deliberately don't re-state at the page-level
-                      // toast since this can be a frequent action.
-                      // (No state needed — the button label flips via CSS
-                      // animation if you want it later.)
-                    } catch {
-                      // Clipboard API blocked (insecure context, perm denied).
-                      // Fall back to creating a textarea + execCommand.
-                      const ta = document.createElement("textarea");
-                      ta.value = displayText;
-                      ta.style.position = "fixed";
-                      ta.style.opacity = "0";
-                      document.body.appendChild(ta);
-                      ta.select();
-                      try {
-                        document.execCommand("copy");
-                      } catch {
-                        // best-effort
-                      }
-                      document.body.removeChild(ta);
-                    }
-                  }}
-                  title="Copy reply Markdown to clipboard"
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 4,
-                    border: "1px solid #30363d",
-                    background: "transparent",
-                    color: theme.textMuted,
-                    fontSize: 11,
-                    cursor: "pointer",
-                    fontFamily: "JetBrains Mono, monospace",
-                  }}
-                >
-                  📋 Copy
-                </button>
-              )}
-              {onFix && (
-                <button
-                  type="button"
-                  onClick={onFix}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 4,
-                    border: "1px solid #f8514944",
-                    background: "transparent",
-                    color: "#f85149",
-                    fontSize: 11,
-                    cursor: "pointer",
-                    fontFamily: "JetBrains Mono, monospace",
-                  }}
-                >
-                  ⚡ Fix
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onRetry}
-                style={{
-                  padding: "4px 10px",
-                  borderRadius: 4,
-                  border: "1px solid #30363d",
-                  background: "transparent",
-                  color: theme.textMuted,
-                  fontSize: 11,
-                  cursor: "pointer",
-                  fontFamily: "JetBrains Mono, monospace",
-                }}
-              >
-                ↺ Retry
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }

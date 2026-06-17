@@ -88,3 +88,11 @@ select {
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+
+/* Card tile hover — replaces inline JS mouseenter/leave handlers
+   (which trip biome's a11y/noStaticElementInteractions on the
+   container <div>). Border light-up signals "this is interactive";
+   the inner buttons themselves carry the actual click semantics. */
+.bscode-card-tile:hover {
+  border-color: #58a6ff !important;
+}
