@@ -17,6 +17,14 @@ const FrameworkApiMap = dynamic(
   { ssr: false, loading: () => null }
 );
 
+// Lazy because the modal only renders on Differentiator-band → "isolation" click.
+// Keeps it out of the first-paint chunk; no UX cost (the click handler awaits
+// the chunk while the click feedback is already showing).
+const IsolationDemoModal = dynamic(
+  () => import("@/components/IsolationDemoModal").then((m) => m.IsolationDemoModal),
+  { ssr: false, loading: () => null }
+);
+
 import { type PreviewContent, Terminal } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, type ClassifyResult, useAgent } from "@/hooks/useAgent";
@@ -147,6 +155,7 @@ export default function Home() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiMapOpen, setApiMapOpen] = useState(false);
+  const [isolationDemoOpen, setIsolationDemoOpen] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevIsRunning = useRef(false);
@@ -1027,13 +1036,23 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           // toast that points the visitor at the matching part of the
           // existing UI; the funnel-tracking event has already fired
           // inside the band itself.
+          //
+          // The `isolation` demo is the one exception — it opens a
+          // modal because the OWASP attack scenarios + intercepted
+          // errors are inherently visual and don't map to "scroll to a
+          // section of the existing app." The other three demos all
+          // exist as flows in the existing UI.
           const toastMessages: Record<typeof demoId, string> = {
             portal: "Try: prompt 'federate fs + github MCP servers and list the agentkit-js repos'",
             resume:
               "Try: start any run, then DevTools → Network → throttle Offline; the run resumes when you go back online",
             fork: "Try: run any task, then click the EventLog timeline → Fork from this step",
+            isolation: "Watch four OWASP Agentic Top 10 attacks hit the kernel and bounce.",
           };
           addToast(toastMessages[demoId], "info");
+          if (demoId === "isolation") {
+            setIsolationDemoOpen(true);
+          }
         }}
       />
 
@@ -1042,6 +1061,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           with the dynamic() wrapper this defers both the chunk download
           AND the React tree until the user clicks. */}
       {apiMapOpen && <FrameworkApiMap open={true} onClose={() => setApiMapOpen(false)} />}
+      {isolationDemoOpen && <IsolationDemoModal onClose={() => setIsolationDemoOpen(false)} />}
 
       {/* ── Main area ── */}
       {/* On narrow viewports collapse to a single column so neither pane gets squeezed

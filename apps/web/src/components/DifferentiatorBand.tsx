@@ -1,14 +1,16 @@
 "use client";
 /**
  * DifferentiatorBand — D6 (2026-06-13) of the
- * agentkit-js + bscode optimization brief.
+ * agentkit-js + bscode optimization brief, refreshed 2026-06-17 to reflect
+ * the strategy update in `agentkit-js/docs/strategy/2026-06-17-update.md`
+ * (axes S1 sharpened + S1' added).
  *
- * Three differentiated moments rendered as a thin band below the navbar.
+ * Four differentiated moments rendered as a thin band below the navbar.
  * The strategic premise (S4): bscode is the *funnel*, not the product —
  * the conversion-determining 30 seconds is whether a visitor sees
  * something *only agentkit-js can give them*.
  *
- * The three moments, in order of decreasing surprise:
+ * The four moments, in order of decreasing surprise:
  *
  *   1. **MCP Portal token-counter** — federate 3 servers behind ONE
  *      `docs_search + execute_code` MCP face. Direct multi-MCP cost vs
@@ -23,10 +25,17 @@
  *      to any step in the EventLog, fork from there. LangGraph Studio's
  *      headline feature, in a 25-test package you can `npm i`.
  *
+ *   4. **Isolation in flight** (added 2026-06-17) — `CapabilityManifest`
+ *      blocks four OWASP Agentic Top 10 attacks (exfiltration, tool
+ *      misuse, runaway loops, path traversal) with the *real* intercepted
+ *      error each kernel returns. Code-mode itself is now table stakes;
+ *      this one is the moat — runtime-enforced authorisation with WASM
+ *      isolation, not just a policy decision.
+ *
  * The band is visually small on purpose — it deliberately does not
  * compete with the product surface below. It is a *signal*, not a
- * tutorial. Each of the three moments has a `Try it` button that
- * scrolls / opens the relevant subsection of the existing app.
+ * tutorial. Each moment has a `Try it` button that scrolls / opens the
+ * relevant subsection of the existing app.
  *
  * Funnel attribution: each `Try it` click fires
  * `window.dispatchEvent(new CustomEvent('bscode:funnel', { detail: { step:
@@ -37,7 +46,7 @@
 import { useEffect, useState } from "react";
 
 type Demo = {
-  id: "portal" | "resume" | "fork";
+  id: "portal" | "resume" | "fork" | "isolation";
   /** ≤4 words. Reads in <1 second; this is the funnel's 30-second budget. */
   headline: string;
   /** ≤14 words. The *promise* — what the visitor will see after one click. */
@@ -64,6 +73,12 @@ const DEMOS: Demo[] = [
     headline: "Time-travel debugger · fork from step",
     pitch: "Open the EventLog timeline; jump to any step; branch the run from there.",
     badge: "LangGraph Studio's killer feature, OSS",
+  },
+  {
+    id: "isolation",
+    headline: "Sandbox blocks an OWASP attack live",
+    pitch: "CapabilityManifest refuses exfiltration, tool misuse, runaway loops, path traversal.",
+    badge: "OWASP Agentic Top 10 — 7 of 10 enforced",
   },
 ];
 

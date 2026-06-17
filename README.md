@@ -82,6 +82,7 @@ them up against the Cloudflare runtime.
 | Per-job session isolation + diff/merge | `BranchableWorkspace` in core |
 | Tiered approval policy (B4) | `needsApproval` lifecycle hook in core |
 | Visual verifier (CDP + vision judge) | [`@agentkit-js/tools-browser`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/tools-browser) — CDP session driver |
+| **OWASP Agentic Top 10 — live blocked** *(2026-06-17)* | [`CapabilityManifest`](https://github.com/telleroutlook/agentkit-js/blob/main/packages/core/src/executor/types.ts) + [field-by-field OWASP map](https://github.com/telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md). Click "Sandbox blocks an OWASP attack live" in the differentiator band to see the 4 attack scenarios + intercepted-error strings the kernel actually returns. |
 | GitHub repo import + PR opener | Bscode-specific tools wrapping the standard tool contract |
 | Prompt-cache instrumentation | Per-call `usage` events from every model adapter |
 | AGENTS.md project conventions | Loaded into the system prompt prefix on every `/run` |
@@ -89,6 +90,20 @@ them up against the Cloudflare runtime.
 The framework's [Getting started](https://telleroutlook.github.io/agentkit-js/guides/getting-started)
 and [Comparison](https://telleroutlook.github.io/agentkit-js/compare) pages
 explain the broader picture.
+
+> 🛡️ **Governance face (2026-06-17).** The S1' axis added in agentkit-js
+> [`docs/strategy/2026-06-17-update.md`](https://github.com/telleroutlook/agentkit-js/blob/main/docs/strategy/2026-06-17-update.md):
+> code-mode itself is now table stakes (Cloudflare ships portal-default,
+> OpenAI Agents SDK has a native sandbox, Anthropic standardised the
+> pattern). The remaining moat is *runtime-enforced authorisation +
+> WASM isolation* — `CapabilityManifest` + the agentkit kernel matrix.
+> Microsoft's Agent Governance Toolkit (2026-04, MIT) decides *should*;
+> agentkit kernels enforce *can* and isolate the blast radius. The
+> "Sandbox blocks an OWASP attack live" panel in bscode's differentiator
+> band is the visual demo of that contract. The full coverage map
+> (`CapabilityManifest` field ↔ OWASP Agentic Top 10 entry, plus EU AI
+> Act / Colorado AI Act / ISO 42001 mapping) is in
+> [`docs/security/capability-manifest-owasp.md`](https://github.com/telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md).
 
 > 🔁 **Already on a different framework?** bscode also has a live
 > reverse-funnel landing — visit
