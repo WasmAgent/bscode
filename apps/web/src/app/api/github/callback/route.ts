@@ -1,5 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+// Cloudflare Pages requires every non-static route to declare the edge
+// runtime — node:vm and the rest of Node's stdlib aren't available on
+// the Pages runtime. This route doesn't actually need anything beyond
+// fetch + URL parsing, so the switch is free.
+export const runtime = "edge";
+
 // GitHub OAuth callback — exchanges authorization code for access token,
 // then redirects back to the app with the token in the URL fragment (#).
 // The fragment is never sent to the server, so the token stays client-side.

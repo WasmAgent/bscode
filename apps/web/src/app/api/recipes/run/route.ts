@@ -19,6 +19,13 @@
 
 import type { NextRequest } from "next/server";
 
+// Cloudflare Pages requires every non-static API route to declare the
+// edge runtime. The stub evaluator below uses `new Function(...)`, which
+// CF Workers does allow (V8 isolates), so the switch is functional —
+// `bun run deploy:web` would otherwise fail the next-on-pages build
+// check before ever reaching deploy.
+export const runtime = "edge";
+
 interface RunRequest {
   recipe: string;
 }
