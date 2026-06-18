@@ -588,7 +588,8 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     //    visible just to repeat what the chat already shows. Leaving
     //    preview.output undefined keeps `hasPreview` false and lets
     //    the layout collapse to a single full-width chat column.
-  }, [finalAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: only run when finalAnswer changes; config.framework read is intentionally a snapshot at that moment.
+  }, [finalAnswer, config.framework]);
 
   // ── First-run model probe ──────────────────────────────────────────────────
   // If a visitor lands with NO usable models (no built-in API keys

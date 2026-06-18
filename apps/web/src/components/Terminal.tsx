@@ -98,6 +98,7 @@ export function Terminal({
   // to 0 when the cards array identity changes (a new turn produced a
   // fresh artefact set) so we don't carry over a stale index.
   const [activeCardIdx, setActiveCardIdx] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — reset is keyed by cards-array identity, the setter doesn't read activeCardIdx.
   useEffect(() => {
     setActiveCardIdx(0);
   }, [preview?.cards]);
