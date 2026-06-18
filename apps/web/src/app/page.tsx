@@ -435,11 +435,18 @@ export default function Home() {
             addToast(`Could not preview ${p}: HTTP ${res.status}`, "warn");
             continue;
           }
-          const body = await res.text();
+          // Worker returns {path, content} JSON (see app.ts /files/:path).
+          // We previously read .text() which left the literal JSON wrapper
+          // showing in the right pane.
+          const json = (await res.json()) as { content?: string; error?: string };
+          if (typeof json.content !== "string") {
+            addToast(`Could not preview ${p}: ${json.error ?? "no content"}`, "warn");
+            continue;
+          }
           fetched.push({
             id: `goal-card-${i}`,
             type: cardTypeForPath(p),
-            content: body,
+            content: json.content,
             meta: p,
           });
         } catch (err) {
