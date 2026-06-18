@@ -11,7 +11,7 @@
  *   - failed runner surfaces error string instead of throwing out
  */
 
-import type { AgentEvent } from "@agentkit-js/core";
+import type { AgentEvent } from "@wasmagent/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemKvStore } from "../platform.js";
 import { JobQueue } from "./queue.js";

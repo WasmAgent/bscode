@@ -18,7 +18,7 @@ If you want the **framework**, head to
 If you want the **template**, you're in the right place.
 
 ```bash
-npm add @agentkit-js/core   # the framework itself, on npm
+npm add @wasmagent/core   # the framework itself, on npm
 ```
 
 > The same `npm add` string lives in the running app's top-left navbar
@@ -75,13 +75,13 @@ them up against the Cloudflare runtime.
 
 | bscode feature | agentkit-js it exercises |
 |---|---|
-| Edge-isolated code execution | [`@agentkit-js/kernel-quickjs`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-quickjs) — QuickJS WASM kernel, no `node:vm` |
-| Speculative tool fan-out | `ParallelForkJoinRunner` in `@agentkit-js/core` |
-| Durable checkpoints + SSE resume | [`@agentkit-js/core`](https://telleroutlook.github.io/agentkit-js/guides/durable-runtime) — `KvCheckpointer`, `EventLog`, `Last-Event-ID` |
+| Edge-isolated code execution | [`@wasmagent/kernel-quickjs`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-quickjs) — QuickJS WASM kernel, no `node:vm` |
+| Speculative tool fan-out | `ParallelForkJoinRunner` in `@wasmagent/core` |
+| Durable checkpoints + SSE resume | [`@wasmagent/core`](https://telleroutlook.github.io/agentkit-js/guides/durable-runtime) — `KvCheckpointer`, `EventLog`, `Last-Event-ID` |
 | Multi-agent shapes (parallel / planFirst) | `ParallelForkJoinRunner` + stateless HITL primitive in core |
 | Per-job session isolation + diff/merge | `BranchableWorkspace` in core |
 | Tiered approval policy (B4) | `needsApproval` lifecycle hook in core |
-| Visual verifier (CDP + vision judge) | [`@agentkit-js/tools-browser`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/tools-browser) — CDP session driver |
+| Visual verifier (CDP + vision judge) | [`@wasmagent/tools-browser`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/tools-browser) — CDP session driver |
 | **OWASP Agentic Top 10 — live blocked** *(2026-06-17)* | [`CapabilityManifest`](https://github.com/telleroutlook/agentkit-js/blob/main/packages/core/src/executor/types.ts) + [field-by-field OWASP map](https://github.com/telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md). Click "Sandbox blocks an OWASP attack live" in the differentiator band to see the 4 attack scenarios + intercepted-error strings the kernel actually returns. |
 | GitHub repo import + PR opener | Bscode-specific tools wrapping the standard tool contract |
 | Prompt-cache instrumentation | Per-call `usage` events from every model adapter |
@@ -151,7 +151,7 @@ both converged on the same shape in 2026: a host (Claude Desktop,
 Cursor, VS Code Copilot) talks MCP to a server that exposes one
 `execute_code` surface, and the host's tools live behind that surface
 as code the agent calls. agentkit-js ships
-[`@agentkit-js/mcp-server`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/mcp-server)
+[`@wasmagent/mcp-server`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/mcp-server)
 for that, with the same `CapabilityManifest` the WASM kernel inside
 bscode already honours.
 
@@ -197,9 +197,9 @@ file index — write a Worker entry that calls
 
 ```ts
 // my-mcp-server.ts — paste into a Worker entry, deploy, take the URL.
-import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
-import type { ToolDefinition } from "@agentkit-js/core";
+import { createCodeModeServer, createFetchHandler } from "@wasmagent/mcp-server";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
+import type { ToolDefinition } from "@wasmagent/core";
 
 const tools: ToolDefinition[] = [/* … your tool list … */];
 
@@ -221,7 +221,7 @@ bscode is intentionally **not**:
 
 - **A Cursor / Claude Code competitor.** Real shell, real npm install, real
   compilation chains are not what a WASM kernel is for. If you want that,
-  use the framework's [`@agentkit-js/kernel-remote`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-remote) tier (E2B / CF Sandbox microVMs) on top of a host that runs them.
+  use the framework's [`@wasmagent/kernel-remote`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-remote) tier (E2B / CF Sandbox microVMs) on top of a host that runs them.
 - **An IDE.** No file watcher, no LSP, no plugin system. The Monaco surface
   exists to demonstrate `useAgentRun()` + `TokenMeter` in a Next.js app, not
   to be a development environment.

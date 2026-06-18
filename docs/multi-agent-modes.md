@@ -25,7 +25,7 @@ curl -X POST http://localhost:8788/run \
 ```
 
 Stage 1 forks the task into 3 independent draft branches via
-`@agentkit-js/core`'s `ParallelForkJoinRunner`; the synthesised draft is
+`@wasmagent/core`'s `ParallelForkJoinRunner`; the synthesised draft is
 threaded into Stage 2, where a `createToolAgent` reviews/refines with
 the full tool set. The wall-clock cost is roughly
 `max(branch_time) + review_time` instead of the old
@@ -110,5 +110,5 @@ execution. Defence in depth.
   custom promptId, and runPlanFirstExecution.
 - `apps/worker/src/app.test.ts` "planFirst resume (B4)" — 2 route tests
   cover the resume happy path and the missing-snapshot error shape.
-- @agentkit-js/core: `ParallelForkJoinRunner`, `CheckpointableRun`,
+- @wasmagent/core: `ParallelForkJoinRunner`, `CheckpointableRun`,
   `applyHumanResponse` — primitives B1+B4 are built on.

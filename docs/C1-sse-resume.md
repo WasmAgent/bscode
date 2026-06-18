@@ -48,7 +48,7 @@ duplicate file writes or PR pushes.
 
 ## Client side
 
-The hook `@agentkit-js/react`'s `useAgentRun` (used by `apps/web/src/hooks/useAgent.ts`)
+The hook `@wasmagent/react`'s `useAgentRun` (used by `apps/web/src/hooks/useAgent.ts`)
 already implements the protocol:
 
 * tracks the highest `id:` seen across the stream;

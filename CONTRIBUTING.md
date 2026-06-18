@@ -42,13 +42,13 @@ Concretely:
 
 ## NOT allowed in bscode
 
-- New `@agentkit-js/*`-style abstractions (those go upstream).
+- New `@wasmagent/*`-style abstractions (those go upstream).
 - Forks of agentkit-js classes with bscode-specific edits (file an
   upstream issue / PR; if the upstream maintainer rejects, document
   the gap and route around the API rather than fork it).
 - Vendor-specific helpers that other agentkit-js users would also
   want (e.g. a generic CF binding adapter — those go in
-  `@agentkit-js/tools-browser` or similar; bscode just imports).
+  `@wasmagent/tools-browser` or similar; bscode just imports).
 
 ## Workflow
 
@@ -73,7 +73,7 @@ from agentkit-js's CONTRIBUTING applies:
 
 1. *Is the logic specific to this product, or would another agent
    project want it?*
-2. *Does it depend only on already-published `@agentkit-js/*` APIs?*
+2. *Does it depend only on already-published `@wasmagent/*` APIs?*
 3. *Is there a comparable feature already in `agentkit-js` you would
    otherwise duplicate?*
 

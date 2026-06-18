@@ -14,9 +14,9 @@
     "preview": "bunx opennextjs-cloudflare build && bunx wrangler dev"
   },
   "dependencies": {
-    "@agentkit-js/react": "workspace:*",
-    "@agentkit-js/ui-cards": "workspace:*",
-    "@agentkit-js/ui-cards-react": "workspace:*",
+    "@wasmagent/react": "workspace:*",
+    "@wasmagent/ui-cards": "workspace:*",
+    "@wasmagent/ui-cards-react": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
     "@opennextjs/cloudflare": "^1.19.11",
     "@terrastruct/d2": "^0.1.33",

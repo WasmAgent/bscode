@@ -1,4 +1,4 @@
-import type { AgentEvent, Model, ModelMessage, Scorer, ToolDefinition } from "@agentkit-js/core";
+import type { AgentEvent, Model, ModelMessage, Scorer, ToolDefinition } from "@wasmagent/core";
 import {
   BudgetForcingRunner,
   CheckpointableRun,
@@ -27,7 +27,7 @@ import {
   toolCallAccuracy,
   trajectoryValidity,
   withOtel,
-} from "@agentkit-js/core";
+} from "@wasmagent/core";
 import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
 import { type MultiAgentMode, multiAgentRun, runPlanFirstExecution } from "./agents/multi-agent.js";
@@ -128,7 +128,7 @@ function recordError(message: string, stack?: string, traceId?: string) {
   if (stack) console.error(stack.split("\n").slice(0, 4).join("\n"));
 }
 /**
- * B1 — Adapter from bscode's KvStore (CF KVNamespace-shape) to agentkit-js's
+ * B1 — Adapter from bscode's KvStore (CF KVNamespace-shape) to wasmagent's
  * canonical KvBackend (string list, plain put). One-line keeps both codebases
  * speaking the same KV contract without dragging the worker-types dependency.
  */
@@ -233,7 +233,7 @@ export function createApp(config: AppConfig) {
   // Per-session indexers are constructed lazily so each conversation gets
   // its own vocabulary; the underlying embedder is shared.
   const sessionIndexers = new Map<string, SemanticIndexer>();
-  let sharedEmbedder: import("@agentkit-js/core").Embedder | undefined;
+  let sharedEmbedder: import("@wasmagent/core").Embedder | undefined;
   if (config.embedding) {
     // Lazy import keeps tools-rag out of the bundle when the consumer
     // never sets EMBEDDING_API_KEY. The dynamic import is awaited inside
@@ -260,7 +260,7 @@ export function createApp(config: AppConfig) {
     const embedding = config.embedding;
     void (async () => {
       try {
-        const { HttpEmbedder } = await import("@agentkit-js/tools-rag");
+        const { HttpEmbedder } = await import("@wasmagent/tools-rag");
         sharedEmbedder = new HttpEmbedder({
           apiKey: embedding.apiKey,
           baseUrl: embedding.baseUrl,
@@ -385,7 +385,7 @@ export function createApp(config: AppConfig) {
     const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
     if (!apiKey) return c.json({ enhanced: task }); // passthrough fallback
 
-    const { AnthropicModel } = await import("@agentkit-js/model-anthropic");
+    const { AnthropicModel } = await import("@wasmagent/model-anthropic");
     const model = new AnthropicModel(
       "claude-haiku-4-5-20251001",
       config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
@@ -437,7 +437,7 @@ Rules:
     const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
     if (!apiKey) return c.json({ needsClarification: false, questions: [] });
 
-    const { AnthropicModel } = await import("@agentkit-js/model-anthropic");
+    const { AnthropicModel } = await import("@wasmagent/model-anthropic");
     const model = new AnthropicModel(
       "claude-haiku-4-5-20251001",
       config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
@@ -632,7 +632,7 @@ ${fields
     const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
     if (!apiKey) return c.json({ mode: "tool", framework: null, loop: "single" }); // fallback
 
-    const { AnthropicModel } = await import("@agentkit-js/model-anthropic");
+    const { AnthropicModel } = await import("@wasmagent/model-anthropic");
     const model = new AnthropicModel(
       "claude-haiku-4-5-20251001",
       config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
@@ -1499,7 +1499,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
           scheduler: body.scheduler,
           outputSchemaRetries: body.outputSchemaRetries,
           // C4 — load AGENTS.md (and any nested files) from the workspace and
-          // append to the system prompt. We use the agentkit-js KV loader on
+          // append to the system prompt. We use the wasmagent KV loader on
           // a thin adapter over the per-session files KV; the resolver caches
           // the catalogue, so the cost is one list per /run.
           projectInstructions: filesKv ? await loadProjectInstructions(filesKv) : "",
@@ -1543,7 +1543,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
             finalTask
           );
         } else if (useParallelFork) {
-          const { ParallelForkJoinRunner } = await import("@agentkit-js/core");
+          const { ParallelForkJoinRunner } = await import("@wasmagent/core");
           const branches = policy?.parallelForkJoin?.branches ?? 3;
           const concurrency = policy?.parallelForkJoin?.concurrency ?? 2;
           const aggregation = policy?.parallelForkJoin?.aggregation ?? "summary";
@@ -1604,7 +1604,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
               // multiAgentRun does not own a MessageAssembler — pass a fresh
               // one whose .steps[] just records the plan event. CheckpointableRun
               // only reads `assembler.steps` on snapshot persistence.
-              const { MessageAssembler } = await import("@agentkit-js/core");
+              const { MessageAssembler } = await import("@wasmagent/core");
               const planAssembler = new MessageAssembler({ systemPrompt: "", toolsSchema: [] });
               planAssembler.addStep({ type: "user_message", content: finalTask });
               const cpRun = new CheckpointableRun(
@@ -1625,7 +1625,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
           // the verifier's hint. Fixes the "outline-itis" pattern where
           // a one-shot tool-call returns 700 bytes when the user wanted a
           // 1500-word write-up. See [[bscode-md-as-card-2026-06-18]] for
-          // the originating UX bug and `agentkit-js/docs/guides/goal-directed.md`
+          // the originating UX bug and `wasmagent/docs/guides/goal-directed.md`
           // for the architecture.
           //
           // Synth + judge models default to the executor model. A future
@@ -1666,7 +1666,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
           // compressing the earliest chunks into a summary.
           if (body.autoCompactThreshold && body.autoCompactThreshold > 0) {
             const msgs = agent.assembler.build();
-            const { estimateMessagesTokens } = await import("@agentkit-js/core");
+            const { estimateMessagesTokens } = await import("@wasmagent/core");
             const estimatedTokens = estimateMessagesTokens(msgs);
             if (estimatedTokens > body.autoCompactThreshold) {
               await agent.assembler.compact(model);
@@ -1893,7 +1893,7 @@ interface RunBody {
 
   // ── Enhancement policy (replaces flat "enhancement" string for new features) ──
   /** Inline enhancement policy — configures runners with custom parameters */
-  enhancementPolicy?: import("@agentkit-js/core").EnhancementPolicy;
+  enhancementPolicy?: import("@wasmagent/core").EnhancementPolicy;
 
   // ── Stop conditions (new) ────────────────────────────────────────────────────
   /** Stop condition descriptors: "noProgress", "stepCount:<n>", "costBudget:<maxUSD>" */
@@ -2216,7 +2216,7 @@ async function* ptcAgentRun(
   } as AgentEvent;
 
   try {
-    const { QuickJSKernel } = await import("@agentkit-js/kernel-quickjs");
+    const { QuickJSKernel } = await import("@wasmagent/kernel-quickjs");
     const { newQuickJSWASMModuleFromVariant } = await import("quickjs-emscripten-core");
     const cfVariant = (await import("@jitl/quickjs-wasmfile-release-sync")).default;
 

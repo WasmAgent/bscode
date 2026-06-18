@@ -13,7 +13,7 @@
  * tests behind a BSCODE_CDP_WS env var (out of scope for unit tests).
  */
 
-import type { BrowserSession } from "@agentkit-js/tools-browser";
+import type { BrowserSession } from "@wasmagent/tools-browser";
 import { describe, expect, it, vi } from "vitest";
 import { runVisualInteraction, runVisualVerification } from "./visualVerifier.js";
 

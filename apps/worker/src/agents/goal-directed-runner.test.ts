@@ -1,7 +1,7 @@
 /**
  * goal-directed-runner unit tests — KV→WorkspaceReader adapter + scout
  * snapshot extraction. The end-to-end path (which spans the actual
- * `GoalDirectedAgent`) is covered in agentkit-js/packages/core's
+ * `GoalDirectedAgent`) is covered in wasmagent/packages/core's
  * `GoalDirectedAgent.test.ts`; this file pins down the bscode-specific
  * thin wiring.
  */

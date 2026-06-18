@@ -1,7 +1,7 @@
 /**
  * B2 — semantic_search tool + incremental indexer for bscode.
  *
- * Wires agentkit-js's generic vector primitives (`InMemoryVectorStore`,
+ * Wires wasmagent's generic vector primitives (`InMemoryVectorStore`,
  * `KvBackendVectorStore`, `TfidfEmbedder`, an optional injected
  * {@link Embedder}) into the bscode worker so the agent can search the
  * project semantically rather than only by exact-string match.
@@ -9,16 +9,16 @@
  * Design choices:
  *  - **Zero new dependencies**: TfidfEmbedder ships in core; the optional
  *    {@link Embedder} param lets callers plug in `HttpEmbedder` from
- *    `@agentkit-js/tools-rag` (or any other) without bscode taking the dep.
- *  - **Generic-foundation respect**: agentkit-js core is unchanged. All
+ *    `@wasmagent/tools-rag` (or any other) without bscode taking the dep.
+ *  - **Generic-foundation respect**: wasmagent core is unchanged. All
  *    bscode-specific glue (file path → embedding entry id, write-time hook)
  *    lives in this file.
  *  - **DAG-safe**: the `semantic_search` tool is `readOnly: true` and
  *    `idempotent: true`, so the agentkit Scheduler can run it speculatively.
  */
 
-import type { Embedder, Retriever, ToolDefinition } from "@agentkit-js/core";
-import { InMemoryVectorStore, type KvBackend, KvBackendVectorStore } from "@agentkit-js/core";
+import type { Embedder, Retriever, ToolDefinition } from "@wasmagent/core";
+import { InMemoryVectorStore, type KvBackend, KvBackendVectorStore } from "@wasmagent/core";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
 
@@ -45,7 +45,7 @@ export interface SemanticIndexerOptions {
    * without any external API but only for in-process indexes — TF-IDF
    * vocab cannot be reliably serialised to KV. For cross-session
    * persistence pass an external {@link Embedder} (e.g. HttpEmbedder from
-   * @agentkit-js/tools-rag).
+   * @wasmagent/tools-rag).
    */
   embedder?: Embedder;
   /**

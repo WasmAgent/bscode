@@ -3,7 +3,7 @@
  *
  * Verifies the "fall back to TF-IDF" semantics described in app.ts:
  *   - When AppConfig.embedding is undefined, semantic_search uses the
- *     default TF-IDF embedder (no @agentkit-js/tools-rag import attempted).
+ *     default TF-IDF embedder (no @wasmagent/tools-rag import attempted).
  *   - When AppConfig.embedding is set, the worker still serves traffic
  *     immediately (TF-IDF) and the HttpEmbedder is wired in lazily.
  *   - The /capabilities surface (or any equivalent diagnostic) reflects

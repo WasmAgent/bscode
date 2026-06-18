@@ -58,7 +58,7 @@ would let the iframe navigate the top frame on form submit.
 
 ### D2 card iframe sandbox
 
-The D2 diagram card (`@agentkit-js/ui-cards-react/src/D2Card.tsx`)
+The D2 diagram card (`@wasmagent/ui-cards-react/src/D2Card.tsx`)
 uses a strictly tighter sandbox:
 
 ```

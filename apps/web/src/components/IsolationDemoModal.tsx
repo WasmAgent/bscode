@@ -1,7 +1,7 @@
 "use client";
 /**
  * IsolationDemoModal — D7 (2026-06-17) of the
- * agentkit-js + bscode optimization brief, in service of ROADMAP S1' (the
+ * wasmagent + bscode optimization brief, in service of ROADMAP S1' (the
  * "governance + isolation" axis added in `docs/strategy/2026-06-17-update.md`).
  *
  * The premise: code-mode itself is now table stakes (Cloudflare ships
@@ -12,7 +12,7 @@
  * (2026-04, MIT) ships policy decisions but no isolation; the agentkit
  * kernels enforce *can* and isolate the blast radius of *should* decisions
  * the toolkit makes. See `docs/security/capability-manifest-owasp.md` in the
- * agentkit-js repo for the field-by-field OWASP Agentic Top 10 mapping.
+ * wasmagent repo for the field-by-field OWASP Agentic Top 10 mapping.
  *
  * What this modal demonstrates
  * ----------------------------
@@ -192,7 +192,7 @@ export function IsolationDemoModal({ onClose }: IsolationDemoModalProps) {
               Four OWASP Agentic Top 10 attacks, each with the real intercepted error from the
               agentkit kernel. Map: see{" "}
               <a
-                href="https://github.com/telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md"
+                href="https://github.com/WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md"
                 target="_blank"
                 rel="noreferrer"
                 style={{ color: "#58a6ff" }}
@@ -350,7 +350,7 @@ export function IsolationDemoModal({ onClose }: IsolationDemoModalProps) {
           returns. To run them against the deployed kernel, paste any snippet into a code-mode run
           with the matching `CapabilityManifest` and watch the same error appear.{" "}
           <a
-            href="https://github.com/telleroutlook/agentkit-js/blob/main/packages/core/src/executor/types.ts"
+            href="https://github.com/WasmAgent/wasmagent-js/blob/main/packages/core/src/executor/types.ts"
             target="_blank"
             rel="noreferrer"
             style={{ color: "#58a6ff" }}
@@ -359,7 +359,7 @@ export function IsolationDemoModal({ onClose }: IsolationDemoModalProps) {
           </a>
           {" · "}
           <a
-            href="https://github.com/telleroutlook/agentkit-js/blob/main/SECURITY.md"
+            href="https://github.com/WasmAgent/wasmagent-js/blob/main/SECURITY.md"
             target="_blank"
             rel="noreferrer"
             style={{ color: "#58a6ff" }}
@@ -368,7 +368,7 @@ export function IsolationDemoModal({ onClose }: IsolationDemoModalProps) {
           </a>
           {" · "}
           <a
-            href="https://github.com/telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md"
+            href="https://github.com/WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md"
             target="_blank"
             rel="noreferrer"
             style={{ color: "#58a6ff" }}

@@ -8,7 +8,7 @@
  * any human prompt beyond the initial task.
  */
 
-import type { BrowserSession } from "@agentkit-js/tools-browser";
+import type { BrowserSession } from "@wasmagent/tools-browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { _resetForTests, getBuildResult } from "../build-results.js";
 import { MemKvStore } from "../platform.js";

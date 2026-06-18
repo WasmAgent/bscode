@@ -2,7 +2,7 @@
  * Tests for FrameworkApiMap.
  *
  * The component is the inbound funnel for "I see a feature in bscode → I
- * want the agentkit-js API for it". Every entry in ENTRIES is a contract
+ * want the wasmagent API for it". Every entry in ENTRIES is a contract
  * pinned by these tests:
  *   - feature label visible
  *   - docs link present + has the source-attribution data-* attrs

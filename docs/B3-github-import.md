@@ -4,7 +4,7 @@
 > the agent can `read_file`, `search_code`, `semantic_search`, and
 > ultimately `create_github_pr` against an existing codebase. Plus the
 > wiring for swapping the default TF-IDF embedder for a real-vector one
-> via `@agentkit-js/tools-rag`.
+> via `@wasmagent/tools-rag`.
 
 ## Why this matters
 
@@ -87,8 +87,8 @@ Returns:
 ## True-embedding upgrade
 
 The `semanticSearch.ts` indexer accepts an `Embedder` from
-`@agentkit-js/core` (the shape `tools-rag` uses). The bscode worker
-auto-wires `HttpEmbedder` from `@agentkit-js/tools-rag` when these three
+`@wasmagent/core` (the shape `tools-rag` uses). The bscode worker
+auto-wires `HttpEmbedder` from `@wasmagent/tools-rag` when these three
 env vars are set (Wrangler secrets / `.dev.vars`):
 
 ```bash
@@ -129,5 +129,5 @@ Any OpenAI-API-shape embedder server drops in (TEI, Ollama with
 
 - `apps/worker/src/tools/githubImport.ts` — implementation
 - `apps/worker/src/tools/githubPr.ts` — companion OUT path
-- [@agentkit-js/tools-rag](../../../agentkit-js/packages/tools-rag/src/HttpEmbedder.ts)
+- [@wasmagent/tools-rag](../../../agentkit-js/packages/tools-rag/src/HttpEmbedder.ts)
   — true-vector embedder

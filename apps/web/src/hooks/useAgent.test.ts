@@ -1,7 +1,7 @@
 /**
  * Tests for useAgent — the load-bearing state machine of the BSCode UI.
  *
- * Strategy: vi.mock("@agentkit-js/react") so we control useAgentRun's
+ * Strategy: vi.mock("@wasmagent/react") so we control useAgentRun's
  * return value AND capture the `onEvent` callback the hook registers,
  * letting us deterministically inject events and assert how the hook
  * routes each into TokenStats / lastModelId / rawEvents. We also capture
@@ -42,7 +42,7 @@ let mockReturn: {
   reset: () => {},
 };
 
-vi.mock("@agentkit-js/react", () => ({
+vi.mock("@wasmagent/react", () => ({
   useAgentRun: (_endpoint: string, opts: { onEvent?: (ev: unknown) => void } = {}) => {
     capturedOnEvent = opts.onEvent ?? null;
     return {

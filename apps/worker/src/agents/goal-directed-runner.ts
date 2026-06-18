@@ -1,5 +1,5 @@
 /**
- * goal-directed-runner — bscode product wiring around agentkit-js's
+ * goal-directed-runner — bscode product wiring around wasmagent's
  * generic `GoalDirectedAgent`.
  *
  * The product side does three things only:
@@ -12,12 +12,12 @@
  *      model; operators can wire haiku for synth and a stronger judge.
  *
  * Everything else (criteria synthesis prompt, verifier protocol, judge
- * adversarial defaults) lives in agentkit-js core so other consumers
+ * adversarial defaults) lives in wasmagent core so other consumers
  * pick up the same behaviour without re-implementing it.
  */
 
-import type { Model, ToolDefinition } from "@agentkit-js/core";
-import { GoalDirectedAgent, type WorkspaceReader } from "@agentkit-js/core";
+import type { Model, ToolDefinition } from "@wasmagent/core";
+import { GoalDirectedAgent, type WorkspaceReader } from "@wasmagent/core";
 import type { KvStore } from "../types.js";
 
 /** Build a WorkspaceReader against bscode's `file:<path>` KV layout. */

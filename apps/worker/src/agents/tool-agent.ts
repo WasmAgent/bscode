@@ -6,7 +6,7 @@ import type {
   OutputGuardrail,
   StopCondition,
   ToolDefinition,
-} from "@agentkit-js/core";
+} from "@wasmagent/core";
 import {
   costBudget,
   MessageAssembler,
@@ -14,7 +14,7 @@ import {
   stepCountIs,
   ToolCallingAgent,
   ToolRegistry,
-} from "@agentkit-js/core";
+} from "@wasmagent/core";
 import { bscodeFrameworkPrompt, type Framework } from "./prompts.js";
 
 export type { Framework };

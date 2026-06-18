@@ -8,7 +8,7 @@
  * these tests assert the render branch.
  */
 
-import type { CardBlock } from "@agentkit-js/ui-cards";
+import type { CardBlock } from "@wasmagent/ui-cards";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -16,7 +16,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 // surface "older React" runtime conflicts in vitest. The render branches
 // we care about (tab strip, "Output" vs "WebContainers" header) don't
 // depend on the card body itself, so stub it to a passthrough <pre>.
-vi.mock("@agentkit-js/ui-cards-react", () => ({
+vi.mock("@wasmagent/ui-cards-react", () => ({
   CardRenderer: ({ card }: { card: CardBlock }) => (
     <pre data-testid="card-body">{card.content}</pre>
   ),

@@ -1,5 +1,5 @@
 /**
- * bscode workflows — declarative cross-job DAGs on top of agentkit-js's
+ * bscode workflows — declarative cross-job DAGs on top of wasmagent's
  * LocalWorkflowEngine.
  *
  * Why: bscode's existing JobQueue runs jobs in parallel up to a concurrency
@@ -9,7 +9,7 @@
  * letting LocalWorkflowEngine handle dependency-driven scheduling, retries,
  * persistence, sleep, waitForEvent, and resume-after-crash.
  *
- * The four guarantees agentkit-js's WorkflowEngine offers — observable,
+ * The four guarantees wasmagent's WorkflowEngine offers — observable,
  * terminable, resumable, clear errors — apply to bscode workflows too.
  */
 
@@ -22,7 +22,7 @@ import {
   type WorkflowDefinition,
   type WorkflowRunHandle,
   type WorkflowStateStore,
-} from "@agentkit-js/core";
+} from "@wasmagent/core";
 import { z } from "zod";
 
 /** A bscode-flavoured "step" that wraps a job-like action into a workflow tool. */
@@ -55,7 +55,7 @@ export interface BscodeWorkflow {
 
 /**
  * Translate a BscodeWorkflow into a WorkflowDefinition + ToolRegistry pair
- * the agentkit-js engine can consume directly.
+ * the wasmagent engine can consume directly.
  */
 function buildEngineInputs(wf: BscodeWorkflow): {
   def: WorkflowDefinition;
@@ -101,7 +101,7 @@ export interface BscodeWorkflowEngineOptions {
 /**
  * The engine bscode wires up to expose `/workflows` (or simply use it from
  * worker handlers / cron). Implements the four contracts identically to
- * agentkit-js LocalWorkflowEngine — bscode does not invent new semantics.
+ * wasmagent LocalWorkflowEngine — bscode does not invent new semantics.
  */
 export class BscodeWorkflowEngine {
   readonly #store: WorkflowStateStore;

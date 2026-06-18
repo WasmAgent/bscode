@@ -1,11 +1,11 @@
 /**
  * BSCode-specific system prompts.
  *
- * Composed from generic agentkit-js building blocks (`@agentkit-js/agent-prompts`)
+ * Composed from generic wasmagent building blocks (`@wasmagent/agent-prompts`)
  * plus BSCode-specific instructions (persona, `<boltThinking>` tag,
  * WebContainers-aware file conventions, framework scaffolding).
  *
- * The agentkit-js package itself is intentionally product-agnostic; it
+ * The wasmagent package itself is intentionally product-agnostic; it
  * provides only atomic fragments + a composer. This file is where we
  * compose those fragments with BSCode product personality.
  */
@@ -24,7 +24,7 @@ import {
   SANDBOX_NODE,
   SANDBOX_PYODIDE,
   SANDBOX_QUICKJS,
-} from "@agentkit-js/agent-prompts";
+} from "@wasmagent/agent-prompts";
 
 export type CodeLanguage = "js" | "python" | "node";
 export type Framework = "react" | "vue" | "svelte" | "vanilla" | "general";

@@ -52,7 +52,7 @@ export async function putBuildResult(sessionId, snapshot, kv): Promise<void>
 
 ```ts
 // 假想的 apps/worker/src/agents/goal-driven.ts
-import { GoalAgent } from "@agentkit-js/core";
+import { GoalAgent } from "@wasmagent/core";
 import { getBuildResult } from "../build-results.js";
 
 export function makeBuildPassGoal(sessionId: string, kv: KvStore) {

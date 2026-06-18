@@ -1,7 +1,7 @@
 /**
  * B-D2 follow-up — code-mode MCP server mount for bscode.
  *
- * Wires `@agentkit-js/mcp-server`'s `createCodeModeServer` +
+ * Wires `@wasmagent/mcp-server`'s `createCodeModeServer` +
  * `createFetchHandler` into the bscode worker so a host like Claude
  * Desktop / Cursor / VS Code Copilot can paste this Worker's
  * `/mcp` URL and call read-only bscode tools through one
@@ -43,9 +43,9 @@
  * not always configured).
  */
 
-import { type CapabilityManifest, type ToolDefinition, ToolRegistry } from "@agentkit-js/core";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
-import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
+import { type CapabilityManifest, type ToolDefinition, ToolRegistry } from "@wasmagent/core";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
+import { createCodeModeServer, createFetchHandler } from "@wasmagent/mcp-server";
 import type { AppConfig } from "./platform.js";
 import { createListFilesTool, createReadFileTool, createSearchCodeTool } from "./tools/index.js";
 

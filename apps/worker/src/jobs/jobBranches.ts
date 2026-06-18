@@ -11,7 +11,7 @@
  * each job a derived session id, snapshot the parent session into it on
  * submit, and provide diff/merge endpoints that compare the two prefixes.
  *
- * This is the same shape as agentkit-js's framework-level
+ * This is the same shape as wasmagent's framework-level
  * `BranchableWorkspace` (F3) but specialised to bscode's KV layout. The two
  * could be unified once bscode migrates its mass file storage to
  * `wsfile:` keys, but that's a bigger refactor than C2 needs and would force

@@ -13,7 +13,7 @@
  * single tool call (writeFile content length, patch content delta).
  */
 
-import type { ToolDefinition } from "@agentkit-js/core";
+import type { ToolDefinition } from "@wasmagent/core";
 
 export type WriteOpKind = "write" | "patch" | "delete" | "rename";
 

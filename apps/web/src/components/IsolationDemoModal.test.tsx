@@ -2,7 +2,7 @@
  * D7 (2026-06-17) — IsolationDemoModal tests.
  *
  * Lands the S1' governance/isolation axis from
- * `agentkit-js/docs/strategy/2026-06-17-update.md`. The modal demos four
+ * `wasmagent/docs/strategy/2026-06-17-update.md`. The modal demos four
  * OWASP Agentic Top 10 attacks the kernel actually blocks; this test
  * pins down:
  *
@@ -15,7 +15,7 @@
  *      the kernel's actual output should be changed too.
  *   3. Esc and click-out dismiss the modal — keyboard + pointer parity
  *      with SettingsDrawer.
- *   4. Outbound links go to the agentkit-js source-of-truth files
+ *   4. Outbound links go to the wasmagent source-of-truth files
  *      (CapabilityManifest types.ts, SECURITY.md, OWASP coverage matrix).
  *      The link contract is stable across releases — these are GitHub
  *      paths the documentation page also points at.
@@ -80,7 +80,7 @@ describe("IsolationDemoModal (D7)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("links point at the agentkit-js source-of-truth files (stable contract)", () => {
+  it("links point at the wasmagent source-of-truth files (stable contract)", () => {
     const { container } = render(<IsolationDemoModal onClose={() => {}} />);
     const hrefs = Array.from(container.querySelectorAll("a")).map((a) => a.getAttribute("href"));
     // OWASP coverage matrix appears twice (header link + footer link); both
@@ -88,16 +88,16 @@ describe("IsolationDemoModal (D7)", () => {
     expect(
       hrefs.some((h) =>
         h?.includes(
-          "telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md"
+          "WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md"
         )
       )
     ).toBe(true);
     expect(
       hrefs.some((h) =>
-        h?.includes("telleroutlook/agentkit-js/blob/main/packages/core/src/executor/types.ts")
+        h?.includes("WasmAgent/wasmagent-js/blob/main/packages/core/src/executor/types.ts")
       )
     ).toBe(true);
-    expect(hrefs.some((h) => h?.includes("telleroutlook/agentkit-js/blob/main/SECURITY.md"))).toBe(
+    expect(hrefs.some((h) => h?.includes("WasmAgent/wasmagent-js/blob/main/SECURITY.md"))).toBe(
       true
     );
   });

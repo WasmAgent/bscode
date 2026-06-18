@@ -6,7 +6,7 @@
  *      headlines and badges (the funnel signals must be visible BEFORE
  *      the visitor scrolls). The 4th demo (`isolation`) was added 2026-06-17
  *      to land the S1' governance/isolation axis from
- *      `agentkit-js/docs/strategy/2026-06-17-update.md`.
+ *      `wasmagent/docs/strategy/2026-06-17-update.md`.
  *   2. Clicking a demo fires (a) the onTry callback with the demo id and
  *      (b) a `bscode:funnel` CustomEvent with `step: differentiator-<id>-click`.
  *      The funnel-cost reduction work (2026-06-12 v3) listens to that event;

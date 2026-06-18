@@ -9,11 +9,11 @@
  * Persistence: custom models + preferred models stored in FsKvStore (local dev)
  * or Cloudflare KV (production). API keys encrypted with AES-256-GCM before storage.
  */
-import type { Model } from "@agentkit-js/core";
-import { OpenAIModel } from "@agentkit-js/core";
-import { AnthropicModel } from "@agentkit-js/model-anthropic";
-import { DeepSeekModel } from "@agentkit-js/model-deepseek";
-import { DoubaoModel } from "@agentkit-js/model-doubao";
+import type { Model } from "@wasmagent/core";
+import { OpenAIModel } from "@wasmagent/core";
+import { AnthropicModel } from "@wasmagent/model-anthropic";
+import { DeepSeekModel } from "@wasmagent/model-deepseek";
+import { DoubaoModel } from "@wasmagent/model-doubao";
 import type { AppConfig, KvStore } from "../platform.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -334,7 +334,7 @@ export async function getBuiltinModels(config: AppConfig, store: KvStore): Promi
   return entries;
 }
 
-// ── Resolve modelId → agentkit-js Model instance ─────────────────────────────
+// ── Resolve modelId → wasmagent Model instance ─────────────────────────────
 
 export async function resolveModelFromRegistry(
   modelId: string | undefined,

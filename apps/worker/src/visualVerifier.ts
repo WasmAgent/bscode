@@ -27,7 +27,7 @@ import {
   type BrowserSession,
   openBrowserRunSession,
   openCdpSession,
-} from "@agentkit-js/tools-browser";
+} from "@wasmagent/tools-browser";
 import type { VisualCheckSnapshot } from "./build-results.js";
 import { judgeRender, type VisionJudge } from "./visionJudge.js";
 

@@ -15,7 +15,7 @@
  * agentkit HITL gate (A3). A reviewer must approve before any push happens.
  */
 
-import type { ToolDefinition } from "@agentkit-js/core";
+import type { ToolDefinition } from "@wasmagent/core";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
 

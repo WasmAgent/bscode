@@ -1,7 +1,7 @@
 "use client";
-import type { AgentMessage } from "@agentkit-js/react";
-import type { CardBlock } from "@agentkit-js/ui-cards";
-import { CardRenderer, ChatMessage } from "@agentkit-js/ui-cards-react";
+import type { AgentMessage } from "@wasmagent/react";
+import type { CardBlock } from "@wasmagent/ui-cards";
+import { CardRenderer, ChatMessage } from "@wasmagent/ui-cards-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { theme } from "@/lib/theme";
 

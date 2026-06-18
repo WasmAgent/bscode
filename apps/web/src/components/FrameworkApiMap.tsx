@@ -5,10 +5,10 @@
  *
  * The brief: bscode's job is to convert demo viewers into framework users.
  * The friction we are removing: "I see this cool thing happening — what
- * agentkit-js API was responsible, and how do I copy it into my own code?"
+ * wasmagent API was responsible, and how do I copy it into my own code?"
  *
  * This panel is opened from the main page's `?` button. It shows a map
- * from observable demo features to the agentkit-js API responsible, with
+ * from observable demo features to the wasmagent API responsible, with
  * a copy-button next to a minimal usage snippet. There is also one
  * "Export minimal project" button that bundles the snippets the user
  * marked into a 50-line starter project (`pnpm i && pnpm dev`).
@@ -27,7 +27,7 @@ interface MappingEntry {
   feature: string;
   /** One-sentence description of the user-visible behaviour. */
   describe: string;
-  /** The agentkit-js API responsible. */
+  /** The wasmagent API responsible. */
   api: string;
   /** npm package the API is exported from. */
   pkg: string;
@@ -43,10 +43,10 @@ const ENTRIES: readonly MappingEntry[] = [
     describe:
       "Model-generated JavaScript runs inside QuickJS-in-WASM, with capability-gated fetch + fs.",
     api: "QuickJSKernel + ProgrammaticOrchestrator",
-    pkg: "@agentkit-js/kernel-quickjs · @agentkit-js/core",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/code-mode.md",
-    snippet: `import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
-import { ProgrammaticOrchestrator, ToolRegistry } from "@agentkit-js/core";
+    pkg: "@wasmagent/kernel-quickjs · @wasmagent/core",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/code-mode.md",
+    snippet: `import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
+import { ProgrammaticOrchestrator, ToolRegistry } from "@wasmagent/core";
 
 const kernel = new QuickJSKernel({ timeoutMs: 5_000 });
 const tools = new ToolRegistry(); // register your tools here
@@ -68,9 +68,9 @@ console.log(result.finalOutput);`,
     describe:
       "Multiple read-only tool calls run in parallel, write tools serialise — automatic from tool metadata.",
     api: "Scheduler + deriveDependencies",
-    pkg: "@agentkit-js/core",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/packages/core/src/scheduler/Scheduler.ts",
-    snippet: `import { CodeAgent, Scheduler } from "@agentkit-js/core";
+    pkg: "@wasmagent/core",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/packages/core/src/scheduler/Scheduler.ts",
+    snippet: `import { CodeAgent, Scheduler } from "@wasmagent/core";
 
 // Each ToolDefinition declares { readOnly, idempotent }; the Scheduler
 // builds the IR from the agent's emitted tool_call list and runs the
@@ -83,10 +83,10 @@ for await (const ev of agent.run("…")) console.log(ev);`,
     feature: "Visual diff cards (file-tree edits)",
     describe: "The chat renders structured diff blocks with copy and apply actions.",
     api: "parseCardBlocks + ui-cards-react",
-    pkg: "@agentkit-js/ui-cards-react",
-    docs: "https://github.com/telleroutlook/agentkit-js/tree/main/packages/ui-cards",
-    snippet: `import { parseCardBlocks } from "@agentkit-js/ui-cards";
-import { CardRenderer } from "@agentkit-js/ui-cards-react";
+    pkg: "@wasmagent/ui-cards-react",
+    docs: "https://github.com/WasmAgent/wasmagent-js/tree/main/packages/ui-cards",
+    snippet: `import { parseCardBlocks } from "@wasmagent/ui-cards";
+import { CardRenderer } from "@wasmagent/ui-cards-react";
 
 const blocks = parseCardBlocks(agentMarkdown);
 return blocks.map((b, i) => <CardRenderer key={i} block={b} />);`,
@@ -95,9 +95,9 @@ return blocks.map((b, i) => <CardRenderer key={i} block={b} />);`,
     feature: "Token cost meter",
     describe: "Live estimate of input/output/cache-read tokens + USD per turn.",
     api: "TokenBudget + GenericOpenAICompatModel",
-    pkg: "@agentkit-js/core",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/openai-compat-recipes.md",
-    snippet: `import { GenericOpenAICompatModel, TokenBudget } from "@agentkit-js/core";
+    pkg: "@wasmagent/core",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/openai-compat-recipes.md",
+    snippet: `import { GenericOpenAICompatModel, TokenBudget } from "@wasmagent/core";
 
 const model = new GenericOpenAICompatModel("qwen2.5:14b", "http://localhost:11434/v1", {
   apiKey: "ollama",
@@ -112,9 +112,9 @@ const budget = new TokenBudget({ maxTokens: 200_000 });
     describe:
       "When a tool with side effects is about to run, the agent pauses for approval — resume continues from the same checkpoint.",
     api: "KvCheckpointer + await_human_input",
-    pkg: "@agentkit-js/core",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/durable-runtime.md",
-    snippet: `import { CodeAgent, KvCheckpointer } from "@agentkit-js/core";
+    pkg: "@wasmagent/core",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/durable-runtime.md",
+    snippet: `import { CodeAgent, KvCheckpointer } from "@wasmagent/core";
 
 const agent = new CodeAgent({
   tools,
@@ -130,10 +130,10 @@ for await (const ev of agent.resume(traceId, { humanResponse: "ok" })) {…}`,
     describe:
       "Expose every bscode tool to a third-party MCP host (Claude Code, Cursor) via a 2-tool surface.",
     api: "createCodeModeServer",
-    pkg: "@agentkit-js/mcp-server",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/code-mode.md",
-    snippet: `import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+    pkg: "@wasmagent/mcp-server",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/code-mode.md",
+    snippet: `import { createCodeModeServer, createFetchHandler } from "@wasmagent/mcp-server";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const server = createCodeModeServer({
   serverInfo: { name: "bscode", version: "1.0.0" },
@@ -147,8 +147,8 @@ export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
     describe:
       "Aggregate runs from the EventLog into a runs-overview dashboard — zero deploy, served by `agentkit devtools`.",
     api: "RunsAggregator + agentkit devtools",
-    pkg: "@agentkit-js/devtools · @agentkit-js/cli",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/ROADMAP.md#shipped-2026-06",
+    pkg: "@wasmagent/devtools · @wasmagent/cli",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/ROADMAP.md#shipped-2026-06",
     snippet: `# After your runs have written events to ./events.ndjson
 npx agentkit devtools --events-file ./events.ndjson --port 4317
 # → http://localhost:4317`,
@@ -158,8 +158,8 @@ npx agentkit devtools --events-file ./events.ndjson --port 4317
     describe:
       "Compare two or more models on memory/long-context/tool-sequence/cost suites; report flags Pareto-front winners on (acc, cost, p95 wall).",
     api: "runEvaluation + agentkit evals",
-    pkg: "@agentkit-js/evals-runner",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/evals-runner.md",
+    pkg: "@wasmagent/evals-runner",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/evals-runner.md",
     snippet: `# List the 6 reference suites:
 agentkit evals list
 
@@ -176,8 +176,8 @@ agentkit evals run \\
     describe:
       "bscode's worker mounts a code-mode MCP server at /mcp. Paste the URL into Claude Desktop / Cursor / VS Code Copilot and the host calls bscode's read-only file tools through one execute_code surface.",
     api: "createCodeModeServer + createFetchHandler",
-    pkg: "@agentkit-js/mcp-server",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/code-mode.md",
+    pkg: "@wasmagent/mcp-server",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/code-mode.md",
     snippet: `// 1. The bscode worker already mounts /mcp — see apps/worker/src/mcp.ts.
 //    Read-only tools only: read_file, list_files, search_code.
 
@@ -192,8 +192,8 @@ agentkit evals run \\
 //    tool-use tokens at N=30 tools (examples/benchmarks/code-mode-tokens.mjs).
 
 // To stand up a separate MCP server for your own tools, paste this:
-import { createCodeModeServer, createFetchHandler } from "@agentkit-js/mcp-server";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { createCodeModeServer, createFetchHandler } from "@wasmagent/mcp-server";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const server = createCodeModeServer({
   serverInfo: { name: "my-tools", version: "1.0.0" },
@@ -207,10 +207,10 @@ export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
     describe:
       "Drop an agentkit kernel into Vercel AI SDK 4–6 as a `tool()`. The model emits a tool_call, agentkit runs the script in QuickJS, the result flows back to the SDK loop. No SDK fork, no patches.",
     api: "sandboxedJsTool + codeModeTool",
-    pkg: "@agentkit-js/aisdk",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/integrate-vercel-ai-sdk.md",
-    snippet: `import { sandboxedJsTool } from "@agentkit-js/aisdk";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+    pkg: "@wasmagent/aisdk",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/integrate-vercel-ai-sdk.md",
+    snippet: `import { sandboxedJsTool } from "@wasmagent/aisdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 import { generateText } from "ai";
 
 const sandbox = sandboxedJsTool({
@@ -229,10 +229,10 @@ await generateText({
     describe:
       "Plug an agentkit kernel into Mastra's sandbox-provider contract. Replace E2B / Daytona / Modal with a 3-tier composable kernel — same Workspace API.",
     api: "agentkitMastraSandbox",
-    pkg: "@agentkit-js/mastra-sandbox",
-    docs: "https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/integrate-mastra.md",
-    snippet: `import { agentkitMastraSandbox } from "@agentkit-js/mastra-sandbox";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+    pkg: "@wasmagent/mastra-sandbox",
+    docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/integrate-mastra.md",
+    snippet: `import { agentkitMastraSandbox } from "@wasmagent/mastra-sandbox";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 import { Workspace } from "@mastra/core";
 
 const workspace = new Workspace({
@@ -247,10 +247,10 @@ const workspace = new Workspace({
     describe:
       "Wrap a kernel as an Anthropic Claude Agent SDK tool — turns the SDK's tool-call loop into a code-mode loop with WASM-isolated execution.",
     api: "sandboxedJsClaudeTool",
-    pkg: "@agentkit-js/claude-agent-sdk",
-    docs: "https://github.com/telleroutlook/agentkit-js/tree/main/packages/claude-agent-sdk",
-    snippet: `import { sandboxedJsClaudeTool } from "@agentkit-js/claude-agent-sdk";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+    pkg: "@wasmagent/claude-agent-sdk",
+    docs: "https://github.com/WasmAgent/wasmagent-js/tree/main/packages/claude-agent-sdk",
+    snippet: `import { sandboxedJsClaudeTool } from "@wasmagent/claude-agent-sdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 import { Anthropic } from "@anthropic-ai/sdk";
 
 const sandbox = sandboxedJsClaudeTool({
@@ -271,10 +271,10 @@ await client.messages.create({
     describe:
       "Wrap a kernel as an OpenAI Agents JS `Tool<T>` — adds WASM-isolated execution to the SDK's agent loop without forking the SDK.",
     api: "sandboxedJsAgentTool",
-    pkg: "@agentkit-js/openai-agents",
-    docs: "https://github.com/telleroutlook/agentkit-js/tree/main/packages/openai-agents",
-    snippet: `import { sandboxedJsAgentTool } from "@agentkit-js/openai-agents";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+    pkg: "@wasmagent/openai-agents",
+    docs: "https://github.com/WasmAgent/wasmagent-js/tree/main/packages/openai-agents",
+    snippet: `import { sandboxedJsAgentTool } from "@wasmagent/openai-agents";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 import { Agent } from "@openai/agents";
 
 const sandbox = sandboxedJsAgentTool({
@@ -396,7 +396,7 @@ export function FrameworkApiMap({ open, onClose }: FrameworkApiMapProps) {
           <div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>What you see ↔ what you can copy</div>
             <div style={{ color: theme.textMuted, fontSize: 12, marginTop: 2 }}>
-              bscode demonstrates eight differentiated agentkit-js capabilities. Star the ones you
+              bscode demonstrates eight differentiated wasmagent capabilities. Star the ones you
               want and click <em>Export minimal project</em> below to download a starter that drops
               into <code>pnpm dev</code>.
             </div>
@@ -556,7 +556,7 @@ export function FrameworkApiMap({ open, onClose }: FrameworkApiMapProps) {
 
 // ─── Minimal-project renderer ───────────────────────────────────────────────
 //
-// Build an opinion-free starter project that imports just the agentkit-js
+// Build an opinion-free starter project that imports just the wasmagent
 // packages the user marked. Total: README + package.json + tsconfig +
 // src/main.ts containing the marked snippets. ~50 lines of total content
 // before the snippets are concatenated, which is the brief from B1's DoD:
@@ -582,7 +582,7 @@ function renderMinimalProject(picked: readonly MappingEntry[]): Record<string, s
     .join("\n\n");
 
   const readme = [
-    "# agentkit-js starter (generated by bscode)",
+    "# wasmagent starter (generated by bscode)",
     "",
     "Marked features:",
     ...picked.map((e) => `- **${e.feature}** — ${e.api} (\`${e.pkg}\`)`),
@@ -596,9 +596,9 @@ function renderMinimalProject(picked: readonly MappingEntry[]): Record<string, s
     "",
     "## Where to go next",
     "",
-    "- [ROADMAP](https://github.com/telleroutlook/agentkit-js/blob/main/ROADMAP.md)",
-    "- [Code mode guide](https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/code-mode.md)",
-    "- [OpenAI-compat recipes](https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/openai-compat-recipes.md)",
+    "- [ROADMAP](https://github.com/WasmAgent/wasmagent-js/blob/main/ROADMAP.md)",
+    "- [Code mode guide](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/code-mode.md)",
+    "- [OpenAI-compat recipes](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/openai-compat-recipes.md)",
   ].join("\n");
 
   return {

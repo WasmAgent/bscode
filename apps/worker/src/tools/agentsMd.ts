@@ -13,7 +13,7 @@
  * The host (or the user) decides whether to call write_file with it.
  */
 
-import type { ToolDefinition } from "@agentkit-js/core";
+import type { ToolDefinition } from "@wasmagent/core";
 import { z } from "zod";
 import type { KvStore } from "../platform.js";
 

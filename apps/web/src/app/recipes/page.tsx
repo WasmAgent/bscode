@@ -8,7 +8,7 @@ import { useState } from "react";
  * Visitors who already use Vercel AI SDK 6, Cloudflare codemode, Mastra,
  * the Anthropic Claude Agent SDK, or OpenAI Agents JS arrive here via
  * the `?source=bscode-<framework>-recipe` UTM links from the
- * agentkit-js README and the "Their framework + our kernel" doc page.
+ * wasmagent README and the "Their framework + our kernel" doc page.
  *
  * Each recipe row shows:
  *   1. The minimum-viable code snippet (copy button).
@@ -17,7 +17,7 @@ import { useState } from "react";
  *      patch the user can inspect — proof the kernel actually ran on
  *      THIS deployment, not just in a README.
  *   3. The npm install line (copy button) and a UTM-tagged link out
- *      to the agentkit-js framework page so attribution survives.
+ *      to the wasmagent framework page so attribution survives.
  *
  * The static surface (this file) ships first; the `Try` button
  * exercises the existing /run worker route so we don't introduce a
@@ -40,10 +40,10 @@ const RECIPES: Recipe[] = [
     framework: "Vercel AI SDK 6",
     blurb:
       "streamText({ tools }) keeps every primitive you have. Replace your sandboxed code-exec tool with one backed by an agentkit kernel — no Docker / E2B server.",
-    npmInstall: "npm add @agentkit-js/aisdk @agentkit-js/kernel-quickjs @agentkit-js/core",
+    npmInstall: "npm add @wasmagent/aisdk @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { streamText } from "ai";
-import { sandboxedJsTool } from "@agentkit-js/aisdk";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { sandboxedJsTool } from "@wasmagent/aisdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const safeJsTool = sandboxedJsTool({
   kernel: new QuickJSKernel(),
@@ -56,7 +56,7 @@ await streamText({
   messages,
 });`,
     upstreamHref:
-      "https://github.com/telleroutlook/agentkit-js/tree/main/packages/aisdk?utm_source=bscode-aisdk-recipe",
+      "https://github.com/WasmAgent/wasmagent-js/tree/main/packages/aisdk?utm_source=bscode-aisdk-recipe",
     utm: "bscode-aisdk-recipe",
   },
   {
@@ -64,10 +64,10 @@ await streamText({
     framework: "Cloudflare codemode",
     blurb:
       "DynamicWorkerExecutor binds you to Workers. agentkitCodemodeExecutor runs the same codemode shape on Node / Bun / Vercel / Lambda, plus optional Python via PyodideKernel.",
-    npmInstall: "npm add @agentkit-js/aisdk @agentkit-js/kernel-quickjs @agentkit-js/core",
+    npmInstall: "npm add @wasmagent/aisdk @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { Agent } from "@cloudflare/agents/codemode";
-import { agentkitCodemodeExecutor } from "@agentkit-js/aisdk";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { agentkitCodemodeExecutor } from "@wasmagent/aisdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const agent = new Agent({
   tools: { /* your existing codemode tool surface */ },
@@ -77,18 +77,18 @@ const agent = new Agent({
   }),
 });`,
     upstreamHref:
-      "https://github.com/telleroutlook/agentkit-js/blob/main/docs/strategy/upstream-prs/cloudflare-codemode-byo-executor.md?utm_source=bscode-cf-codemode-recipe",
+      "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/strategy/upstream-prs/cloudflare-codemode-byo-executor.md?utm_source=bscode-cf-codemode-recipe",
     utm: "bscode-cf-codemode-recipe",
   },
   {
     id: "mastra",
     framework: "Mastra",
     blurb:
-      "Mastra's sandbox provider takes any backend. agentkit-js gives you WASM isolation (in-process or remote) without Blaxel / E2B service standoff.",
-    npmInstall: "npm add @agentkit-js/mastra-sandbox @agentkit-js/kernel-quickjs @agentkit-js/core",
+      "Mastra's sandbox provider takes any backend. wasmagent gives you WASM isolation (in-process or remote) without Blaxel / E2B service standoff.",
+    npmInstall: "npm add @wasmagent/mastra-sandbox @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { Mastra } from "@mastra/core";
-import { agentkitMastraSandbox } from "@agentkit-js/mastra-sandbox";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { agentkitMastraSandbox } from "@wasmagent/mastra-sandbox";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const mastra = new Mastra({
   sandbox: agentkitMastraSandbox({
@@ -97,7 +97,7 @@ const mastra = new Mastra({
   }),
 });`,
     upstreamHref:
-      "https://github.com/telleroutlook/agentkit-js/tree/main/packages/mastra-sandbox?utm_source=bscode-mastra-recipe",
+      "https://github.com/WasmAgent/wasmagent-js/tree/main/packages/mastra-sandbox?utm_source=bscode-mastra-recipe",
     utm: "bscode-mastra-recipe",
   },
   {
@@ -106,10 +106,10 @@ const mastra = new Mastra({
     blurb:
       "Claude Agent SDK takes {name, description, input_schema, handler}. sandboxedJsClaudeTool produces that shape with kernel isolation already wired.",
     npmInstall:
-      "npm add @agentkit-js/claude-agent-sdk @agentkit-js/kernel-quickjs @agentkit-js/core",
+      "npm add @wasmagent/claude-agent-sdk @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import Anthropic from "@anthropic-ai/sdk";
-import { sandboxedJsClaudeTool } from "@agentkit-js/claude-agent-sdk";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { sandboxedJsClaudeTool } from "@wasmagent/claude-agent-sdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const tool = sandboxedJsClaudeTool({
   kernel: new QuickJSKernel(),
@@ -124,7 +124,7 @@ await client.messages.create({
   messages,
 });`,
     upstreamHref:
-      "https://github.com/telleroutlook/agentkit-js/tree/main/packages/claude-agent-sdk?utm_source=bscode-claude-agent-sdk-recipe",
+      "https://github.com/WasmAgent/wasmagent-js/tree/main/packages/claude-agent-sdk?utm_source=bscode-claude-agent-sdk-recipe",
     utm: "bscode-claude-agent-sdk-recipe",
   },
   {
@@ -132,10 +132,10 @@ await client.messages.create({
     framework: "OpenAI Agents JS",
     blurb:
       "@openai/agents takes Tool<T> with a Zod parameters schema and execute(). sandboxedJsAgentTool wires that to an agentkit kernel.",
-    npmInstall: "npm add @agentkit-js/openai-agents @agentkit-js/kernel-quickjs @agentkit-js/core",
+    npmInstall: "npm add @wasmagent/openai-agents @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { Agent, run } from "@openai/agents";
-import { sandboxedJsAgentTool } from "@agentkit-js/openai-agents";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { sandboxedJsAgentTool } from "@wasmagent/openai-agents";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const agent = new Agent({
   name: "code-runner",
@@ -148,7 +148,7 @@ const agent = new Agent({
 
 await run(agent, "compute the 20th Fibonacci number");`,
     upstreamHref:
-      "https://github.com/telleroutlook/agentkit-js/tree/main/packages/openai-agents?utm_source=bscode-openai-agents-recipe",
+      "https://github.com/WasmAgent/wasmagent-js/tree/main/packages/openai-agents?utm_source=bscode-openai-agents-recipe",
     utm: "bscode-openai-agents-recipe",
   },
 ];
@@ -337,12 +337,12 @@ export default function RecipesPage(): JSX.Element {
             SDK, or OpenAI Agents JS — and you want sandboxed code execution without Docker, E2B, or
             another service. Each recipe below drops an{" "}
             <a
-              href="https://github.com/telleroutlook/agentkit-js?utm_source=bscode-recipes-page"
+              href="https://github.com/WasmAgent/wasmagent-js?utm_source=bscode-recipes-page"
               target="_blank"
               rel="noreferrer"
               style={{ color: "#9b9bff" }}
             >
-              agentkit-js
+              wasmagent
             </a>{" "}
             kernel into your framework as one tool / one executor / one provider — your existing
             setup keeps working.
@@ -358,12 +358,12 @@ export default function RecipesPage(): JSX.Element {
         <footer style={{ marginTop: 40, color: "#666", fontSize: 13, lineHeight: 1.6 }}>
           Direction 6 of the{" "}
           <a
-            href="https://github.com/telleroutlook/agentkit-js/blob/main/docs/strategy/2026-06-competitiveness.md?utm_source=bscode-recipes-footer"
+            href="https://github.com/WasmAgent/wasmagent-js/blob/main/docs/strategy/2026-06-competitiveness.md?utm_source=bscode-recipes-footer"
             target="_blank"
             rel="noreferrer"
             style={{ color: "#9b9bff" }}
           >
-            agentkit-js 2026-06 strategic brief
+            wasmagent 2026-06 strategic brief
           </a>
           . The full prose version of these recipes lives at{" "}
           <a

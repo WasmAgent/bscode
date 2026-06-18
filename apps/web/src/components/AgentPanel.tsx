@@ -208,7 +208,7 @@ export function AgentPanel({
     <div style={panelStyle}>
       <div>
         <div style={titleStyle}>BSCode</div>
-        <div style={subtitleStyle}>agentkit-js on Cloudflare</div>
+        <div style={subtitleStyle}>wasmagent on Cloudflare</div>
       </div>
 
       <hr style={dividerStyle} />

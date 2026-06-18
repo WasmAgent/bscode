@@ -1,5 +1,5 @@
-import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@agentkit-js/core";
-import { ParallelForkJoinRunner, ToolCallingAgent } from "@agentkit-js/core";
+import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@wasmagent/core";
+import { ParallelForkJoinRunner, ToolCallingAgent } from "@wasmagent/core";
 import { createToolAgent } from "./tool-agent.js";
 
 /**
@@ -42,7 +42,7 @@ export interface MultiAgentExtras {
    * multi-agent run without a checkpointer; in production the worker
    * always passes one.
    */
-  checkpointer?: import("@agentkit-js/core").Checkpointer;
+  checkpointer?: import("@wasmagent/core").Checkpointer;
 }
 
 const DEFAULT_BRANCHES = 3;
@@ -252,7 +252,7 @@ export async function* runPlanFirstExecution(
   task: string,
   plan: string,
   approvalResponse: string,
-  extras: { maxSteps?: number; checkpointer?: import("@agentkit-js/core").Checkpointer } = {}
+  extras: { maxSteps?: number; checkpointer?: import("@wasmagent/core").Checkpointer } = {}
 ): AsyncGenerator<AgentEvent> {
   const traceId = `multi-planfirst-exec-${Date.now()}`;
   yield {

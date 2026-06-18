@@ -11,7 +11,7 @@
  * row is safe (and common, while a build is in progress).
  */
 
-import type { ToolDefinition } from "@agentkit-js/core";
+import type { ToolDefinition } from "@wasmagent/core";
 import { z } from "zod";
 import { type BuildResultSnapshot, getBuildResult } from "../build-results.js";
 import type { KvStore } from "../types.js";

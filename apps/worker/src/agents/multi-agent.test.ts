@@ -6,17 +6,17 @@
  *   - "planFirst"  — planner emits await_human_input then yields control
  *   - runPlanFirstExecution — second-half executor invoked on resume
  *
- * Mocks @agentkit-js/core's ParallelForkJoinRunner + ToolCallingAgent so the
+ * Mocks @wasmagent/core's ParallelForkJoinRunner + ToolCallingAgent so the
  * tests don't make real model calls.
  */
 
-import type { AgentEvent, Model } from "@agentkit-js/core";
+import type { AgentEvent, Model } from "@wasmagent/core";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 // Mock ParallelForkJoinRunner: deterministic synthesised draft.
-vi.mock("@agentkit-js/core", async (importActual) => {
-  const actual = await importActual<typeof import("@agentkit-js/core")>();
+vi.mock("@wasmagent/core", async (importActual) => {
+  const actual = await importActual<typeof import("@wasmagent/core")>();
   return {
     ...actual,
     ParallelForkJoinRunner: class {

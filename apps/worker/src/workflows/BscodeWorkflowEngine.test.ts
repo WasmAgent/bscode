@@ -10,7 +10,7 @@
  *   - $sleep + $waitForEvent semantics
  */
 
-import { KvWorkflowStateStore, MemoryKvBackend } from "@agentkit-js/core";
+import { KvWorkflowStateStore, MemoryKvBackend } from "@wasmagent/core";
 import { describe, expect, it } from "vitest";
 import { BscodeWorkflowEngine } from "./BscodeWorkflowEngine.js";
 

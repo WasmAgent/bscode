@@ -1,6 +1,6 @@
 "use client";
-import type { CardBlock } from "@agentkit-js/ui-cards";
-import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
+import type { CardBlock } from "@wasmagent/ui-cards";
+import { parseCardBlocks, upgradeCardSyntax } from "@wasmagent/ui-cards";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -40,7 +40,7 @@ function modeLabel(d: ClassifyResult | null): string {
  * differentiator between "the agent guesses it's done" and "the agent
  * checked against criteria it published before running" — it is the
  * UX surface for the differentiation argued in
- * agentkit-js/docs/guides/goal-directed.md.
+ * wasmagent/docs/guides/goal-directed.md.
  */
 function GoalTimeline(props: {
   criteria?: GoalCriterion[];

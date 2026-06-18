@@ -5,7 +5,7 @@
  * stated intent. The output is a structured `{ matchesIntent, reason }`
  * pair the verifier folds into `VisualCheckSnapshot.verdict`.
  *
- * The judge is provider-agnostic: anything that implements the agentkit-js
+ * The judge is provider-agnostic: anything that implements the wasmagent
  * `Model` interface and accepts an `ImageBlock` (Anthropic Claude, OpenAI
  * GPT-4o, etc.) works. Ergonomically we wrap that behind a `VisionJudge`
  * function so callers don't have to know about `ModelMessage` shape.
@@ -16,7 +16,7 @@
  * still has signal it can react to.
  */
 
-import type { ImageBlock, Model, ModelMessage } from "@agentkit-js/core";
+import type { ImageBlock, Model, ModelMessage } from "@wasmagent/core";
 
 export interface VisionJudgeInput {
   intent: string;

@@ -20,7 +20,7 @@
  *     trusts the runner to wind itself down.
  */
 
-import type { AgentEvent } from "@agentkit-js/core";
+import type { AgentEvent } from "@wasmagent/core";
 import type { JobQueueOptions, JobRecord, JobRunner, JobSpec, JobStatus } from "./types.js";
 
 interface JobState {

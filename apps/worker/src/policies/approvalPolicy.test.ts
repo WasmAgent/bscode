@@ -11,7 +11,7 @@
  *   - presets behave as advertised
  */
 
-import type { ToolDefinition } from "@agentkit-js/core";
+import type { ToolDefinition } from "@wasmagent/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ApprovalPolicy, applyApprovalPolicy, PolicyPresets } from "./approvalPolicy.js";

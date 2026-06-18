@@ -311,7 +311,7 @@ function renderReport(allResults, scenarios) {
   const lines = [];
   lines.push("# Local-Model Benchmark — bscode scenarios (real machine)");
   lines.push("");
-  lines.push("Apple Silicon Metal · `node-llama-cpp@3.18.x` · `@agentkit-js/model-local`");
+  lines.push("Apple Silicon Metal · `node-llama-cpp@3.18.x` · `@wasmagent/model-local`");
   lines.push("");
 
   // Summary table

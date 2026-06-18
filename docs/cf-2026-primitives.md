@@ -17,9 +17,9 @@ therefore: **same agentkit interface, multiple CF backends**.
 
 | 2026 CF primitive | agentkit-js interface | bscode entry point | Default behaviour |
 |---|---|---|---|
-| **Browser Run** (`BROWSER` binding via `@cloudflare/puppeteer`) | `BrowserSession` (`@agentkit-js/tools-browser`) | `runVisualVerification({ browserRunBinding })` in `apps/worker/src/visualVerifier.ts` | Falls back to plain CDP `wsEndpoint` when binding is absent. |
-| **Agent Memory** (managed KV with TTL + namespace) | `KvBackend` consumed by `createMemoryTool` (`@agentkit-js/core`) | Any worker that calls `createMemoryTool({ backend })` — see `apps/worker/src/agents/code-agent.ts` | Defaults to `MapKvBackend` (in-memory). |
-| **Workflows** (durable steps with retries) | `KvCheckpointer` (`@agentkit-js/core`) — Workflow steps replace KV writes 1:1 | `apps/worker/src/agents/code-agent.ts` constructs the checkpointer; swap to a Workflow-backed shim. | KV-backed checkpointer (existing). |
+| **Browser Run** (`BROWSER` binding via `@cloudflare/puppeteer`) | `BrowserSession` (`@wasmagent/tools-browser`) | `runVisualVerification({ browserRunBinding })` in `apps/worker/src/visualVerifier.ts` | Falls back to plain CDP `wsEndpoint` when binding is absent. |
+| **Agent Memory** (managed KV with TTL + namespace) | `KvBackend` consumed by `createMemoryTool` (`@wasmagent/core`) | Any worker that calls `createMemoryTool({ backend })` — see `apps/worker/src/agents/code-agent.ts` | Defaults to `MapKvBackend` (in-memory). |
+| **Workflows** (durable steps with retries) | `KvCheckpointer` (`@wasmagent/core`) — Workflow steps replace KV writes 1:1 | `apps/worker/src/agents/code-agent.ts` constructs the checkpointer; swap to a Workflow-backed shim. | KV-backed checkpointer (existing). |
 
 ## Browser Run wiring (one fetch handler)
 
@@ -52,7 +52,7 @@ CF Agent Memory speaks a `KV`-style namespace contract. agentkit's
 (`get`, `put` + `delete` + `list`) and you have it.
 
 ```ts
-import { createMemoryTool, type KvBackend } from "@agentkit-js/core";
+import { createMemoryTool, type KvBackend } from "@wasmagent/core";
 
 class CfAgentMemoryBackend implements KvBackend {
   constructor(private kv: KVNamespace) {}
@@ -78,7 +78,7 @@ already gives you durable state at every checkpoint; replacing the
 underlying KV with Workflow step storage keeps the same agent code:
 
 ```ts
-import { KvCheckpointer, type KvBackend } from "@agentkit-js/core";
+import { KvCheckpointer, type KvBackend } from "@wasmagent/core";
 
 class WorkflowStepBackend implements KvBackend {
   constructor(private step: WorkflowStepEvent) {}

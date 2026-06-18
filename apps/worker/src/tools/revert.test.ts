@@ -2,7 +2,7 @@
  * B4 — revert_file + list_file_versions tool tests.
  */
 
-import { FileTreeManager } from "@agentkit-js/core";
+import { FileTreeManager } from "@wasmagent/core";
 import { describe, expect, it } from "vitest";
 import { MemKvStore } from "../platform.js";
 import { createListFileVersionsTool, createRevertFileTool, createWriteFileTool } from "./index.js";

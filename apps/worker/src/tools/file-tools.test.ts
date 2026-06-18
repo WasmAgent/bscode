@@ -17,7 +17,7 @@
  *   - init_agents_md's draft is well-formed markdown referencing real files.
  */
 
-import { FileTreeManager } from "@agentkit-js/core";
+import { FileTreeManager } from "@wasmagent/core";
 import { describe, expect, it } from "vitest";
 import { MemKvStore } from "../platform.js";
 import {

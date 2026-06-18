@@ -2,9 +2,9 @@
  * /api/recipes/run — server-side handler for the "try a live patch"
  * button on /recipes (Direction 6 reverse-funnel landing).
  *
- * This route does NOT call the agentkit-js packages directly — bscode
- * does not depend on `@agentkit-js/aisdk` or the kernel packages from
- * the framework repo, only on the small `@agentkit-js/ui-cards` /
+ * This route does NOT call the wasmagent packages directly — bscode
+ * does not depend on `@wasmagent/aisdk` or the kernel packages from
+ * the framework repo, only on the small `@wasmagent/ui-cards` /
  * `react` surface. Pulling the kernel runtime in just for this demo
  * would be a large bundle hit for the rest of the bscode UI.
  *

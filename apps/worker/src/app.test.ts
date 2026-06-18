@@ -1,12 +1,12 @@
 /**
  * Integration tests for app.ts HTTP handler.
  *
- * Strategy: mock @agentkit-js/core agents and WASM kernels so tests run fast
+ * Strategy: mock @wasmagent/core agents and WASM kernels so tests run fast
  * without real API calls. Test actual HTTP routing, CORS, SSE streaming, auth,
  * model registry, file KV, input validation, and error handling.
  */
 
-import type { AgentEvent } from "@agentkit-js/core";
+import type { AgentEvent } from "@wasmagent/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { MemKvStore } from "./platform.js";
@@ -679,7 +679,7 @@ describe("Checkpoints — B1 durable backend", () => {
   // fresh instance B sharing the same KV store, and verify B can read the
   // snapshot. This is the "worker recycle doesn't lose the run" guarantee.
   it("snapshot saved via one createApp() instance is readable by a fresh instance sharing the same KV", async () => {
-    const { KvCheckpointer } = await import("@agentkit-js/core");
+    const { KvCheckpointer } = await import("@wasmagent/core");
     const sharedKv = new MemKvStore();
 
     // Adapter shape used by createApp() internally; mirror it here so we can
@@ -730,7 +730,7 @@ describe("Checkpoints — B1 durable backend", () => {
   });
 
   it("HITL pendingHumanInput survives across app instances (A3 + B1 contract)", async () => {
-    const { KvCheckpointer, resumeFromHuman } = await import("@agentkit-js/core");
+    const { KvCheckpointer, resumeFromHuman } = await import("@wasmagent/core");
     const sharedKv = new MemKvStore();
     const adaptKv = (store: MemKvStore) => ({
       get: (key: string) => store.get(key),
@@ -2174,7 +2174,7 @@ describe("C4 — AGENTS.md project instructions", () => {
     await putFile(app, "alice", "AGENTS.md", "PROJECT-RULE-XYZ");
 
     // Stub the tool agent factory so we can read what app.ts hands it.
-    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@agentkit-js/core");
+    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
     // Build the same loader+resolver app.ts uses on the per-session KV view.
     const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "alice");
     const loader = makeKvAgentsMdLoader({
@@ -2195,7 +2195,7 @@ describe("C4 — AGENTS.md project instructions", () => {
     await putFile(app, "alice", "AGENTS.md", "ROOT-RULES");
     await putFile(app, "alice", "packages/api/AGENTS.md", "API-RULES");
 
-    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@agentkit-js/core");
+    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
     const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "alice");
     const loader = makeKvAgentsMdLoader({
       get: (k) => sessKv.get(k),
@@ -2212,7 +2212,7 @@ describe("C4 — AGENTS.md project instructions", () => {
 
   it("empty workspace: ProjectInstructions returns empty text — no header injection", async () => {
     const filesKv = new MemKvStore();
-    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@agentkit-js/core");
+    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
     const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "alice");
     const loader = makeKvAgentsMdLoader({
       get: (k) => sessKv.get(k),

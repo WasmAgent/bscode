@@ -92,7 +92,7 @@ embedder, edit the worker's indexer wiring:
 ```diff
 -import { createSemanticIndexer } from "./tools/index.js";
 +import { createSemanticIndexer } from "./tools/index.js";
-+import { HttpEmbedder } from "@agentkit-js/tools-rag";
++import { HttpEmbedder } from "@wasmagent/tools-rag";
 
 -const indexer = createSemanticIndexer({ kv });
 +const indexer = createSemanticIndexer({

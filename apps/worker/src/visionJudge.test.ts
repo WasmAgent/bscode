@@ -5,7 +5,7 @@
  * JSON, and missing fields) and the model-backed judge factory.
  */
 
-import type { Model, ModelMessage, StreamEvent } from "@agentkit-js/core";
+import type { Model, ModelMessage, StreamEvent } from "@wasmagent/core";
 import { describe, expect, it } from "vitest";
 import { createModelVisionJudge, parseJudgeReply } from "./visionJudge.js";
 

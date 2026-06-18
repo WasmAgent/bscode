@@ -1,5 +1,5 @@
 "use client";
-import { useAgentRun } from "@agentkit-js/react";
+import { useAgentRun } from "@wasmagent/react";
 import { useCallback, useRef, useState } from "react";
 import { getWorkerUrl } from "@/lib/workerUrl";
 
@@ -88,7 +88,7 @@ export interface ClarifyQuestion {
   options: string[];
 }
 
-// Minimal shape we need from AgentEvent — avoids importing @agentkit-js/core in the browser bundle
+// Minimal shape we need from AgentEvent — avoids importing @wasmagent/core in the browser bundle
 interface AgentEventMinimal {
   event: string;
   data: Record<string, unknown>;
@@ -122,7 +122,7 @@ export function useAgent(
         inputTokens?: number;
         outputTokens?: number;
         cacheReadTokens?: number;
-        // New enriched fields from agentkit-js TokenBudget
+        // New enriched fields from wasmagent TokenBudget
         cacheHitRate?: number;
         estimatedUsd?: number;
         calls?: number;

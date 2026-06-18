@@ -13,7 +13,7 @@
  * map a `browserInteract` op kind in their policy.
  */
 
-import type { Model, ToolDefinition } from "@agentkit-js/core";
+import type { Model, ToolDefinition } from "@wasmagent/core";
 import { z } from "zod";
 import { type BuildResultSnapshot, putBuildResult } from "../build-results.js";
 import type { KvStore } from "../types.js";

@@ -1,14 +1,14 @@
 "use client";
 /**
  * DifferentiatorBand — D6 (2026-06-13) of the
- * agentkit-js + bscode optimization brief, refreshed 2026-06-17 to reflect
- * the strategy update in `agentkit-js/docs/strategy/2026-06-17-update.md`
+ * wasmagent + bscode optimization brief, refreshed 2026-06-17 to reflect
+ * the strategy update in `wasmagent/docs/strategy/2026-06-17-update.md`
  * (axes S1 sharpened + S1' added).
  *
  * Four differentiated moments rendered as a thin band below the navbar.
  * The strategic premise (S4): bscode is the *funnel*, not the product —
  * the conversion-determining 30 seconds is whether a visitor sees
- * something *only agentkit-js can give them*.
+ * something *only wasmagent can give them*.
  *
  * The four moments, in order of decreasing surprise:
  *

@@ -45,7 +45,7 @@ const { values } = parseArgs({
   },
 });
 
-console.log("[bscode-local] Loading @agentkit-js/model-local ...");
+console.log("[bscode-local] Loading @wasmagent/model-local ...");
 // Resolve via path: bscode worker doesn't depend on model-local (Workers
 // can't run native bindings) so it's not symlinked into bscode's tree.
 // We reach into the agentkit-js sibling repo directly.

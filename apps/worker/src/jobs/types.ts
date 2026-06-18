@@ -12,7 +12,7 @@
  * up real ToolCallingAgent / multiAgentRun calls.
  */
 
-import type { AgentEvent } from "@agentkit-js/core";
+import type { AgentEvent } from "@wasmagent/core";
 
 /**
  * Lifecycle states a job moves through, monotonically:

@@ -31,8 +31,8 @@ WASM sandbox — without standing up a Docker / E2B server.
 ```ts
 import { streamText, tool } from "ai";
 import { z } from "zod";
-import { sandboxedJsTool } from "@agentkit-js/aisdk";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { sandboxedJsTool } from "@wasmagent/aisdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const safeJsTool = sandboxedJsTool({
   kernel: new QuickJSKernel(),
@@ -71,14 +71,14 @@ UTM tag for click attribution: `?source=bscode-aisdk-recipe`.
 The Cloudflare codemode docs explicitly say the
 `DynamicWorkerExecutor` is *one* implementation, and that you can
 build your own for "Node VM, QuickJS, containers, or any other
-sandbox." `@agentkit-js/kernel-quickjs` is exactly that custom
+sandbox." `@wasmagent/kernel-quickjs` is exactly that custom
 executor — *and* it works off Cloudflare too (Node, Bun, Vercel,
 AWS Lambda).
 
 ```ts
 import { Agent } from "@cloudflare/agents/codemode";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
-import { agentkitCodemodeExecutor } from "@agentkit-js/aisdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
+import { agentkitCodemodeExecutor } from "@wasmagent/aisdk";
 //                                       ^ shim is in flight; see the
 //                                         draft at agentkit-js
 //                                         docs/strategy/upstream-prs/
@@ -116,8 +116,8 @@ service.
 
 ```ts
 import { Mastra } from "@mastra/core";
-import { agentkitMastraSandbox } from "@agentkit-js/mastra-sandbox";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { agentkitMastraSandbox } from "@wasmagent/mastra-sandbox";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const mastra = new Mastra({
   // …your existing Mastra config…
@@ -141,8 +141,8 @@ shape.
 
 ```ts
 import Anthropic from "@anthropic-ai/sdk";
-import { sandboxedJsClaudeTool } from "@agentkit-js/claude-agent-sdk";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { sandboxedJsClaudeTool } from "@wasmagent/claude-agent-sdk";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const tool = sandboxedJsClaudeTool({
   kernel: new QuickJSKernel(),
@@ -169,8 +169,8 @@ parameters and `execute()`. `sandboxedJsAgentTool` produces that.
 
 ```ts
 import { Agent, run } from "@openai/agents";
-import { sandboxedJsAgentTool } from "@agentkit-js/openai-agents";
-import { QuickJSKernel } from "@agentkit-js/kernel-quickjs";
+import { sandboxedJsAgentTool } from "@wasmagent/openai-agents";
+import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const agent = new Agent({
   name: "code-runner",
@@ -200,7 +200,7 @@ UTM tag: `?source=bscode-openai-agents-recipe`.
   --otel-events-file`](https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/devtools-cross-framework.md)
   at both NDJSON traces — the same Studio view renders both.
 - **A pitch for the agentkit framework.** The framework is at
-  `@agentkit-js/core` and is documented separately. This page is
+  `@wasmagent/core` and is documented separately. This page is
   the *runtime* pitch — the embedded-runtime thesis is "the
   kernel + the manifest + the evaluator", which is what the
   recipes above actually demonstrate.
@@ -209,7 +209,7 @@ UTM tag: `?source=bscode-openai-agents-recipe`.
 
 Each `?source=bscode-*-recipe` UTM threads through to the existing
 [bscode README](../README.md) attribution scheme. When a reader
-clicks `npm add @agentkit-js/...` from one of these recipes, the
+clicks `npm add @wasmagent/...` from one of these recipes, the
 download is tagged so the strategy-memo falsifiability test
 ("zero organic downloads from upstream ecosystems by 2026-Q4 ⇒
 retire the runtime pitch") can be checked against the actual

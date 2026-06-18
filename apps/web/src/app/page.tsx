@@ -1,6 +1,6 @@
 "use client";
-import type { CardBlock } from "@agentkit-js/ui-cards";
-import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
+import type { CardBlock } from "@wasmagent/ui-cards";
+import { parseCardBlocks, upgradeCardSyntax } from "@wasmagent/ui-cards";
 import JSZip from "jszip";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -993,10 +993,10 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               source=ui-pill query param distinguishes UI clicks from
               README-link / deploy-button traffic in any aggregation. */}
           <a
-            href="https://www.npmjs.com/package/@agentkit-js/core?source=bscode-ui-pill"
+            href="https://www.npmjs.com/package/@wasmagent/core?source=bscode-ui-pill"
             target="_blank"
             rel="noopener noreferrer"
-            title="bscode is a thin template; the framework lives at @agentkit-js/core"
+            title="bscode is a thin template; the framework lives at @wasmagent/core"
             style={{
               fontSize: 10,
               padding: "2px 7px",
@@ -1008,7 +1008,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               whiteSpace: "nowrap",
             }}
           >
-            npm add @agentkit-js/core →
+            npm add @wasmagent/core →
           </a>
           {/* Direction 6 reverse-funnel entry: "their framework + our kernel".
               Visible alongside the npm pill so a visitor on Vercel AI SDK 6 /
@@ -1250,7 +1250,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           // section of the existing app." The other three demos all
           // exist as flows in the existing UI.
           const toastMessages: Record<typeof demoId, string> = {
-            portal: "Try: prompt 'federate fs + github MCP servers and list the agentkit-js repos'",
+            portal: "Try: prompt 'federate fs + github MCP servers and list the wasmagent repos'",
             resume:
               "Try: start any run, then DevTools → Network → throttle Offline; the run resumes when you go back online",
             fork: "Try: run any task, then click the EventLog timeline → Fork from this step",

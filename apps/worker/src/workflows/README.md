@@ -59,8 +59,8 @@ const sameRun = await engine.resume("build-and-test", run.runId);
 ## Persistence (resume after crash)
 
 ```ts
-import { KvWorkflowStateStore } from "@agentkit-js/core";
-import { CloudflareKvBackend } from "@agentkit-js/cloudflare-worker";
+import { KvWorkflowStateStore } from "@wasmagent/core";
+import { CloudflareKvBackend } from "@wasmagent/cloudflare-worker";
 
 const store = new KvWorkflowStateStore(new CloudflareKvBackend(env.WF_STATE));
 const engine = new BscodeWorkflowEngine({ store });
@@ -72,7 +72,7 @@ Cloudflare KV, Durable Object — same engine, same DAG.
 ## Long-term: Cloudflare Workflows fallback
 
 When you want CF's hibernate-and-replay semantics for runs that span days or
-weeks, use `@agentkit-js/cloudflare-worker`'s `CloudflareWorkflowEngine` with
+weeks, use `@wasmagent/cloudflare-worker`'s `CloudflareWorkflowEngine` with
 the **same `WorkflowDefinition`** — no rewrite. See
 `docs/guides/workflows.md` in agentkit-js.
 

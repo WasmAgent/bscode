@@ -1,5 +1,5 @@
-import type { ToolDefinition } from "@agentkit-js/core";
-import { type FileTreeManager, globalFileLock } from "@agentkit-js/core";
+import type { ToolDefinition } from "@wasmagent/core";
+import { type FileTreeManager, globalFileLock } from "@wasmagent/core";
 import { applyPatch } from "diff";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
@@ -412,7 +412,7 @@ export function createRunCommandTool(
       // sandbox and let any tool_call exfiltrate KV bindings via
       // `globalThis.fetch(...)`. Replaced with a no-op simulation
       // hint — production must wire shellRunner to a sandboxed kernel
-      // (see @agentkit-js/kernel-quickjs). 2026-06-16 SEC-014.
+      // (see @wasmagent/kernel-quickjs). 2026-06-16 SEC-014.
       output.push(
         code
           ? "(simulation — code execution disabled in this build; wire shellRunner to a sandboxed kernel for real eval)"

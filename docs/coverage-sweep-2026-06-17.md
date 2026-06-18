@@ -112,7 +112,7 @@ purpose:
 - Pages (`app/page.tsx`, `app/layout.tsx`) — almost no logic; the
   components they compose are tested individually.
 - `useAgent`'s deeper SSE-reconnect path — owned by `useAgentRun` in
-  `@agentkit-js/react`; tested in that package's own suite.
+  `@wasmagent/react`; tested in that package's own suite.
 
 ## Reproducing the numbers
 
