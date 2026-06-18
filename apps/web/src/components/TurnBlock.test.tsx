@@ -253,3 +253,82 @@ describe("TurnBlock — Goal-directed timeline", () => {
     expect(screen.getByText(/file doc.md is 800 bytes/)).toBeTruthy();
   });
 });
+
+describe("TurnBlock — mode badge with classifier loop axis", () => {
+  it("loop=single (default) renders the plain mode label", () => {
+    const turn: ConversationTurn = {
+      ...baseTurn,
+      detectedMode: { mode: "tool", framework: null, loop: "single" },
+      finalAnswer: "ok",
+    };
+    render(
+      <TurnBlock
+        turn={turn}
+        isActive={false}
+        onRetry={() => {}}
+        onPreviewCard={() => {}}
+        isFrameworkMode={false}
+      />
+    );
+    // Plain "Tool + DAG" — no goal-mode suffix.
+    expect(screen.getByText("Tool + DAG")).toBeTruthy();
+    expect(screen.queryByText(/Tool \+ DAG · 🎯/)).toBeNull();
+  });
+
+  it("loop=verify appends a 🎯 suffix so the auto-routing decision is visible", () => {
+    const turn: ConversationTurn = {
+      ...baseTurn,
+      detectedMode: { mode: "tool", framework: null, loop: "verify" },
+      finalAnswer: "ok",
+    };
+    render(
+      <TurnBlock
+        turn={turn}
+        isActive={false}
+        onRetry={() => {}}
+        onPreviewCard={() => {}}
+        isFrameworkMode={false}
+      />
+    );
+    expect(screen.getByText("Tool + DAG · 🎯")).toBeTruthy();
+  });
+
+  it("loop=verify also applies to code mode badges", () => {
+    const turn: ConversationTurn = {
+      ...baseTurn,
+      detectedMode: { mode: "code", framework: null, loop: "verify" },
+      finalAnswer: "ok",
+    };
+    render(
+      <TurnBlock
+        turn={turn}
+        isActive={false}
+        onRetry={() => {}}
+        onPreviewCard={() => {}}
+        isFrameworkMode={false}
+      />
+    );
+    expect(screen.getByText("Code + WASM · 🎯")).toBeTruthy();
+  });
+
+  it("framework mode ignores loop axis (it has its own plan→build loop already)", () => {
+    const turn: ConversationTurn = {
+      ...baseTurn,
+      detectedMode: { mode: "framework", framework: "react", loop: "verify" },
+      finalAnswer: "ok",
+    };
+    render(
+      <TurnBlock
+        turn={turn}
+        isActive={false}
+        onRetry={() => {}}
+        onPreviewCard={() => {}}
+        isFrameworkMode={true}
+        previewUrl="https://x.local"
+      />
+    );
+    // Plain framework label, no 🎯 suffix.
+    expect(screen.getByText("Framework · react")).toBeTruthy();
+    expect(screen.queryByText(/Framework.*🎯/)).toBeNull();
+  });
+});

@@ -966,38 +966,17 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               </button>
             ))}
             {/*
-              2026-06-18 — "Goal" mode opts the run into agentkit's
-              GoalDirectedAgent: scout → synth criteria → execute →
-              verify (deterministic + LLM-judge with adversarial
-              defaults) → loop with hint until verified or maxIter.
-              Cost is +10-15% on simple tasks, 3-5× on hard ones; opt-in
-              by design. See agentkit-js/docs/guides/goal-directed.md.
+              2026-06-18 (revised same day): the manual 🎯 Goal toggle was
+              removed. The classifier (`POST /classify`) now emits a
+              `loop: "single" | "verify"` axis; useAgent maps `loop=verify`
+              + non-framework mode onto agentMode="goalDirected" without
+              user intervention. The agentMode value is still threaded all
+              the way through to the worker, so any caller that sets it
+              explicitly (the `agentkit goal` CLI, raw POST /run, future
+              advanced UI) keeps working — UI users just don't see a dial.
+              The mode badge shown by TurnBlock carries a "🎯" suffix when
+              loop=verify so the classifier's choice stays visible.
             */}
-            <button
-              type="button"
-              onClick={() =>
-                setConfig((c) => ({ ...c, agentMode: "goalDirected", framework: null }))
-              }
-              title="Loop until verifier accepts the artifact"
-              style={{
-                padding: "3px 8px",
-                borderRadius: 3,
-                fontSize: 10,
-                border: "none",
-                cursor: "pointer",
-                background:
-                  config.agentMode === "goalDirected" && !config.framework
-                    ? "#bc8cff33"
-                    : "transparent",
-                color:
-                  config.agentMode === "goalDirected" && !config.framework
-                    ? "#bc8cff"
-                    : theme.textMuted,
-                fontWeight: 600,
-              }}
-            >
-              🎯 Goal
-            </button>
             <button
               type="button"
               onClick={() =>

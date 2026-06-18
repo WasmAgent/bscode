@@ -68,6 +68,17 @@ export interface AgentConfig {
 export interface ClassifyResult {
   mode: "code" | "tool" | "framework";
   framework: "react" | "vue" | "svelte" | "vanilla" | null;
+  /**
+   * 2026-06-18 — Verifier-loop axis. `verify` means the task expects a
+   * substantive deliverable that benefits from auto-criteria + retry
+   * (long-form writing, multi-file refactor, "build must pass"). Any
+   * `mode` can carry `loop: "verify"`; the dispatch layer in this hook
+   * maps `loop=verify` (excluding framework, which has its own loop)
+   * onto `agentMode === "goalDirected"`. Optional + defaults to
+   * `"single"` for backward compatibility with classifiers / proxies
+   * that haven't learned this axis yet.
+   */
+  loop?: "single" | "verify";
 }
 
 /** A clarifying question with optional multiple-choice options (Claude Code style) */
@@ -171,8 +182,20 @@ export function useAgent(
           const result = (await res.json()) as ClassifyResult;
           setDetectedMode(result);
 
-          // Build updated config based on classification
-          const agentMode = result.mode === "framework" ? "tool" : result.mode;
+          // Build updated config based on classification.
+          //
+          // 2026-06-18: classifier emits two axes — `mode` (code/tool/framework)
+          // and `loop` (single/verify). When loop=verify and the task is NOT
+          // a framework build (which has its own plan→build→preview loop via
+          // WebContainers), upgrade agentMode to "goalDirected" so the worker
+          // runs synth-criteria → execute → verify → retry. UI users never
+          // see this dial — the classifier decides on their behalf, and the
+          // turn badge shows a "🎯" suffix so the choice is transparent.
+          const baseAgentMode = result.mode === "framework" ? "tool" : result.mode;
+          const agentMode =
+            result.loop === "verify" && result.mode !== "framework"
+              ? "goalDirected"
+              : baseAgentMode;
           const framework = result.mode === "framework" ? result.framework : null;
           // Framework mode: cap at 15 steps (4-8 files + planning overhead).
           // Too many steps → retry loops on errors; too few → truncated projects.

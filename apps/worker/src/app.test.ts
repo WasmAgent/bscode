@@ -601,7 +601,7 @@ describe("POST /classify — diagram fast-path", () => {
         body: JSON.stringify({ task }),
       })
     );
-    return (await res.json()) as { mode: string; framework: string | null };
+    return (await res.json()) as { mode: string; framework: string | null; loop?: string };
   }
 
   it.each([
@@ -610,20 +610,37 @@ describe("POST /classify — diagram fast-path", () => {
     "create a mermaid flow chart for the deploy pipeline",
     "render an architecture diagram for the new service",
     "用 D2 画一张服务拓扑图",
-  ])('routes diagram-only task "%s" to mode=code', async (task) => {
+  ])('routes diagram-only task "%s" to mode=code, loop=single', async (task) => {
     const result = await classify(classifyApp(), task);
     expect(result.mode).toBe("code");
     expect(result.framework).toBeNull();
+    expect(result.loop).toBe("single");
   });
 
   it("does NOT short-circuit when the task asks for an app that draws diagrams", async () => {
     // "build a Vue app that renders a diagram" still needs framework
-    // mode — falls through to the LLM (no key → falls back to tool).
+    // mode — falls through to the LLM (no key → falls back to tool/single).
     const result = await classify(
       classifyApp(),
       "build a Vue app that renders a flowchart of user actions"
     );
     expect(result.mode).not.toBe("code"); // fast-path skipped
+    expect(result.loop).toBe("single"); // fallback default when no API key
+  });
+
+  it("LLM-unavailable fallback: returns tool/single with the new loop axis present", async () => {
+    // 2026-06-18: when no api key is configured the classifier returns a
+    // fallback shape rather than 500ing. The shape MUST include the new
+    // `loop` axis so the front-end's dispatch layer (useAgent) doesn't
+    // see `undefined` and accidentally treat it as `"single"` only by
+    // coincidence — make the contract explicit.
+    const result = await classify(
+      classifyApp(),
+      "write a comprehensive technical introduction to half-dry batteries"
+    );
+    expect(result.mode).toBe("tool");
+    expect(result.framework).toBeNull();
+    expect(result.loop).toBe("single");
   });
 });
 

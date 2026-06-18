@@ -23,8 +23,13 @@ const MODE_COLORS: Record<string, string> = {
 
 function modeLabel(d: ClassifyResult | null): string {
   if (!d) return "";
-  if (d.mode === "code") return "Code + WASM";
-  if (d.mode === "tool") return "Tool + DAG";
+  // 2026-06-18: classifier's loop=verify routes the run through
+  // GoalDirectedAgent. Surface that on the badge with a "🎯" suffix —
+  // the dial itself is hidden (autoMode decides) but the user should
+  // still see what the agent is about to do.
+  const goalSuffix = d.loop === "verify" ? " · 🎯" : "";
+  if (d.mode === "code") return `Code + WASM${goalSuffix}`;
+  if (d.mode === "tool") return `Tool + DAG${goalSuffix}`;
   return `Framework · ${d.framework ?? "react"}`;
 }
 
@@ -254,9 +259,9 @@ export function TurnBlock({
                   fontSize: 10,
                   padding: "1px 6px",
                   borderRadius: 3,
-                  background: `${MODE_COLORS[label] ?? "#58a6ff"}22`,
-                  border: `1px solid ${MODE_COLORS[label] ?? "#58a6ff"}44`,
-                  color: MODE_COLORS[label] ?? "#58a6ff",
+                  background: `${MODE_COLORS[label.replace(/\s·\s🎯$/, "")] ?? "#58a6ff"}22`,
+                  border: `1px solid ${MODE_COLORS[label.replace(/\s·\s🎯$/, "")] ?? "#58a6ff"}44`,
+                  color: MODE_COLORS[label.replace(/\s·\s🎯$/, "")] ?? "#58a6ff",
                 }}
               >
                 {label}

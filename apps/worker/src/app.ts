@@ -626,11 +626,11 @@ ${fields
     const looksLikeApp =
       /\b(app|todo|game|component|website|ui|界面|应用|网站|游戏|计算器|看板)\b/i.test(lcTask);
     if (isDiagramTask && !looksLikeApp) {
-      return c.json({ mode: "code", framework: null });
+      return c.json({ mode: "code", framework: null, loop: "single" });
     }
 
     const apiKey = config.anthropicAuthToken ?? config.anthropicApiKey;
-    if (!apiKey) return c.json({ mode: "tool", framework: null }); // fallback
+    if (!apiKey) return c.json({ mode: "tool", framework: null, loop: "single" }); // fallback
 
     const { AnthropicModel } = await import("@agentkit-js/model-anthropic");
     const model = new AnthropicModel(
@@ -638,44 +638,71 @@ ${fields
       config.anthropicBaseUrl ? { apiKey, baseURL: config.anthropicBaseUrl } : apiKey
     );
 
-    const prompt = `Classify this coding task into exactly one category. Reply with ONLY valid JSON.
+    const prompt = `Classify this user task on TWO orthogonal axes. Reply with ONLY valid JSON.
 
 Task: "${task.slice(0, 500)}"
 
-Categories:
+# Axis 1 — "mode" (what kind of agent runs)
+
 - "framework": The task asks to build a UI app, web app, website, interactive animation/game with visuals, or use React/Vue/Svelte/Next.js/Vite. Choose this for games (贪吃蛇, calculator app, todo app, etc), canvas animations (fireworks, particle effects, etc), or anything that needs a live interactive visual output in the browser.
 - "code": The task asks to write/execute an algorithm, function, data structure, math computation, data analysis, OR to draw a static diagram (flow chart, sequence diagram, architecture, ER, mind map — D2 / Mermaid / PlantUML output). Choose this ONLY for non-visual, non-interactive scripts and for diagram-only output (which renders inline as a card, no app needed). If the task would normally use tkinter/pygame/GUI on desktop → use "framework" instead.
-- "tool": Everything else — file operations, multi-file projects without a framework, analysis, refactoring.
+- "tool": Everything else — file operations, multi-file projects without a framework, analysis, refactoring, writing documents/reports/READMEs.
 
-If mode is "framework", also pick: "react" | "vue" | "svelte" | "vanilla"
+If mode is "framework", also pick "framework_kind": "react" | "vue" | "svelte" | "vanilla"
 - react: React, Next.js, or unspecified frontend framework
 - vue: Vue.js
 - svelte: Svelte
 - vanilla: Pure JS/TS, Canvas games/animations, HTML-only, no framework preference
 
+# Axis 2 — "loop" (does completion need a verifier loop?)
+
+- "verify": The user expects a substantive deliverable that should be machine-checkable. Pick this when the task implies non-trivial *quality bars*:
+    • Long-form writing: "写一篇/份介绍/报告/文档/README/教程" with implicit length expectations (≥500 字 / ≥600 words).
+    • Multi-file refactor or feature implementation that should *actually work* (e.g. tests pass, build succeeds, specific behaviour).
+    • "Comprehensive / 全面 / 详细 / 深入 / 完整" anywhere in the task is a strong signal for "verify".
+    • Anything where an outline / one-paragraph stub would be visibly wrong.
+- "single": Quick tasks where one shot of a tool-calling agent is enough.
+    • Short questions, single-line edits, "add a console.log", "fix this typo", "what does X mean".
+    • Chat-style replies that don't produce a substantive artifact.
+    • When uncertain between "single" and "verify" for a SHORT task → pick "single" (cheaper).
+
+The two axes are independent: a "tool" task can be either "single" or "verify".
+
 Reply JSON only, no explanation:
-{"mode":"framework","framework":"react"}
-or {"mode":"code","framework":null}
-or {"mode":"tool","framework":null}`;
+{"mode":"framework","framework":"react","loop":"single"}
+or {"mode":"code","framework":null,"loop":"verify"}
+or {"mode":"tool","framework":null,"loop":"verify"}
+or {"mode":"tool","framework":null,"loop":"single"}`;
 
     try {
       let text = "";
       for await (const ev of model.generate([{ role: "user", content: prompt }], {
         stream: true,
-        maxTokens: 50,
+        maxTokens: 80,
       })) {
         if (ev.type === "text_delta" && ev.delta) text += ev.delta;
       }
-      const jsonMatch = /\{[^}]+\}/.exec(text.trim());
-      if (!jsonMatch) return c.json({ mode: "tool", framework: null });
-      const result = JSON.parse(jsonMatch[0]) as { mode: string; framework: string | null };
+      const jsonMatch = /\{[\s\S]*?\}/.exec(text.trim());
+      if (!jsonMatch) return c.json({ mode: "tool", framework: null, loop: "single" });
+      const result = JSON.parse(jsonMatch[0]) as {
+        mode: string;
+        framework: string | null;
+        loop?: string;
+      };
       const validModes = ["code", "tool", "framework"];
       const validFrameworks = ["react", "vue", "svelte", "vanilla", null];
-      if (!validModes.includes(result.mode)) return c.json({ mode: "tool", framework: null });
+      const validLoops = ["single", "verify"];
+      if (!validModes.includes(result.mode)) {
+        return c.json({ mode: "tool", framework: null, loop: "single" });
+      }
       if (!validFrameworks.includes(result.framework)) result.framework = "react";
-      return c.json(result);
+      // Loop default = "single" so an upstream model that hasn't learned the
+      // axis yet behaves like the pre-2026-06-18 classifier — backward
+      // compatible at the API level.
+      const loop = validLoops.includes(result.loop ?? "") ? result.loop : "single";
+      return c.json({ mode: result.mode, framework: result.framework, loop });
     } catch {
-      return c.json({ mode: "tool", framework: null });
+      return c.json({ mode: "tool", framework: null, loop: "single" });
     }
   });
 
