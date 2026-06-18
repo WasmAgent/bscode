@@ -7,7 +7,7 @@
  */
 
 import type { AgentEvent } from "@wasmagent/core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { createApp } from "./app.js";
 import { MemKvStore } from "./platform.js";
 
@@ -78,24 +78,20 @@ vi.mock("./agents/multi-agent.js", () => ({
   },
 }));
 
-vi.mock("./models/registry.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./models/registry.js")>();
-  return {
-    ...actual,
-    resolveModelFromRegistry: vi.fn().mockResolvedValue({ modelId: "mock-model" }),
-    discoverLocalModels: vi.fn().mockResolvedValue([]),
-    getBuiltinModels: vi.fn().mockResolvedValue([
-      {
-        id: "claude-sonnet-4-6",
-        label: "Claude Sonnet 4.6",
-        provider: "anthropic",
-        available: true,
-        source: "builtin",
-      },
-    ]),
-    loadPreferences: vi.fn().mockResolvedValue({ primaryModelId: "claude-sonnet-4-6" }),
-  };
-});
+vi.mock("./models/registry.js", () => ({
+  resolveModelFromRegistry: vi.fn().mockResolvedValue({ modelId: "mock-model" }),
+  discoverLocalModels: vi.fn().mockResolvedValue([]),
+  getBuiltinModels: vi.fn().mockResolvedValue([
+    {
+      id: "claude-sonnet-4-6",
+      label: "Claude Sonnet 4.6",
+      provider: "anthropic",
+      available: true,
+      source: "builtin",
+    },
+  ]),
+  loadPreferences: vi.fn().mockResolvedValue({ primaryModelId: "claude-sonnet-4-6" }),
+}));
 
 vi.mock("./tools/web-search.js", () => ({
   createWebSearchTool: () => ({ name: "web_search", description: "search", execute: vi.fn() }),

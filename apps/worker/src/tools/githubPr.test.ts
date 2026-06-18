@@ -10,7 +10,7 @@
  *   POST /pulls
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { MemKvStore } from "../platform.js";
 import { createGitHubPrTool } from "./githubPr.js";
 

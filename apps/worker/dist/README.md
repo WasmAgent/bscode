@@ -1,1 +1,1 @@
-This folder contains the built output assets for the worker "bscode-worker" generated at 2026-06-08T12:05:42.453Z.
+This folder contains the built output assets for the worker "bscode-worker" generated at 2026-06-18T13:25:39.876Z.

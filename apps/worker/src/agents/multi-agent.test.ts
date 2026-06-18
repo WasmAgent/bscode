@@ -11,14 +11,11 @@
  */
 
 import type { AgentEvent, Model } from "@wasmagent/core";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { z } from "zod";
 
 // Mock ParallelForkJoinRunner: deterministic synthesised draft.
-vi.mock("@wasmagent/core", async (importActual) => {
-  const actual = await importActual<typeof import("@wasmagent/core")>();
-  return {
-    ...actual,
+vi.mock("@wasmagent/core", () => ({
     ParallelForkJoinRunner: class {
       constructor(public opts: unknown) {}
       async run() {
@@ -64,8 +61,7 @@ vi.mock("@wasmagent/core", async (importActual) => {
         } as AgentEvent;
       }
     },
-  };
-});
+}));
 
 // Mock the local createToolAgent — same shape as the real one for our purposes.
 vi.mock("./tool-agent.js", () => ({

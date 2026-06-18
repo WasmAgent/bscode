@@ -13,7 +13,7 @@
  *      the DAG scheduler can run it in parallel.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { createWebSearchTool } from "./web-search.js";
 
 const realFetch = globalThis.fetch;

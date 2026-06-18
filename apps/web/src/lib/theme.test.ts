@@ -12,7 +12,7 @@
  *   4. ThemeKey type is exported (compile-time check via `satisfies`).
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { type ThemeKey, theme } from "./theme";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;

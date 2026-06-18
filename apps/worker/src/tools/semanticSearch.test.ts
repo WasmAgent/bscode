@@ -7,7 +7,7 @@
  *  - tombstoned entries (deleted files) are filtered from results
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { createSemanticIndexer, createSemanticSearchTool } from "./semanticSearch.js";
 
 describe("createSemanticIndexer (in-process default)", () => {

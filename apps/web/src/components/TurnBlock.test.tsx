@@ -13,7 +13,7 @@
  * etc.) — see [[no-sap-references-in-public-repos]].
  */
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import type { ConversationTurn } from "@/lib/conversationTypes";
 import { cardDownloadName, formatBytes, TurnBlock } from "./TurnBlock";
 

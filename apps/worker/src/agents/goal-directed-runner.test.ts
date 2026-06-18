@@ -6,7 +6,7 @@
  * thin wiring.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import type { KvStore } from "../types.js";
 import { kvWorkspaceReader, snapshotWorkspaceEntries } from "./goal-directed-runner.js";
 

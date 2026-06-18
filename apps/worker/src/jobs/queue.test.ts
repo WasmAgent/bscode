@@ -12,7 +12,7 @@
  */
 
 import type { AgentEvent } from "@wasmagent/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { MemKvStore } from "../platform.js";
 import { JobQueue } from "./queue.js";
 

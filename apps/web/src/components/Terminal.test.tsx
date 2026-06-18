@@ -10,7 +10,7 @@
 
 import type { CardBlock } from "@wasmagent/ui-cards";
 import { render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "bun:test";
 
 // CardRenderer pulls D2 + react-markdown which are heavy and tend to
 // surface "older React" runtime conflicts in vitest. The render branches

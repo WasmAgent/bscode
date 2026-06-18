@@ -8,7 +8,7 @@
  * malformed JSON fails with 400 rather than a 500.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { POST } from "./route";
 
 function makeRequest(body: unknown, malformed = false): Request {

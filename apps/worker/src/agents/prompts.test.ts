@@ -13,7 +13,7 @@
  * file ops, build-result reverse channel.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { bscodeCodeAgentPrompt, bscodeFrameworkPrompt } from "./prompts.js";
 
 describe("bscodeCodeAgentPrompt", () => {

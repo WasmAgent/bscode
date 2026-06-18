@@ -4,26 +4,31 @@
  * local-service auto-discovery, and modelId → Model resolution.
  *
  * Module reset: registry.ts caches the encryption key + custom model
- * Map at module scope. We resetModules() per scenario so independent
+ * Map at module scope. We call _resetForTests() per scenario so independent
  * tests don't leak through the cache and observe each other's KV
  * state via stale references.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { MemKvStore } from "../platform.js";
-
-async function freshModule() {
-  vi.resetModules();
-  return import("./registry.js");
-}
+import {
+  _resetForTests,
+  discoverLocalModels,
+  getBuiltinModels,
+  listCustomModels,
+  loadPreferences,
+  registerCustomModel,
+  removeCustomModel,
+  resolveModelFromRegistry,
+  savePreferences,
+} from "./registry.js";
 
 describe("registerCustomModel + listCustomModels", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => _resetForTests());
 
   it("registers a custom model and lists it back", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel(
+    await registerCustomModel(
       {
         id: "my-llm",
         label: "My LLM",
@@ -33,7 +38,7 @@ describe("registerCustomModel + listCustomModels", () => {
       },
       kv
     );
-    const list = await reg.listCustomModels(kv);
+    const list = await listCustomModels(kv);
     expect(list.length).toBe(1);
     expect(list[0]).toMatchObject({
       id: "my-llm",
@@ -46,9 +51,8 @@ describe("registerCustomModel + listCustomModels", () => {
   });
 
   it("encrypts the apiKey at rest in KV (raw value never appears)", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel(
+    await registerCustomModel(
       { id: "m", label: "M", baseUrl: "https://x.example", apiKey: "VERY_SECRET_42" },
       kv
     );
@@ -59,28 +63,26 @@ describe("registerCustomModel + listCustomModels", () => {
   });
 
   it("registering with no apiKey stores the entry with apiKey omitted", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel(
+    await registerCustomModel(
       { id: "open", label: "Open", baseUrl: "https://open.example" },
       kv
     );
-    const list = await reg.listCustomModels(kv);
+    const list = await listCustomModels(kv);
     expect(list[0]?.apiKey).toBeUndefined();
   });
 
   it("registering the same id twice replaces the previous entry", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel(
+    await registerCustomModel(
       { id: "m", label: "v1", baseUrl: "https://a.example", apiKey: "k1" },
       kv
     );
-    await reg.registerCustomModel(
+    await registerCustomModel(
       { id: "m", label: "v2", baseUrl: "https://b.example", apiKey: "k2" },
       kv
     );
-    const list = await reg.listCustomModels(kv);
+    const list = await listCustomModels(kv);
     expect(list.length).toBe(1);
     expect(list[0]?.label).toBe("v2");
     expect(list[0]?.baseUrl).toBe("https://b.example");
@@ -88,41 +90,37 @@ describe("registerCustomModel + listCustomModels", () => {
 });
 
 describe("removeCustomModel", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => _resetForTests());
 
   it("returns true and drops the entry when id exists", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel({ id: "x", label: "X", baseUrl: "https://x.example" }, kv);
-    expect(await reg.removeCustomModel("x", kv)).toBe(true);
-    expect((await reg.listCustomModels(kv)).length).toBe(0);
+    await registerCustomModel({ id: "x", label: "X", baseUrl: "https://x.example" }, kv);
+    expect(await removeCustomModel("x", kv)).toBe(true);
+    expect((await listCustomModels(kv)).length).toBe(0);
   });
 
   it("returns false when id is unknown (no-op, no KV mutation)", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel({ id: "x", label: "X", baseUrl: "https://x.example" }, kv);
-    expect(await reg.removeCustomModel("ghost", kv)).toBe(false);
-    expect((await reg.listCustomModels(kv)).length).toBe(1);
+    await registerCustomModel({ id: "x", label: "X", baseUrl: "https://x.example" }, kv);
+    expect(await removeCustomModel("ghost", kv)).toBe(false);
+    expect((await listCustomModels(kv)).length).toBe(1);
   });
 });
 
 describe("savePreferences + loadPreferences", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => _resetForTests());
 
   it("returns null when no preferences are saved yet", async () => {
-    const reg = await freshModule();
-    expect(await reg.loadPreferences(new MemKvStore())).toBeNull();
+    expect(await loadPreferences(new MemKvStore())).toBeNull();
   });
 
   it("round-trips primary + economy model ids", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.savePreferences(
+    await savePreferences(
       { primaryModelId: "claude-sonnet-4-6", economyModelId: "claude-haiku-4-5-20251001" },
       kv
     );
-    const got = await reg.loadPreferences(kv);
+    const got = await loadPreferences(kv);
     expect(got).toEqual({
       primaryModelId: "claude-sonnet-4-6",
       economyModelId: "claude-haiku-4-5-20251001",
@@ -130,15 +128,14 @@ describe("savePreferences + loadPreferences", () => {
   });
 
   it("returns null when the stored payload is corrupted JSON (no throw)", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
     await kv.put("meta:preferences", "{not valid json");
-    expect(await reg.loadPreferences(kv)).toBeNull();
+    expect(await loadPreferences(kv)).toBeNull();
   });
 });
 
 describe("getBuiltinModels", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => _resetForTests());
 
   it("always lists 7 builtin entries (3 Claude + 2 DeepSeek + 2 Doubao); without keys all are available:false", async () => {
     // Pre-2026-06-17 we returned [] when no key was configured. The
@@ -147,8 +144,7 @@ describe("getBuiltinModels", () => {
     // (users couldn't see which providers exist + which key they'd
     // need). New contract: builtin entries are always returned; the
     // `available` flag reflects whether the matching key/baseUrl is set.
-    const reg = await freshModule();
-    const list = await reg.getBuiltinModels({}, new MemKvStore());
+    const list = await getBuiltinModels({}, new MemKvStore());
     expect(list.length).toBe(7);
     expect(list.every((m) => m.available === false)).toBe(true);
     expect(list.map((m) => m.id).sort()).toEqual([
@@ -163,8 +159,7 @@ describe("getBuiltinModels", () => {
   });
 
   it("anthropicApiKey unlocks all 3 Claude entries marked available", async () => {
-    const reg = await freshModule();
-    const list = await reg.getBuiltinModels({ anthropicApiKey: "sk-ant-test" }, new MemKvStore());
+    const list = await getBuiltinModels({ anthropicApiKey: "sk-ant-test" }, new MemKvStore());
     const claude = list.filter((m) => m.provider === "anthropic");
     expect(claude.length).toBe(3);
     expect(claude.every((m) => m.available)).toBe(true);
@@ -176,8 +171,7 @@ describe("getBuiltinModels", () => {
   });
 
   it("anthropicBaseUrl alone (proxy) lists Claude entries but marks them unavailable", async () => {
-    const reg = await freshModule();
-    const list = await reg.getBuiltinModels(
+    const list = await getBuiltinModels(
       { anthropicBaseUrl: "https://my-proxy.example" },
       new MemKvStore()
     );
@@ -187,16 +181,14 @@ describe("getBuiltinModels", () => {
   });
 
   it("deepseekApiKey adds 2 DeepSeek entries", async () => {
-    const reg = await freshModule();
-    const list = await reg.getBuiltinModels({ deepseekApiKey: "sk-d" }, new MemKvStore());
+    const list = await getBuiltinModels({ deepseekApiKey: "sk-d" }, new MemKvStore());
     const ds = list.filter((m) => m.provider === "deepseek");
     expect(ds.length).toBe(2);
     expect(ds.every((m) => m.available)).toBe(true);
   });
 
   it("doubaoApiKey adds 2 Doubao entries (Pro + Lite, 2.0 generation)", async () => {
-    const reg = await freshModule();
-    const list = await reg.getBuiltinModels({ doubaoApiKey: "k" }, new MemKvStore());
+    const list = await getBuiltinModels({ doubaoApiKey: "k" }, new MemKvStore());
     const db = list.filter((m) => m.provider === "doubao");
     expect(db.length).toBe(2);
     expect(db.every((m) => m.available)).toBe(true);
@@ -207,13 +199,12 @@ describe("getBuiltinModels", () => {
   });
 
   it("custom models registered earlier appear with source=custom", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel(
+    await registerCustomModel(
       { id: "my-thing", label: "My Thing", baseUrl: "https://x.example" },
       kv
     );
-    const list = await reg.getBuiltinModels({}, kv);
+    const list = await getBuiltinModels({}, kv);
     const custom = list.find((m) => m.id === "my-thing");
     expect(custom?.source).toBe("custom");
     expect(custom?.baseUrl).toBe("https://x.example");
@@ -221,18 +212,16 @@ describe("getBuiltinModels", () => {
 });
 
 describe("resolveModelFromRegistry", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => _resetForTests());
 
   it("returns null when the requested model needs anthropic but no key is set", async () => {
-    const reg = await freshModule();
     expect(
-      await reg.resolveModelFromRegistry("claude-sonnet-4-6", {}, new MemKvStore())
+      await resolveModelFromRegistry("claude-sonnet-4-6", {}, new MemKvStore())
     ).toBeNull();
   });
 
   it("resolves a Claude model when anthropicApiKey is present", async () => {
-    const reg = await freshModule();
-    const m = await reg.resolveModelFromRegistry(
+    const m = await resolveModelFromRegistry(
       "claude-sonnet-4-6",
       { anthropicApiKey: "sk-ant" },
       new MemKvStore()
@@ -242,11 +231,10 @@ describe("resolveModelFromRegistry", () => {
   });
 
   it("returns null for explicit deepseek request without key (no silent provider switch)", async () => {
-    const reg = await freshModule();
     // Even though anthropicApiKey is present, an explicit deepseek-* request
     // MUST NOT silently degrade to Anthropic.
     expect(
-      await reg.resolveModelFromRegistry(
+      await resolveModelFromRegistry(
         "deepseek-v4-pro",
         { anthropicApiKey: "sk-ant" },
         new MemKvStore()
@@ -255,9 +243,8 @@ describe("resolveModelFromRegistry", () => {
   });
 
   it("returns null for explicit doubao request without doubao key", async () => {
-    const reg = await freshModule();
     expect(
-      await reg.resolveModelFromRegistry(
+      await resolveModelFromRegistry(
         "doubao-seed-2-0-pro",
         { anthropicApiKey: "sk-ant" },
         new MemKvStore()
@@ -266,15 +253,13 @@ describe("resolveModelFromRegistry", () => {
   });
 
   it("returns null for explicit gpt-* request when no matching custom model exists", async () => {
-    const reg = await freshModule();
     expect(
-      await reg.resolveModelFromRegistry("gpt-4o", { anthropicApiKey: "sk-ant" }, new MemKvStore())
+      await resolveModelFromRegistry("gpt-4o", { anthropicApiKey: "sk-ant" }, new MemKvStore())
     ).toBeNull();
   });
 
   it("falls back to Claude Sonnet when modelId is undefined and Anthropic key is set", async () => {
-    const reg = await freshModule();
-    const m = await reg.resolveModelFromRegistry(
+    const m = await resolveModelFromRegistry(
       undefined,
       { anthropicApiKey: "sk-ant" },
       new MemKvStore()
@@ -283,19 +268,17 @@ describe("resolveModelFromRegistry", () => {
   });
 
   it("resolves a registered custom model by id", async () => {
-    const reg = await freshModule();
     const kv = new MemKvStore();
-    await reg.registerCustomModel(
+    await registerCustomModel(
       { id: "my-llm", label: "My LLM", baseUrl: "https://x.example", apiKey: "k" },
       kv
     );
-    const m = await reg.resolveModelFromRegistry("my-llm", {}, kv);
+    const m = await resolveModelFromRegistry("my-llm", {}, kv);
     expect(m).not.toBeNull();
   });
 
   it("resolves a local: model id by parsing host/model from the id", async () => {
-    const reg = await freshModule();
-    const m = await reg.resolveModelFromRegistry(
+    const m = await resolveModelFromRegistry(
       "local:localhost:11434/llama3:latest",
       {},
       new MemKvStore()
@@ -304,16 +287,15 @@ describe("resolveModelFromRegistry", () => {
   });
 
   it("returns null for malformed local: id (missing slash)", async () => {
-    const reg = await freshModule();
     expect(
-      await reg.resolveModelFromRegistry("local:localhost-no-slash", {}, new MemKvStore())
+      await resolveModelFromRegistry("local:localhost-no-slash", {}, new MemKvStore())
     ).toBeNull();
   });
 });
 
 describe("discoverLocalModels", () => {
   const realFetch = globalThis.fetch;
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => _resetForTests());
   afterEach(() => {
     globalThis.fetch = realFetch;
   });
@@ -322,8 +304,7 @@ describe("discoverLocalModels", () => {
     globalThis.fetch = vi.fn(() =>
       Promise.reject(new Error("ECONNREFUSED"))
     ) as unknown as typeof globalThis.fetch;
-    const reg = await freshModule();
-    const list = await reg.discoverLocalModels();
+    const list = await discoverLocalModels();
     expect(list).toEqual([]);
   });
 
@@ -343,8 +324,7 @@ describe("discoverLocalModels", () => {
       return Promise.reject(new Error("ECONNREFUSED"));
     }) as unknown as typeof globalThis.fetch;
 
-    const reg = await freshModule();
-    const list = await reg.discoverLocalModels();
+    const list = await discoverLocalModels();
     expect(list.length).toBe(2);
     expect(list.every((m) => m.provider === "ollama")).toBe(true);
     expect(list.map((m) => m.label).sort()).toEqual(["Ollama · llama3:8b", "Ollama · qwen2:7b"]);
@@ -360,8 +340,7 @@ describe("discoverLocalModels", () => {
       return Promise.reject(new Error("ECONNREFUSED"));
     }) as unknown as typeof globalThis.fetch;
 
-    const reg = await freshModule();
-    const list = await reg.discoverLocalModels();
+    const list = await discoverLocalModels();
     expect(list.length).toBe(30);
   });
 
@@ -369,7 +348,6 @@ describe("discoverLocalModels", () => {
     globalThis.fetch = vi.fn(() =>
       Promise.resolve(new Response("nope", { status: 503 }))
     ) as unknown as typeof globalThis.fetch;
-    const reg = await freshModule();
-    expect(await reg.discoverLocalModels()).toEqual([]);
+    expect(await discoverLocalModels()).toEqual([]);
   });
 });

@@ -13,7 +13,7 @@
  *      cannot leak through Referer headers / server logs.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { GET } from "./route";
 
 const ORIG_ENV = { ...process.env };

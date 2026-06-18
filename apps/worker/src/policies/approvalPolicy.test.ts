@@ -12,7 +12,7 @@
  */
 
 import type { ToolDefinition } from "@wasmagent/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { z } from "zod";
 import { ApprovalPolicy, applyApprovalPolicy, PolicyPresets } from "./approvalPolicy.js";
 

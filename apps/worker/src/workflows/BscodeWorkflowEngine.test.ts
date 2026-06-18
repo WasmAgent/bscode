@@ -11,7 +11,7 @@
  */
 
 import { KvWorkflowStateStore, MemoryKvBackend } from "@wasmagent/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { BscodeWorkflowEngine } from "./BscodeWorkflowEngine.js";
 
 describe("BscodeWorkflowEngine — cross-job DAG", () => {

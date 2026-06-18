@@ -8,7 +8,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { JobsPanel } from "./JobsPanel.js";
 
 interface MockJob {
@@ -62,17 +62,19 @@ function makeFetch(): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
+const realFetch = globalThis.fetch;
+
 beforeEach(() => {
   mockJobs = [];
   mockStats = { running: 0, pending: 0, total: 0 };
   postedBodies = [];
   deletedIds = [];
   detailFetchCount = 0;
-  vi.stubGlobal("fetch", makeFetch());
+  globalThis.fetch = makeFetch() as unknown as typeof globalThis.fetch;
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  globalThis.fetch = realFetch;
 });
 
 describe("JobsPanel", () => {
@@ -154,10 +156,8 @@ describe("JobsPanel", () => {
   });
 
   it("surfaces error on failed list fetch", async () => {
-    vi.stubGlobal(
-      "fetch",
-      (async () => new Response("oops", { status: 500 })) as unknown as typeof fetch
-    );
+    globalThis.fetch = (async () =>
+      new Response("oops", { status: 500 })) as unknown as typeof globalThis.fetch;
     render(<JobsPanel sessionId="s1" workerUrl="http://test" />);
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeTruthy();

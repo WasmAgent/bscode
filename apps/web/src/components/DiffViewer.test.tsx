@@ -10,7 +10,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 
 // ── Capture what DiffViewer hands to the Editor ─────────────────────────────
 let capturedEditorProps: Array<Record<string, unknown>> = [];

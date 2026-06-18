@@ -17,7 +17,7 @@
  *   8. discardJobSession removes both working copy and snapshot
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { MemKvStore } from "../platform.js";
 import {
   deriveJobSessionId,

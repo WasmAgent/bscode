@@ -9,7 +9,7 @@
  */
 
 import type { BrowserSession } from "@wasmagent/tools-browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import { _resetForTests, getBuildResult } from "../build-results.js";
 import { MemKvStore } from "../platform.js";
 import type { VisionJudge } from "../visionJudge.js";

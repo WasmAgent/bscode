@@ -10,7 +10,7 @@
  *   - bubble unrecoverable errors (404 on tree, etc.) as thrown exceptions
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { MemKvStore } from "../platform.js";
 import { importGithubRepo } from "./githubImport.js";
 

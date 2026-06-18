@@ -6,7 +6,7 @@
  */
 
 import type { Model, ModelMessage, StreamEvent } from "@wasmagent/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { createModelVisionJudge, parseJudgeReply } from "./visionJudge.js";
 
 function fakeModel(reply: string): Model {

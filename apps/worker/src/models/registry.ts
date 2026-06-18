@@ -97,6 +97,12 @@ async function decryptValue(packed: string, key: CryptoKey): Promise<string> {
 // In-memory cache (populated from KV on first access)
 let customModelCache: Map<string, CustomModelConfig> | null = null;
 
+/** Reset module-level caches. For use in tests only. */
+export function _resetForTests(): void {
+  encKey = null;
+  customModelCache = null;
+}
+
 async function loadCustomModels(store: KvStore): Promise<Map<string, CustomModelConfig>> {
   if (customModelCache) return customModelCache;
   const raw = await store.get(CUSTOM_MODELS_KV);

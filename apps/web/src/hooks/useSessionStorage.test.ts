@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { AgentConfig } from "./useAgent";
 import { useSessionStorage } from "./useSessionStorage";
 

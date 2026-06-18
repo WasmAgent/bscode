@@ -16,7 +16,7 @@
  * Repeat-runnable, deterministic, no external services.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { createSemanticIndexer } from "./semanticSearch.js";
 
 interface Doc {

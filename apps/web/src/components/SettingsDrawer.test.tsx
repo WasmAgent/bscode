@@ -13,8 +13,8 @@
  * confirm the hook was called after Save).
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 
 const refreshWorkerUrlMock = vi.fn();
 
@@ -91,12 +91,18 @@ describe("SettingsDrawer — save flow", () => {
   it("Save flashes 'Saved ✓' and the flash clears after the timeout", async () => {
     render(<SettingsDrawer onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText(/^Save$/)).toBeTruthy());
-    fireEvent.click(screen.getByText(/^Save$/));
-    expect(screen.getByText(/Saved/)).toBeTruthy();
-    // The flash clears after 1.2s. Use a real-timer waitFor with a
-    // longer timeout — fake timers + React state updates need explicit
-    // act() wrapping that adds noise without catching anything new.
-    await waitFor(() => expect(screen.queryByText(/Saved/)).toBeNull(), { timeout: 2500 });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByText(/^Save$/));
+      expect(screen.getByText(/Saved/)).toBeTruthy();
+      // Advance past the 1.2s flash timeout in the component.
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.queryByText(/Saved/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("an empty Worker URL field saves the default fallback (never an empty string)", async () => {

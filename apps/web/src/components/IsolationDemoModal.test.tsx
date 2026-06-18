@@ -21,7 +21,7 @@
  *      paths the documentation page also points at.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { IsolationDemoModal } from "./IsolationDemoModal.js";
 
 describe("IsolationDemoModal (D7)", () => {

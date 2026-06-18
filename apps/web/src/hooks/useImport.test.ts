@@ -15,7 +15,7 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import JSZip from "jszip";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { useImport } from "./useImport";
 
 const realFetch = globalThis.fetch;
@@ -196,11 +196,15 @@ describe("useImport — importFromZip filtering", () => {
     // the finally block so the UI doesn't get stuck on a spinner.
     const bad = new File([new Uint8Array([0, 1, 2])], "bad.zip", { type: "application/zip" });
     const { result } = renderHook(() => useImport());
-    await expect(
-      act(async () => {
+    let threw = false;
+    try {
+      await act(async () => {
         await result.current.importFromZip(bad);
-      })
-    ).rejects.toBeTruthy();
+      });
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
     expect(result.current.importing).toBe(false);
   });
 });

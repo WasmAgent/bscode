@@ -14,7 +14,7 @@
  */
 
 import type { BrowserSession } from "@wasmagent/tools-browser";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { runVisualInteraction, runVisualVerification } from "./visualVerifier.js";
 
 function stubSession(overrides: Partial<BrowserSession> = {}): BrowserSession {

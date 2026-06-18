@@ -10,7 +10,7 @@
  *   - tool advertises readOnly + idempotent so the runner can cache it
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { _resetForTests, putBuildResult } from "../build-results.js";
 import { createReadBuildResultTool, formatBuildResult } from "./build-result.js";
 

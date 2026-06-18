@@ -9,7 +9,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { FsKvStore, MemKvStore, SessionKvStore } from "./platform.js";
 
 // ── MemKvStore ────────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ describe("MemKvStore", () => {
   });
 
   it("delete is idempotent on missing key", async () => {
-    await expect(kv.delete("nope")).resolves.not.toThrow();
+    await expect(kv.delete("nope")).resolves.toBeUndefined();
   });
 
   it("lists keys by prefix", async () => {
@@ -131,7 +131,7 @@ describe("FsKvStore", () => {
   });
 
   it("delete is idempotent on missing file", async () => {
-    await expect(kv.delete("file:nope.ts")).resolves.not.toThrow();
+    await expect(kv.delete("file:nope.ts")).resolves.toBeUndefined();
   });
 
   it("lists files under a prefix", async () => {

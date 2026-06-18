@@ -3,7 +3,7 @@
  */
 
 import { FileTreeManager } from "@wasmagent/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { MemKvStore } from "../platform.js";
 import { createListFileVersionsTool, createRevertFileTool, createWriteFileTool } from "./index.js";
 

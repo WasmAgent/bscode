@@ -13,7 +13,7 @@
  * integration test, not a unit test. We only assert the wiring path.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { createApp } from "./app.js";
 import { MemKvStore } from "./platform.js";
 

@@ -17,7 +17,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { FrameworkApiMap } from "./FrameworkApiMap";
 
 let writtenClipboard: string[] = [];
@@ -207,7 +207,9 @@ describe("FrameworkApiMap — mark + export", () => {
     render(<FrameworkApiMap open={true} onClose={() => {}} />);
     fireEvent.click(screen.getAllByText(/^☆ mark$/)[0]);
     fireEvent.click(screen.getByRole("button", { name: /Export minimal project/ }));
-    await waitFor(() => expect(triggeredDownloadName).toBe("agentkit-starter.zip"));
+    await waitFor(() => expect(triggeredDownloadName).toBe("agentkit-starter.zip"), {
+      timeout: 5000,
+    });
     expect(createdObjectUrls.length).toBe(1);
     // revokeObjectURL is the cleanup the production code is responsible for —
     // a regression that drops it would leak blob memory across exports.

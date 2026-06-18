@@ -328,7 +328,7 @@ export function createApp(config: AppConfig) {
   // ── Capabilities ──────────────────────────────────────────────────────────
   app.get("/capabilities", (c) =>
     c.json({
-      agentModes: ["code", "tool", "multi", "ptc"],
+      agentModes: ["code", "tool", "multi", "ptc", "goalDirected"],
       codeLanguages: ["js", "python", "node"],
       enhancements: ["self-consistency", "reflect-refine", "budget-forcing"],
       features: [
