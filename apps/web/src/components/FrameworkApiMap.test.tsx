@@ -16,9 +16,23 @@
  * an actual download. JSZip is real (the production bundle has it).
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FrameworkApiMap } from "./FrameworkApiMap";
+
+// Stub jszip so generateAsync resolves immediately (avoids 5s timeout in happy-dom).
+vi.mock("jszip", () => ({
+  default: class {
+    #files: Record<string, string> = {};
+    file(path: string, content: string) {
+      this.#files[path] = content;
+      return this;
+    }
+    async generateAsync() {
+      return new Blob([JSON.stringify(this.#files)], { type: "application/zip" });
+    }
+  },
+}));
 
 let writtenClipboard: string[] = [];
 let createdObjectUrls: string[] = [];
