@@ -156,3 +156,100 @@ describe("TurnBlock — pure helpers", () => {
     ).toBe("hello-world-.md");
   });
 });
+
+describe("TurnBlock — Goal-directed timeline", () => {
+  it("renders the timeline with criteria, iteration counter, and verified outcome", () => {
+    const turn: ConversationTurn = {
+      ...baseTurn,
+      finalAnswer: "ok",
+      goalCriteria: [
+        {
+          id: "size",
+          description: "≥1500 bytes",
+          verify_method: "file_size_min",
+          arg: 1500,
+          path: "doc.md",
+        },
+        {
+          id: "depth",
+          description: "covers principle, types, applications",
+          verify_method: "llm_judge",
+          path: "doc.md",
+        },
+      ],
+      goalIteration: 2,
+      goalDone: {
+        outcome: "verified",
+        iterationCount: 2,
+        totalInputTokens: 800,
+        totalOutputTokens: 1200,
+      },
+    };
+    render(
+      <TurnBlock
+        turn={turn}
+        isActive={false}
+        onRetry={() => {}}
+        onPreviewCard={() => {}}
+        isFrameworkMode={false}
+      />
+    );
+    expect(screen.getByText(/Goal-directed/i)).toBeTruthy();
+    expect(screen.getByText(/iteration 2/)).toBeTruthy();
+    expect(screen.getByText(/✓ verified/)).toBeTruthy();
+    expect(screen.getByText(/file_size_min/)).toBeTruthy();
+    expect(screen.getByText(/llm_judge/)).toBeTruthy();
+    expect(screen.getByText(/≥1500 bytes/)).toBeTruthy();
+  });
+
+  it("does not render when no goal-directed state is set", () => {
+    const turn: ConversationTurn = {
+      ...baseTurn,
+      finalAnswer: "ok",
+    };
+    render(
+      <TurnBlock
+        turn={turn}
+        isActive={false}
+        onRetry={() => {}}
+        onPreviewCard={() => {}}
+        isFrameworkMode={false}
+      />
+    );
+    expect(screen.queryByText(/Goal-directed/i)).toBeNull();
+  });
+
+  it("shows the lastHint when the loop didn't fully verify", () => {
+    const turn: ConversationTurn = {
+      ...baseTurn,
+      finalAnswer: "ok",
+      goalCriteria: [
+        {
+          id: "size",
+          description: "≥1500 bytes",
+          verify_method: "file_size_min",
+          arg: 1500,
+          path: "doc.md",
+        },
+      ],
+      goalDone: {
+        outcome: "exhausted",
+        iterationCount: 5,
+        totalInputTokens: 2000,
+        totalOutputTokens: 3000,
+        lastHint: "- size: file doc.md is 800 bytes; criterion requires ≥1500",
+      },
+    };
+    render(
+      <TurnBlock
+        turn={turn}
+        isActive={false}
+        onRetry={() => {}}
+        onPreviewCard={() => {}}
+        isFrameworkMode={false}
+      />
+    );
+    expect(screen.getByText(/× exhausted/)).toBeTruthy();
+    expect(screen.getByText(/file doc.md is 800 bytes/)).toBeTruthy();
+  });
+});

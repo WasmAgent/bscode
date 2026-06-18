@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { TurnBlock } from "@/components/TurnBlock";
-import type { ConversationTurn } from "@/lib/conversationTypes";
+import type { ConversationTurn, GoalCriterion, GoalDoneSummary } from "@/lib/conversationTypes";
 
 // react-markdown types are not yet updated for React 19. Same compat
 // shim ui-cards-react ships in MarkdownCard.tsx.
@@ -299,6 +299,41 @@ export default function Home() {
       .filter(Boolean) as string[];
     if (kernelResults.length > 0) {
       setPreview((prev) => ({ ...prev, logs: kernelResults }));
+    }
+
+    // 2026-06-18 — Goal-directed status events:
+    //   - criteria_proposed → store the criteria on the turn
+    //   - goal_iteration_start → bump iteration counter
+    //   - goal_directed_done → final summary (outcome + tokens)
+    // The worker emits these on the `status` channel via
+    // `GoalDirectedAgent`. They are absent for non-goal runs.
+    let latestCriteria: GoalCriterion[] | undefined;
+    let latestIter: number | undefined;
+    let latestDone: GoalDoneSummary | undefined;
+    for (const ev of rawEvents) {
+      if (ev.event === "criteria_proposed") {
+        const d = ev.data as { criteria?: GoalCriterion[] } | undefined;
+        if (d?.criteria) latestCriteria = d.criteria;
+      } else if (ev.event === "goal_iteration_start") {
+        const d = ev.data as { iteration?: number } | undefined;
+        if (typeof d?.iteration === "number") latestIter = d.iteration;
+      } else if (ev.event === "goal_directed_done") {
+        latestDone = ev.data as unknown as GoalDoneSummary;
+      }
+    }
+    if (latestCriteria || latestIter !== undefined || latestDone) {
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === currentTurnId.current
+            ? {
+                ...t,
+                ...(latestCriteria ? { goalCriteria: latestCriteria } : {}),
+                ...(latestIter !== undefined ? { goalIteration: latestIter } : {}),
+                ...(latestDone ? { goalDone: latestDone } : {}),
+              }
+            : t
+        )
+      );
     }
 
     // Progressive artifact streaming (v0.dev pattern) — collect artifact_delta events
@@ -930,6 +965,39 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
                 {mode === "code" ? "Code" : "Tool"}
               </button>
             ))}
+            {/*
+              2026-06-18 — "Goal" mode opts the run into agentkit's
+              GoalDirectedAgent: scout → synth criteria → execute →
+              verify (deterministic + LLM-judge with adversarial
+              defaults) → loop with hint until verified or maxIter.
+              Cost is +10-15% on simple tasks, 3-5× on hard ones; opt-in
+              by design. See agentkit-js/docs/guides/goal-directed.md.
+            */}
+            <button
+              type="button"
+              onClick={() =>
+                setConfig((c) => ({ ...c, agentMode: "goalDirected", framework: null }))
+              }
+              title="Loop until verifier accepts the artifact"
+              style={{
+                padding: "3px 8px",
+                borderRadius: 3,
+                fontSize: 10,
+                border: "none",
+                cursor: "pointer",
+                background:
+                  config.agentMode === "goalDirected" && !config.framework
+                    ? "#bc8cff33"
+                    : "transparent",
+                color:
+                  config.agentMode === "goalDirected" && !config.framework
+                    ? "#bc8cff"
+                    : theme.textMuted,
+                fontWeight: 600,
+              }}
+            >
+              🎯 Goal
+            </button>
             <button
               type="button"
               onClick={() =>

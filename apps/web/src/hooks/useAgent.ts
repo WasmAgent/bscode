@@ -19,7 +19,7 @@ export interface TokenStats {
 }
 
 export interface AgentConfig {
-  agentMode: "code" | "tool" | "multi" | "ptc";
+  agentMode: "code" | "tool" | "multi" | "ptc" | "goalDirected";
   modelId: string;
   maxSteps: number;
   codeLanguage?: "js" | "python" | "node";
@@ -57,6 +57,12 @@ export interface AgentConfig {
   maxDurationMs?: number;
   /** Auto-compact history when estimated tokens exceed this threshold (e.g. 80000) */
   autoCompactThreshold?: number;
+  /**
+   * 2026-06-18 — When `agentMode === "goalDirected"`, cap on goal-loop
+   * iterations. Each iteration = 1 ToolCallingAgent run + 1 verify pass.
+   * Defaults server-side; client may override.
+   */
+  maxIterations?: number;
 }
 
 export interface ClassifyResult {
@@ -238,6 +244,9 @@ export function useAgent(
         ...(stopConditions?.length ? { stopConditions } : {}),
         ...(effectiveConfig.enhancementPolicy
           ? { enhancementPolicy: effectiveConfig.enhancementPolicy }
+          : {}),
+        ...(effectiveConfig.maxIterations !== undefined
+          ? { maxIterations: effectiveConfig.maxIterations }
           : {}),
         ...(effectiveConfig.scheduler ? { scheduler: effectiveConfig.scheduler } : {}),
         ...(effectiveConfig.maxBudgetTokens

@@ -1305,7 +1305,7 @@ or {"mode":"tool","framework":null}`;
     // Valid agentModes are the four documented in the RunBody type at the
     // bottom of this file. "framework" is NOT a separate mode here — the
     // framework field on the body is what selects scaffolding inside "tool".
-    const VALID_MODES = new Set(["code", "tool", "multi", "ptc"]);
+    const VALID_MODES = new Set(["code", "tool", "multi", "ptc", "goalDirected"]);
     if (agentMode && !VALID_MODES.has(agentMode)) {
       return c.json({ error: `agentMode must be one of: ${[...VALID_MODES].join(", ")}` }, 400);
     }
@@ -1591,6 +1591,30 @@ or {"mode":"tool","framework":null}`;
           }
         } else if (agentMode === "ptc") {
           agentRun = ptcAgentRun(model, policedTools, finalTask, codeLanguage, config);
+        } else if (agentMode === "goalDirected") {
+          // 2026-06-18 — opt-in loop where the agent synthesises its own
+          // success criteria, verifies them mechanically (and with an
+          // adversarial-defaulted LLM judge as last resort), retries with
+          // the verifier's hint. Fixes the "outline-itis" pattern where
+          // a one-shot tool-call returns 700 bytes when the user wanted a
+          // 1500-word write-up. See [[bscode-md-as-card-2026-06-18]] for
+          // the originating UX bug and `agentkit-js/docs/guides/goal-directed.md`
+          // for the architecture.
+          //
+          // Synth + judge models default to the executor model. A future
+          // enhancement is to wire haiku-for-synth + sonnet-for-judge from
+          // the model registry without touching this dispatch code.
+          const { runGoalDirected } = await import("./agents/goal-directed-runner.js");
+          agentRun = await runGoalDirected({
+            task: finalTask,
+            model,
+            tools: policedTools,
+            ...(config.filesKv ? { filesKv: config.filesKv } : {}),
+            ...(agentExtras.maxSteps !== undefined
+              ? { maxStepsPerIteration: agentExtras.maxSteps }
+              : {}),
+            ...(body.maxIterations !== undefined ? { maxIterations: body.maxIterations } : {}),
+          });
         } else {
           const agent =
             agentMode === "tool"
@@ -1787,7 +1811,7 @@ or {"mode":"tool","framework":null}`;
 
 interface RunBody {
   task: string;
-  agentMode?: "code" | "tool" | "multi" | "ptc";
+  agentMode?: "code" | "tool" | "multi" | "ptc" | "goalDirected";
   modelId?: string;
   modelIds?: string[];
   maxSteps?: number;
@@ -1894,6 +1918,15 @@ interface RunBody {
    * place to read the persisted log from and falls back to a fresh run.
    */
   resumeTraceId?: string;
+
+  // ── 2026-06-18 — Goal-directed loop (agentMode: "goalDirected") ─────────
+  /**
+   * Cap on goal-loop iterations when `agentMode === "goalDirected"`. Each
+   * iteration runs one full ToolCallingAgent then re-evaluates the
+   * synthesised criteria. Defaults to 5 (set by `GoalDirectedAgent`
+   * itself). Total work ≤ maxIterations × maxSteps.
+   */
+  maxIterations?: number;
 }
 
 function getModelId(model: Model): string {

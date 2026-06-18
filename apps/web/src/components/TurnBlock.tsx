@@ -4,7 +4,7 @@ import { parseCardBlocks, upgradeCardSyntax } from "@agentkit-js/ui-cards";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ClassifyResult, ConversationTurn } from "@/lib/conversationTypes";
+import type { ClassifyResult, ConversationTurn, GoalCriterion } from "@/lib/conversationTypes";
 import { theme } from "@/lib/theme";
 
 // react-markdown types are not yet updated for React 19. Same compat
@@ -26,6 +26,132 @@ function modeLabel(d: ClassifyResult | null): string {
   if (d.mode === "code") return "Code + WASM";
   if (d.mode === "tool") return "Tool + DAG";
   return `Framework · ${d.framework ?? "react"}`;
+}
+
+/**
+ * 2026-06-18 — Compact timeline of the goal-directed loop's phases.
+ * Renders inline above the agent's final answer when this turn ran with
+ * `agentMode === "goalDirected"`. The timeline is the visible
+ * differentiator between "the agent guesses it's done" and "the agent
+ * checked against criteria it published before running" — it is the
+ * UX surface for the differentiation argued in
+ * agentkit-js/docs/guides/goal-directed.md.
+ */
+function GoalTimeline(props: {
+  criteria?: GoalCriterion[];
+  iteration?: number;
+  done?: ConversationTurn["goalDone"];
+  isActive: boolean;
+}) {
+  const { criteria, iteration, done, isActive } = props;
+  if (!criteria && !iteration && !done) return null;
+  const outcomeColor: Record<string, string> = {
+    verified: "#3fb950",
+    exhausted: "#e3b341",
+    budget: "#e3b341",
+    error: "#f85149",
+    "single-shot": "#9b9bff",
+  };
+  return (
+    <div
+      style={{
+        marginBottom: 8,
+        background: "#0d1117",
+        border: "1px solid #bc8cff44",
+        borderRadius: 6,
+        padding: "8px 12px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: "#bc8cff",
+          marginBottom: 6,
+          textTransform: "uppercase",
+          letterSpacing: 0.6,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        🎯 Goal-directed
+        {iteration !== undefined && (
+          <span style={{ color: theme.textMuted, textTransform: "none", letterSpacing: 0 }}>
+            · iteration {iteration}
+          </span>
+        )}
+        {done && (
+          <span
+            style={{
+              marginLeft: "auto",
+              color: outcomeColor[done.outcome] ?? theme.textMuted,
+              textTransform: "none",
+              letterSpacing: 0,
+              fontWeight: 600,
+            }}
+          >
+            {done.outcome === "verified"
+              ? "✓ verified"
+              : done.outcome === "single-shot"
+                ? "single shot"
+                : `× ${done.outcome}`}
+          </span>
+        )}
+      </div>
+      {criteria && criteria.length > 0 && (
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+          }}
+        >
+          {criteria.map((c) => (
+            <li
+              key={c.id}
+              style={{
+                fontSize: 11,
+                color: "#c9d1d9",
+                fontFamily: "JetBrains Mono, monospace",
+                display: "flex",
+                alignItems: "baseline",
+                gap: 6,
+              }}
+            >
+              <span style={{ color: theme.textMuted }}>·</span>
+              <span style={{ color: "#58a6ff" }}>{c.verify_method}</span>
+              <span>{c.description}</span>
+              {c.path && (
+                <span style={{ color: theme.textMuted, marginLeft: "auto" }}>{c.path}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {done?.lastHint && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            color: "#e3b341",
+            fontFamily: "JetBrains Mono, monospace",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {done.lastHint}
+        </div>
+      )}
+      {isActive && !done && (
+        <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 4 }}>
+          <span style={{ animation: "pulse 1.2s infinite" }}>verifying…</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Format a byte count as 1.2 KB / 856 B / 3.4 MB. Pure for testing. */
@@ -163,6 +289,13 @@ export function TurnBlock({
           {isActive ? "⟳" : turn.status === "error" ? "✗" : "✓"}
         </div>
         <div style={{ flex: 1 }}>
+          {/* Goal-directed timeline — only present when this turn ran with agentMode=goalDirected */}
+          <GoalTimeline
+            criteria={turn.goalCriteria}
+            iteration={turn.goalIteration}
+            done={turn.goalDone}
+            isActive={isActive}
+          />
           {/* Plan section — bolt.new <boltThinking> pattern: show plan before files are written */}
           {turn.planText && (
             <div style={{ marginBottom: 8 }}>
