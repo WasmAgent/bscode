@@ -2,7 +2,7 @@
 import type { AgentMessage } from "@agentkit-js/react";
 import type { CardBlock } from "@agentkit-js/ui-cards";
 import { CardRenderer, ChatMessage } from "@agentkit-js/ui-cards-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { theme } from "@/lib/theme";
 
 interface AgentEventMinimal {
@@ -51,6 +51,15 @@ export interface PreviewContent {
   error?: string;
   /** A card block selected from the conversation to display full-size */
   card?: CardBlock;
+  /**
+   * 2026-06-18: Multiple cards to display, one per produced artefact.
+   * Used by goalDirected mode to surface every `write_file` output as a
+   * navigable card in the right pane (Claude Code web pattern). When
+   * `cards` has exactly one entry the renderer falls through to the
+   * existing single-`card` slot so the layout is identical for the
+   * common 1-file case.
+   */
+  cards?: CardBlock[];
 }
 
 interface TerminalProps {
@@ -84,6 +93,14 @@ export function Terminal({
   wcStatus,
 }: TerminalProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // 2026-06-18: Active tab when preview.cards has multiple files. Reset
+  // to 0 when the cards array identity changes (a new turn produced a
+  // fresh artefact set) so we don't carry over a stale index.
+  const [activeCardIdx, setActiveCardIdx] = useState(0);
+  useEffect(() => {
+    setActiveCardIdx(0);
+  }, [preview?.cards]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -141,12 +158,16 @@ export function Terminal({
       !preview?.url &&
       !preview?.html &&
       !preview?.card &&
+      !preview?.cards?.length &&
       wcStatus &&
       wcStatus !== "idle" &&
       wcStatus !== "ready" &&
       wcStatus !== "error"
     ) {
-      const labelMap: Record<"booting" | "installing" | "starting", { title: string; sub: string }> = {
+      const labelMap: Record<
+        "booting" | "installing" | "starting",
+        { title: string; sub: string }
+      > = {
         booting: {
           title: "Booting WebContainer…",
           sub: "Mounting an in-tab Service Worker filesystem for the generated code.",
@@ -234,6 +255,88 @@ export function Terminal({
       );
     }
 
+    // 2026-06-18: Multiple cards (goalDirected pattern) → render with
+    // a tab strip; single-card case below handles cards.length === 1
+    // via the existing single-`card` slot for layout parity.
+    if (preview?.cards && preview.cards.length > 1) {
+      const active = preview.cards[activeCardIdx] ?? preview.cards[0];
+      if (!active) return null;
+      return (
+        <div
+          style={{
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            background: "#f8fafc",
+          }}
+        >
+          <div
+            style={{
+              background: "#161b22",
+              borderBottom: "1px solid #30363d",
+              padding: "4px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              flexShrink: 0,
+              overflowX: "auto",
+            }}
+          >
+            <span
+              style={{
+                ...mono,
+                fontSize: 10,
+                color: theme.textMuted,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+                marginRight: 8,
+              }}
+            >
+              Artefacts ({preview.cards.length})
+            </span>
+            {preview.cards.map((c, i) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setActiveCardIdx(i)}
+                style={{
+                  ...mono,
+                  fontSize: 10,
+                  padding: "2px 8px",
+                  border: "none",
+                  borderRadius: 3,
+                  background: i === activeCardIdx ? "#1f6feb33" : "transparent",
+                  color: i === activeCardIdx ? "#58a6ff" : theme.textMuted,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+                title={c.meta ?? c.id}
+              >
+                {c.meta ?? c.id}
+              </button>
+            ))}
+          </div>
+          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <CardRenderer
+              card={active}
+              onRenderD2={renderD2}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                margin: 0,
+                borderRadius: 0,
+                border: "none",
+                boxShadow: "none",
+                height: "100%",
+              }}
+              fillHeight
+            />
+          </div>
+        </div>
+      );
+    }
+
     // Card selected from conversation → render full-size
     if (preview?.card) {
       return (
@@ -297,7 +400,14 @@ export function Terminal({
     // Nothing to show yet — but WebContainers may be running (show its terminal)
     if (!preview?.html && !preview?.url && !preview?.output && !preview?.error) {
       if (allLines.length > 0) {
-        // WebContainers is installing/starting — show live terminal output
+        // 2026-06-18: Only show the WebContainers "building…" header when
+        // the lines genuinely came from a WebContainer install/start
+        // (wcLines), not when they're plain tool_result echoes from a
+        // tool/goalDirected run leaking into the same preview.logs slot.
+        // The user-reported regression had the right pane saying
+        // "WEBCONTAINERS · building…" forever for a goalDirected run
+        // that never touched WebContainers.
+        const isWcRun = (wcLines?.length ?? 0) > 0;
         return (
           <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <div
@@ -320,18 +430,20 @@ export function Terminal({
                   letterSpacing: 0.8,
                 }}
               >
-                WebContainers
+                {isWcRun ? "WebContainers" : "Output"}
               </span>
-              <span
-                style={{
-                  ...mono,
-                  fontSize: 10,
-                  color: "#e3b341",
-                  animation: "pulse 1.2s ease-in-out infinite",
-                }}
-              >
-                ● building…
-              </span>
+              {isWcRun && (
+                <span
+                  style={{
+                    ...mono,
+                    fontSize: 10,
+                    color: "#e3b341",
+                    animation: "pulse 1.2s ease-in-out infinite",
+                  }}
+                >
+                  ● building…
+                </span>
+              )}
             </div>
             <div style={{ ...container, flex: 1 }}>
               {allLines.map((line, i) => (

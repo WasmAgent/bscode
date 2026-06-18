@@ -75,6 +75,16 @@ const TOAST_COLORS: Record<Toast["kind"], string> = {
 
 const mono: React.CSSProperties = { fontFamily: "JetBrains Mono, monospace" };
 
+/**
+ * Map a workspace file path to a CardType for goalDirected preview.
+ * Defaults to markdown — covers .md, .txt, and any unknown extension
+ * (CardRenderer's markdown branch renders plain text fine). .d2 files
+ * get the d2 renderer for live diagram preview.
+ */
+function cardTypeForPath(path: string): CardBlock["type"] {
+  return /\.d2$/i.test(path) ? "d2" : "markdown";
+}
+
 const iconBtn = (color = theme.textMuted): React.CSSProperties => ({
   padding: "4px 8px",
   borderRadius: 3,
@@ -385,6 +395,70 @@ export default function Home() {
     }
   }, [isRunning, config.framework, runProject, addToast]);
 
+  // ── goalDirected mode → fetch produced files into preview cards ───────────
+  // 2026-06-18 (user-reported regression): the right pane only showed a
+  // 1-line `[write_file] OK: written N chars to <file>` ack — the actual
+  // file content the agent produced was never surfaced. Mirrors the
+  // Claude Code web pane pattern: when the loop finishes and the
+  // outcome is verified/single-shot, fetch each `write_file` target via
+  // /files/:path and pack them into preview.cards. Framework mode is
+  // unaffected (it owns preview via the WebContainers URL effect above);
+  // tool mode is unaffected (it relies on inline card:* blocks the
+  // model itself emits in the chat reply).
+  const goalFetchedTurnRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (config.framework) return;
+    if (config.agentMode !== "goalDirected") return;
+    const turnId = currentTurnId.current;
+    if (!turnId) return;
+    if (goalFetchedTurnRef.current === turnId) return;
+    const turn = turns.find((t) => t.id === turnId);
+    if (!turn?.goalDone) return;
+    const outcome = turn.goalDone.outcome;
+    if (outcome !== "verified" && outcome !== "single-shot") return;
+    const paths = turn.writtenFiles ?? [];
+    if (paths.length === 0) return;
+
+    // Lock against re-fetching the same turn (rawEvents updates during
+    // the run can re-trigger this effect after goalDone first lands).
+    goalFetchedTurnRef.current = turnId;
+
+    const workerUrl = getWorkerUrl();
+    let cancelled = false;
+    void (async () => {
+      const fetched: CardBlock[] = [];
+      for (let i = 0; i < paths.length; i++) {
+        const p = paths[i] as string;
+        try {
+          const res = await fetch(`${workerUrl}/files/${encodeURI(p)}`);
+          if (!res.ok) {
+            addToast(`Could not preview ${p}: HTTP ${res.status}`, "warn");
+            continue;
+          }
+          const body = await res.text();
+          fetched.push({
+            id: `goal-card-${i}`,
+            type: cardTypeForPath(p),
+            content: body,
+            meta: p,
+          });
+        } catch (err) {
+          addToast(
+            `Could not preview ${p}: ${err instanceof Error ? err.message : String(err)}`,
+            "warn"
+          );
+        }
+      }
+      if (cancelled || fetched.length === 0) return;
+      setPreview((prev) => ({ ...prev, cards: fetched, card: fetched[0] }));
+      setPreviewView("preview");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [turns, config.agentMode, config.framework, addToast]);
+
   // ── WebContainers preview URL ──────────────────────────────────────────────
   useEffect(() => {
     if (previewUrl) {
@@ -453,7 +527,13 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     // was caused by us only ever WRITING to preview state below, never
     // resetting it.
     setSelectedCard(null);
-    setPreview((prev) => ({ ...prev, card: undefined, html: undefined, output: undefined }));
+    setPreview((prev) => ({
+      ...prev,
+      card: undefined,
+      cards: undefined,
+      html: undefined,
+      output: undefined,
+    }));
 
     // 1. card:* blocks — let the Preview tab render them via CardRenderer
     //    so the user sees the same rich rendering as the chat. Pre-fix
@@ -827,6 +907,7 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     preview?.html ||
     preview?.url ||
     preview?.card ||
+    (preview?.cards?.length ?? 0) > 0 ||
     selectedCard ||
     (preview?.logs?.length ?? 0) > 0 ||
     preview?.output ||
