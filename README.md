@@ -1,20 +1,20 @@
-# bscode — agentkit-js flagship template
+# bscode — wasmagent-js flagship template
 
 > **Edge-native agent runtime showcase** — Cloudflare Workers + Pages, ships in 5 minutes.
-> The reference deployment for [agentkit-js](https://github.com/telleroutlook/agentkit-js).
+> The reference deployment for [wasmagent-js](https://github.com/WasmAgent/wasmagent-js).
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode&utm_source=bscode-readme-deploy-button)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![agentkit-js](https://img.shields.io/badge/built%20on-agentkit--js-646cff.svg)](https://github.com/telleroutlook/agentkit-js)
+[![wasmagent-js](https://img.shields.io/badge/built%20on-wasmagent--js-646cff.svg)](https://github.com/WasmAgent/wasmagent-js)
 
 bscode is **not** competing with Cursor, Claude Code, or Codex. It is the
-fastest way to see agentkit-js running end-to-end on a real edge runtime —
+fastest way to see wasmagent-js running end-to-end on a real edge runtime —
 QuickJS WASM sandbox, durable checkpoints, multi-agent fan-out, GitHub PR
 opener, visual verifier, all wired into one Workers + Next.js deployment
 that you can fork and own.
 
 If you want the **framework**, head to
-[github.com/telleroutlook/agentkit-js](https://github.com/telleroutlook/agentkit-js).
+[github.com/WasmAgent/wasmagent-js](https://github.com/WasmAgent/wasmagent-js).
 If you want the **template**, you're in the right place.
 
 ```bash
@@ -70,25 +70,25 @@ pnpm deploy:web
 
 ## What this demonstrates
 
-Each row maps to a published agentkit-js capability — bscode just wires
+Each row maps to a published wasmagent-js capability — bscode just wires
 them up against the Cloudflare runtime.
 
-| bscode feature | agentkit-js it exercises |
+| bscode feature | wasmagent-js it exercises |
 |---|---|
-| Edge-isolated code execution | [`@wasmagent/kernel-quickjs`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-quickjs) — QuickJS WASM kernel, no `node:vm` |
+| Edge-isolated code execution | [`@wasmagent/kernel-quickjs`](https://github.com/WasmAgent/wasmagent-js/tree/main/packages/kernel-quickjs) — QuickJS WASM kernel, no `node:vm` |
 | Speculative tool fan-out | `ParallelForkJoinRunner` in `@wasmagent/core` |
-| Durable checkpoints + SSE resume | [`@wasmagent/core`](https://telleroutlook.github.io/agentkit-js/guides/durable-runtime) — `KvCheckpointer`, `EventLog`, `Last-Event-ID` |
+| Durable checkpoints + SSE resume | [`@wasmagent/core`](https://wasmagent.github.io/wasmagent-js/guides/durable-runtime) — `KvCheckpointer`, `EventLog`, `Last-Event-ID` |
 | Multi-agent shapes (parallel / planFirst) | `ParallelForkJoinRunner` + stateless HITL primitive in core |
 | Per-job session isolation + diff/merge | `BranchableWorkspace` in core |
 | Tiered approval policy | `needsApproval` lifecycle hook in core |
-| Visual verifier (CDP + vision judge) | [`@wasmagent/tools-browser`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/tools-browser) — CDP session driver |
-| **OWASP Agentic Top 10 — live blocked** *(2026-06-17)* | [`CapabilityManifest`](https://github.com/telleroutlook/agentkit-js/blob/main/packages/core/src/executor/types.ts) + [field-by-field OWASP map](https://github.com/telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md). Click "Sandbox blocks an OWASP attack live" in the differentiator band to see the 4 attack scenarios + intercepted-error strings the kernel actually returns. |
+| Visual verifier (CDP + vision judge) | [`@wasmagent/tools-browser`](https://github.com/WasmAgent/wasmagent-js/tree/main/packages/tools-browser) — CDP session driver |
+| **OWASP Agentic Top 10 — live blocked** *(2026-06-17)* | [`CapabilityManifest`](https://github.com/WasmAgent/wasmagent-js/blob/main/packages/core/src/executor/types.ts) + [field-by-field OWASP map](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md). Click "Sandbox blocks an OWASP attack live" in the differentiator band to see the 4 attack scenarios + intercepted-error strings the kernel actually returns. |
 | GitHub repo import + PR opener | Bscode-specific tools wrapping the standard tool contract |
 | Prompt-cache instrumentation | Per-call `usage` events from every model adapter |
 | AGENTS.md project conventions | Loaded into the system prompt prefix on every `/run` |
 
-The framework's [Getting started](https://telleroutlook.github.io/agentkit-js/guides/getting-started)
-and [Comparison](https://telleroutlook.github.io/agentkit-js/compare) pages
+The framework's [Getting started](https://wasmagent.github.io/wasmagent-js/guides/getting-started)
+and [Comparison](https://wasmagent.github.io/wasmagent-js/compare) pages
 explain the broader picture.
 
 > 🛡️ **Governance (2026-06-17).** The remaining moat after code-mode became
@@ -100,23 +100,23 @@ explain the broader picture.
 > band is the visual demo of that contract. The full coverage map
 > (`CapabilityManifest` field ↔ OWASP Agentic Top 10 entry, plus EU AI
 > Act / Colorado AI Act / ISO 42001 mapping) is in
-> [`docs/security/capability-manifest-owasp.md`](https://github.com/telleroutlook/agentkit-js/blob/main/docs/security/capability-manifest-owasp.md).
+> [`docs/security/capability-manifest-owasp.md`](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md).
 > You can also reproduce it locally without a browser:
-> `node examples/owasp-demo/owasp-demo.mjs` in the agentkit-js repo.
+> `node examples/owasp-demo/owasp-demo.mjs` in the wasmagent-js repo.
 
 > 🔁 **Already on a different framework?** bscode also has a live
 > reverse-funnel landing — visit
 > **[`/recipes`](https://bscode.dev/recipes?source=bscode-readme-recipes-link)**
 > on a running deployment to copy the snippet, run a live patch
-> against the worker, and jump out to the agentkit-js framework
+> against the worker, and jump out to the wasmagent-js framework
 > docs. The five recipes (Vercel AI SDK 6 / Cloudflare codemode /
 > Mastra / Anthropic Claude Agent SDK / OpenAI Agents JS) also
 > ship as prose at
 > [`docs/their-framework-our-kernel.md`](./docs/their-framework-our-kernel.md).
 > The agentkit kernels slot in as one tool / one executor / one
 > provider; you keep your existing framework. Direction 6 of the
-> agentkit-js [2026-06 strategic
-> brief](https://github.com/telleroutlook/agentkit-js/blob/main/docs/strategy/2026-06-competitiveness.md).
+> wasmagent-js [2026-06 strategic
+> brief](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/strategy/2026-06-competitiveness.md).
 
 ---
 
@@ -149,8 +149,8 @@ Cloudflare's *Code Mode MCP* and Anthropic's *Code execution with MCP*
 both converged on the same shape in 2026: a host (Claude Desktop,
 Cursor, VS Code Copilot) talks MCP to a server that exposes one
 `execute_code` surface, and the host's tools live behind that surface
-as code the agent calls. agentkit-js ships
-[`@wasmagent/mcp-server`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/mcp-server)
+as code the agent calls. wasmagent-js ships
+[`@wasmagent/mcp-server`](https://github.com/WasmAgent/wasmagent-js/tree/main/packages/mcp-server)
 for that, with the same `CapabilityManifest` the WASM kernel inside
 bscode already honours.
 
@@ -185,7 +185,7 @@ mount because they need approval/state that does not translate cleanly
 across an MCP transport boundary; expose them on a fork that owns the
 access policy.
 
-The token-savings benchmark in agentkit-js CI shows ≤14% of direct
+The token-savings benchmark in wasmagent-js CI shows ≤14% of direct
 tool-use tokens at N=30 tools (`examples/benchmarks/code-mode-tokens.mjs`).
 
 ### Or stand up a separate MCP server for your own tools
@@ -220,11 +220,11 @@ bscode is intentionally **not**:
 
 - **A Cursor / Claude Code competitor.** Real shell, real npm install, real
   compilation chains are not what a WASM kernel is for. If you want that,
-  use the framework's [`@wasmagent/kernel-remote`](https://github.com/telleroutlook/agentkit-js/tree/main/packages/kernel-remote) tier (E2B / CF Sandbox microVMs) on top of a host that runs them.
+  use the framework's [`@wasmagent/kernel-remote`](https://github.com/WasmAgent/wasmagent-js/tree/main/packages/kernel-remote) tier (E2B / CF Sandbox microVMs) on top of a host that runs them.
 - **An IDE.** No file watcher, no LSP, no plugin system. The Monaco surface
   exists to demonstrate `useAgentRun()` + `TokenMeter` in a Next.js app, not
   to be a development environment.
-- **A long-term product roadmap.** New capabilities land in agentkit-js
+- **A long-term product roadmap.** New capabilities land in wasmagent-js
   first; bscode pulls them in as a demo. If a feature has no obvious place
   in the *framework*, it does not belong in *bscode*.
 

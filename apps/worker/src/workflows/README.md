@@ -3,7 +3,7 @@
 bscode's `JobQueue` runs jobs in parallel up to a concurrency cap, but jobs
 are independent — there is no native way to say *"after job A finishes, run
 job B with A's output"*. The workflow module bridges that gap by sitting on
-top of agentkit-js's `LocalWorkflowEngine`.
+top of wasmagent-js's `LocalWorkflowEngine`.
 
 The four contracts that engine ships with — **observable, terminable,
 resumable, clear errors** — apply to bscode workflows too.
@@ -74,7 +74,7 @@ Cloudflare KV, Durable Object — same engine, same DAG.
 When you want CF's hibernate-and-replay semantics for runs that span days or
 weeks, use `@wasmagent/cloudflare-worker`'s `CloudflareWorkflowEngine` with
 the **same `WorkflowDefinition`** — no rewrite. See
-`docs/guides/workflows.md` in agentkit-js.
+`docs/guides/workflows.md` in wasmagent-js.
 
 ## Tests
 
