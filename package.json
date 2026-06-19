@@ -4,7 +4,7 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "../agentkit-js/packages/*"
+    "../wasmagent-js/packages/*"
   ],
   "scripts": {
     "dev:worker": "bun --filter @bscode/worker dev",
