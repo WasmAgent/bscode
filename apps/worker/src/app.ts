@@ -206,7 +206,7 @@ export function createApp(config: AppConfig) {
   // before the runner starts; the per-job diff/merge endpoints below let the
   // user review and merge the changes back when the job is done.
   const jobQueue = new JobQueue({
-    concurrency: 4,
+    concurrency: config.rolloutConcurrency ?? 4,
     eventTailSize: 100,
     durableKv: config.sessionsKv, // same KV used for cached run replays
     onBeforeStart: async (jobId, spec) => {

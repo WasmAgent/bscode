@@ -15,6 +15,7 @@ import {
   _resetForTests,
   type BuildResultSnapshot,
   clearBuildResult,
+  DEFAULT_SESSION_ID,
   getBuildResult,
   MAX_STDERR_CHARS,
   putBuildResult,
@@ -154,6 +155,65 @@ describe("build-results store", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const got = await getBuildResult("cold-session", fakeKv);
     expect(got.status).toBe("unknown");
+  });
+});
+
+describe("1-D — build-results state boundary hardening", () => {
+  it("putBuildResult with default session emits a warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await putBuildResult(DEFAULT_SESSION_ID, { status: "success", ranAtMs: 1 });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("default session"));
+  });
+
+  it("getBuildResult with default session emits a warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await getBuildResult(DEFAULT_SESSION_ID);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("default session"));
+  });
+
+  it("putBuildResult with explicit session id does NOT warn", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await putBuildResult("session-explicit", { status: "success", ranAtMs: 1 });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("strictKvMode=true causes KV write failure to throw", async () => {
+    const fakeKv = {
+      get: async () => null,
+      put: async () => {
+        throw new Error("KV write failed");
+      },
+      list: async () => ({ keys: [] }),
+      delete: async () => {},
+    };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(
+      putBuildResult("s", { status: "success", ranAtMs: 1 }, fakeKv, { strictKvMode: true })
+    ).rejects.toThrow("KV write failed");
+  });
+
+  it("strictKvMode=false (default) swallows KV write failure", async () => {
+    const fakeKv = {
+      get: async () => null,
+      put: async () => {
+        throw new Error("KV write failed");
+      },
+      list: async () => ({ keys: [] }),
+      delete: async () => {},
+    };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(
+      putBuildResult("s", { status: "success", ranAtMs: 1 }, fakeKv)
+    ).resolves.toBeUndefined();
+  });
+
+  it("concurrent two-job puts with distinct session ids do not pollute each other", async () => {
+    await Promise.all([
+      putBuildResult("job-A", { status: "success", ranAtMs: 1 }),
+      putBuildResult("job-B", { status: "failed", ranAtMs: 2, exitCode: 1 }),
+    ]);
+    expect((await getBuildResult("job-A")).status).toBe("success");
+    expect((await getBuildResult("job-B")).status).toBe("failed");
   });
 });
 

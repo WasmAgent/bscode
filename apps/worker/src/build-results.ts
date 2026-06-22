@@ -158,6 +158,9 @@ const BUILD_RESULT_TTL_SECONDS = 60 * 60; // 1h
 
 const memoryStore = new Map<string, BuildResultSnapshot>();
 
+/** Sentinel value used when no session ID is provided. */
+export const DEFAULT_SESSION_ID = "default";
+
 function kvKey(sessionId: string): string {
   return `build-result:${sessionId}`;
 }
@@ -167,6 +170,10 @@ function kvKey(sessionId: string): string {
  * result always wins — older results are NOT preserved (the agent only
  * cares about the current build state).
  *
+ * @param strictKvMode  When true, KV write failures are thrown rather than
+ *                      silently swallowed. Use in batch/rollout scenarios where
+ *                      a missing build result would silently corrupt rankings.
+ *
  * KV mirroring is best-effort: failure does NOT propagate. This keeps a
  * flaky KV from blocking the browser → worker path; the in-memory copy
  * is enough for the very common "single-region same-worker" run.
@@ -174,8 +181,15 @@ function kvKey(sessionId: string): string {
 export async function putBuildResult(
   sessionId: string,
   snapshot: BuildResultSnapshot,
-  kv?: KvStore | undefined
+  kv?: KvStore | undefined,
+  opts?: { strictKvMode?: boolean }
 ): Promise<void> {
+  if (sessionId === DEFAULT_SESSION_ID) {
+    console.warn(
+      "[build-results] putBuildResult called with default session — " +
+        "caller should pass an explicit X-Session-Id derived via deriveJobSessionId()"
+    );
+  }
   // Truncate stderr defensively so a runaway log can't blow up later reads.
   const trimmed: BuildResultSnapshot = {
     ...snapshot,
@@ -190,6 +204,9 @@ export async function putBuildResult(
         expirationTtl: BUILD_RESULT_TTL_SECONDS,
       });
     } catch (err) {
+      if (opts?.strictKvMode) {
+        throw err;
+      }
       // Keep the in-memory copy; just log and move on.
       console.warn("[build-results] KV mirror failed:", err);
     }
@@ -211,6 +228,12 @@ export async function getBuildResult(
   sessionId: string,
   kv?: KvStore | undefined
 ): Promise<BuildResultSnapshot> {
+  if (sessionId === DEFAULT_SESSION_ID) {
+    console.warn(
+      "[build-results] getBuildResult called with default session — " +
+        "results may be from a different agent run"
+    );
+  }
   const cached = memoryStore.get(sessionId);
   if (cached) return cached;
   if (kv) {

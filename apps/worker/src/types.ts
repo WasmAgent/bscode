@@ -71,4 +71,9 @@ export interface AppConfig {
    * locally all qualify.
    */
   cdpWsEndpoint?: string;
+  /**
+   * RLAIF — Maximum concurrent rollout jobs for batch trajectory collection.
+   * Passed to JobQueue concurrency; default 4.
+   */
+  rolloutConcurrency?: number;
 }
