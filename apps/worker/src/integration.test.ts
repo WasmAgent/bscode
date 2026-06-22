@@ -57,7 +57,7 @@ describe("A. bscodeFrameworkPrompt ↔ @wasmagent/agent-prompts fragments", () =
     }
   });
 
-  it("framework prompts do not contain @agentkit-js/ package names (rename guard)", async () => {
+  it("framework prompts do not contain legacy @agentkit-js/ package names", async () => {
     const { bscodeFrameworkPrompt, bscodeCodeAgentPrompt } = await import("./agents/prompts.js");
     const all = [
       bscodeFrameworkPrompt("react"),

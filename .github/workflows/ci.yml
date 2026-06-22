@@ -12,15 +12,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout agentkit-js FIRST into a sibling directory.
-      # GitHub Actions doesn't allow checking out outside the workspace,
-      # so we use a relative path within the workspace and create a
-      # symlink the workspace expects (../agentkit-js).
-      - name: Checkout agentkit-js
+      # Checkout wasmagent-js FIRST into a sibling directory so bscode's
+      # workspace ("../wasmagent-js/packages/*") resolves correctly.
+      - name: Checkout wasmagent-js
         uses: actions/checkout@v4
         with:
-          repository: telleroutlook/agentkit-js
-          path: agentkit-js
+          repository: WasmAgent/wasmagent-js
+          path: wasmagent-js
           ref: main
 
       - name: Checkout bscode
@@ -33,20 +31,18 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Make agentkit-js available as a sibling of bscode
+      - name: Make wasmagent-js available as a sibling of bscode
         run: |
-          # bscode/package.json references "../agentkit-js/packages/*" in workspaces.
-          # GitHub puts both checkouts at $GITHUB_WORKSPACE (sibling already).
           ls -la "$GITHUB_WORKSPACE"
-          echo "--- agentkit-js packages ---"
-          ls -la "$GITHUB_WORKSPACE/agentkit-js/packages" || echo "MISSING"
+          echo "--- wasmagent-js packages ---"
+          ls -la "$GITHUB_WORKSPACE/wasmagent-js/packages" || echo "MISSING"
 
-      - name: Install dependencies (agentkit-js — build deps first)
-        working-directory: agentkit-js
+      - name: Install dependencies (wasmagent-js — build deps first)
+        working-directory: wasmagent-js
         run: bun install --frozen-lockfile
 
-      - name: Build agentkit-js packages (so dist/ exists for typecheck)
-        working-directory: agentkit-js
+      - name: Build wasmagent-js packages (so dist/ exists for typecheck)
+        working-directory: wasmagent-js
         run: bun run build
 
       - name: Install dependencies (bscode)
@@ -83,7 +79,7 @@ jobs:
       #   2. Web     (apps/web)     — the Next.js UI via @cloudflare/next-on-pages
       #
       # The deploy steps short-circuit cleanly if the repo doesn't have CF
-      # secrets configured — same pattern agentkit-js's ci.yml uses. That
+      # secrets configured — same pattern wasmagent-js's ci.yml uses. That
       # keeps PRs from forks from breaking the pipeline (forks can't see
       # the secrets) without needing a separate workflow file.
       #

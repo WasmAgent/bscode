@@ -19,7 +19,7 @@ name = "bscode-web"
 main = ".open-next/worker.js"
 
 # Keep this in lockstep with the worker package (apps/worker/wrangler.toml)
-# so a single agentkit-js compat baseline is honoured across both pieces.
+# so a single wasmagent-js compat baseline is honoured across both pieces.
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
