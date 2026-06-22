@@ -79,6 +79,7 @@ them up against the Cloudflare runtime.
 | Speculative tool fan-out | `ParallelForkJoinRunner` in `@wasmagent/core` |
 | Durable checkpoints + SSE resume | [`@wasmagent/core`](https://wasmagent.github.io/wasmagent-js/guides/durable-runtime) — `KvCheckpointer`, `EventLog`, `Last-Event-ID` |
 | Multi-agent shapes (parallel / planFirst) | `ParallelForkJoinRunner` + stateless HITL primitive in core |
+| **RLAIF rollout adapter** *(2026-06-22)* | `apps/worker/src/rollout-adapter.ts` — `makeBuildResultReader` / `makeVisualResultReader` bridge bscode's KV build-result channel to `BuildPassesVerifier` / `VisualAssertVerifier` in `@wasmagent/core`. `AppConfig.rolloutConcurrency` controls the job queue cap for batch sampling runs. |
 | Per-job session isolation + diff/merge | `BranchableWorkspace` in core |
 | Tiered approval policy | `needsApproval` lifecycle hook in core |
 | Visual verifier (CDP + vision judge) | [`@wasmagent/tools-browser`](https://github.com/WasmAgent/wasmagent-js/tree/main/packages/tools-browser) — CDP session driver |

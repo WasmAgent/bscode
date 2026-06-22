@@ -33,3 +33,17 @@ bun run deploy            # deploy to Cloudflare
 bun --filter @bscode/web run typecheck
 bun --filter @bscode/worker run typecheck
 ```
+
+## RLAIF rollout adapter (2026-06-22)
+
+`apps/worker/src/rollout-adapter.ts` bridges bscode's KV build-result channel
+to wasmagent-js verifiers:
+
+- `makeBuildResultReader(kv?)` → `BuildResultReader` for `BuildPassesVerifier`
+- `makeVisualResultReader(kv?)` → `VisualResultReader` for `VisualAssertVerifier`
+
+`AppConfig.rolloutConcurrency` controls `JobQueue` concurrency (default 4).
+
+**Session IDs:** All verifier calls must use derived IDs from `deriveJobSessionId()`.
+Calling `putBuildResult` / `getBuildResult` with `"default"` emits a `console.warn`.
+Use `{ strictKvMode: true }` in batch/rollout contexts to make KV failures throw.
