@@ -90,7 +90,7 @@
     "@wasmagent/model-deepseek": "^1.0.0",
     "@wasmagent/model-doubao": "^1.0.0",
     "@wasmagent/model-openai": "^1.0.0",
-    "@wasmagent/react": "^1.0.0",
+    "@wasmagent/react": "^1.0.2",
     "@wasmagent/tools-browser": "^1.0.0",
     "@wasmagent/tools-rag": "^1.0.0",
     "@wasmagent/ui-cards": "^1.0.0",
@@ -617,7 +617,7 @@
 
     "@wasmagent/model-openai": ["@wasmagent/model-openai@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "openai": ">=4.90.0" } }, "sha512-9EgsLAEl5n/BZrlT+c7rLEyDRiWfvYWeRNYFRodB03es8CfJFGkf+Dd4KX2f/ERyToP4ze/GXRbutrpAh2a5RQ=="],
 
-    "@wasmagent/react": ["@wasmagent/react@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "react": ">=18.0.0" } }, "sha512-Lpcai0Y4bXDZyrlf2Z+FYGsZupq4BJh3ozb3iq+afpa6jKuw5S7IaGbwq79OLILzQ/po0H6ILwSSnmUwjI40RA=="],
+    "@wasmagent/react": ["@wasmagent/react@1.0.2", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "react": ">=18.0.0" } }, "sha512-j2fZmU21knaFEl65naZLEmJTPdGJd1FudLxUjZuFxwH6etoMJmQTWDpYadBjibMIz2vX1DtaiDMCzbXbbWnUPA=="],
 
     "@wasmagent/tools-browser": ["@wasmagent/tools-browser@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0", "zod": "^3.23.0" }, "peerDependencies": { "playwright": ">=1.40.0" }, "optionalPeers": ["playwright"] }, "sha512-6G7RmXdpRO60yr40m418SPyJusL8ystpy6oJpIWbnInYNYNPm4v9jdTYnPTKeXvaINaKYmY1KIlRLb9tlpnJ3A=="],
 
