@@ -157,7 +157,7 @@ interface RecipeCardProps {
   recipe: Recipe;
 }
 
-function RecipeCard({ recipe }: RecipeCardProps): JSX.Element {
+function RecipeCard({ recipe }: RecipeCardProps): React.ReactElement {
   const [copyState, setCopyState] = useState<"idle" | "code-copied" | "npm-copied">("idle");
   const [tryState, setTryState] = useState<
     | { kind: "idle" }
@@ -318,7 +318,7 @@ function resultBox(kind: "ok" | "err"): React.CSSProperties {
   };
 }
 
-export default function RecipesPage(): JSX.Element {
+export default function RecipesPage(): React.ReactElement {
   return (
     <main
       style={{
