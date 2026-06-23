@@ -1,4 +1,5 @@
-import type { AgentEvent, Model, ModelMessage, Scorer, ToolDefinition } from "@wasmagent/core";
+import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@wasmagent/core";
+import type { Scorer } from "@wasmagent/core/beta";
 import {
   CheckpointableRun,
   createMemoryTool,
@@ -526,7 +527,7 @@ export function mountRunRoutes(app: Hono, config: AppConfig, deps: RunRoutesDeps
             finalTask
           );
         } else if (useParallelFork) {
-          const { ParallelForkJoinRunner } = await import("@wasmagent/core");
+          const { ParallelForkJoinRunner } = await import("@wasmagent/core/beta");
           const branches = policy?.parallelForkJoin?.branches ?? 3;
           const concurrency = policy?.parallelForkJoin?.concurrency ?? 2;
           const aggregation = policy?.parallelForkJoin?.aggregation ?? "summary";

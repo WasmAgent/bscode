@@ -179,7 +179,7 @@ export function mountFilesRoutes(app: Hono, config: AppConfig, deps: FileRoutesD
     if (typeof config.filesKv?.delete !== "function") {
       return c.json({ error: "KV backend does not support delete" }, 501);
     }
-    await kv.delete(`file:${path}`);
+    await kv.delete?.(`file:${path}`);
     // Drop the in-memory entry + its version history so a follow-up
     // GET /files/:path/versions doesn't return phantom versions.
     fileTreeFor(c, config).remove(path);

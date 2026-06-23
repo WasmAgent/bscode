@@ -14,15 +14,17 @@
  */
 
 import {
+  type ToolDefinition,
+  ToolRegistry,
+} from "@wasmagent/core";
+import {
   KvWorkflowStateStore,
   LocalWorkflowEngine,
   MemoryKvBackend,
-  type ToolDefinition,
-  ToolRegistry,
   type WorkflowDefinition,
   type WorkflowRunHandle,
   type WorkflowStateStore,
-} from "@wasmagent/core";
+} from "@wasmagent/core/beta";
 import { z } from "zod";
 
 /** A bscode-flavoured "step" that wraps a job-like action into a workflow tool. */

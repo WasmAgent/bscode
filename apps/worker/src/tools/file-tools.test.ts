@@ -17,7 +17,7 @@
  *   - init_agents_md's draft is well-formed markdown referencing real files.
  */
 
-import { FileTreeManager } from "@wasmagent/core";
+import { FileTreeManager } from "@wasmagent/core/beta";
 import { describe, expect, it } from "bun:test";
 import { MemKvStore } from "../platform.js";
 import {
@@ -150,7 +150,7 @@ describe("write_file", () => {
     await tool.forward({ path: "y.ts", content: "v1" });
     await tool.forward({ path: "y.ts", content: "v2" });
     const versions = tree.getVersions("y.ts");
-    expect(versions.map((v) => v.version)).toEqual([1, 2]);
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([1, 2]);
   });
 
   it("rejects writes to hard-locked paths (.dev.vars) with Error: ...", async () => {
