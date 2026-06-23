@@ -1,2 +1,4 @@
 [install]
-registry = "https://registry.npmmirror.com"
+# Use official npm registry so @wasmagent/* packages resolve correctly.
+# npmmirror is used for local dev speed but @wasmagent/* may not be synced there yet.
+registry = "https://registry.npmjs.org"
