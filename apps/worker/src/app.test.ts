@@ -20,7 +20,7 @@ const DEFAULT_EVENTS: AgentEvent[] = [
     parentTraceId: null,
     channel: "text",
     event: "run_start",
-    data: { task: "test" },
+    data: { task: "test", agentConfig: { model: "test", tools: [], maxSteps: 20 } },
     timestampMs: 0,
   },
   {
@@ -64,7 +64,7 @@ vi.mock("./agents/multi-agent.js", () => ({
       parentTraceId: null,
       channel: "text",
       event: "run_start",
-      data: { task: "executing" },
+      data: { task: "executing", agentConfig: { model: "test", tools: [], maxSteps: 20 } },
       timestampMs: 0,
     } as AgentEvent;
     yield {
@@ -1386,7 +1386,7 @@ describe("C1 — SSE Last-Event-ID resume", () => {
         parentTraceId: null,
         channel: "text",
         event: "run_start",
-        data: { task: "resume-flow" },
+        data: { task: "resume-flow", agentConfig: { model: "test", tools: [], maxSteps: 20 } },
         timestampMs: 0,
       },
       {
@@ -1466,7 +1466,7 @@ describe("C1 — SSE Last-Event-ID resume", () => {
         parentTraceId: null,
         channel: "text",
         event: "run_start",
-        data: { task: "tail" },
+        data: { task: "tail", agentConfig: { model: "test", tools: [], maxSteps: 20 } },
         timestampMs: 0,
       },
       {

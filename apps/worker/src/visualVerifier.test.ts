@@ -54,7 +54,7 @@ describe("runVisualVerification", () => {
     expect(snap.pageTitle).toBe("OK");
     expect(snap.rendersNonEmpty).toBe(true);
     expect(snap.thumbnailDataUrl).toBe("data:image/png;base64,AAAA");
-    expect(session.close).toHaveBeenCalledOnce();
+    expect(session.close).toHaveBeenCalledTimes(1);
   });
 
   it("flags rendersNonEmpty=false on a blank-body page", async () => {
@@ -106,7 +106,7 @@ describe("runVisualVerification", () => {
       intent: "show login form",
       judge,
     });
-    expect(judge).toHaveBeenCalledOnce();
+    expect(judge).toHaveBeenCalledTimes(1);
     expect(snap.verdict).toEqual({
       matchesIntent: false,
       reason: "page is wrong",
@@ -137,7 +137,7 @@ describe("runVisualVerification", () => {
     });
     expect(snap.consoleErrors?.[0]?.message).toMatch(/navigation failed.*ECONNREFUSED/);
     // close is still called even when navigate failed
-    expect(session.close).toHaveBeenCalledOnce();
+    expect(session.close).toHaveBeenCalledTimes(1);
   });
 });
 

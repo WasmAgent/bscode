@@ -141,7 +141,7 @@ describe("JobQueue", () => {
     // The runner throws on abort during delay; that surfaces as "failed" with
     // the abort message, OR the queue beats it to the abort-flag check; either
     // is acceptable so long as the job ended without a final answer.
-    expect(["aborted", "failed"]).toContain(rec?.status);
+    expect(["aborted", "failed"]).toContain(rec?.status ?? "");
     expect(rec?.finalAnswer).toBeUndefined();
   });
 
