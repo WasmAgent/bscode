@@ -194,11 +194,11 @@ function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }):
 // Each app instance maintains its own Map below; we rebind via factory.
 type IndexerFor = (c: { req: { header: (n: string) => string | undefined } }) => SemanticIndexer;
 
-const buildResultNonces = new Map<string, { jobId: string; expiresAt: number }>();
+const buildResultNonces = new Map<string, { sessionId: string; jobId: string; expiresAt: number }>();
 
-function issueBuildResultNonce(_sessionId: string, jobId: string): string {
+function issueBuildResultNonce(sessionId: string, jobId: string): string {
   const nonce = crypto.randomUUID();
-  buildResultNonces.set(nonce, { jobId, expiresAt: Date.now() + 15 * 60 * 1000 });
+  buildResultNonces.set(nonce, { sessionId, jobId, expiresAt: Date.now() + 15 * 60 * 1000 });
   return nonce;
 }
 
@@ -763,10 +763,11 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     }
     if (config.clientToken) {
       const nonce = body.nonce;
-      if (!nonce || !buildResultNonces.has(nonce)) {
+      const entry = nonce ? buildResultNonces.get(nonce) : undefined;
+      if (!entry || entry.expiresAt < Date.now() || entry.sessionId !== sessionId) {
         return c.json({ error: "invalid or missing build-result nonce" }, 401);
       }
-      buildResultNonces.delete(nonce);
+      buildResultNonces.delete(nonce!);
     }
     const status = body.status;
     if (status !== "success" && status !== "failed" && status !== "running") {

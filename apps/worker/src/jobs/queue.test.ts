@@ -175,6 +175,62 @@ describe("JobQueue", () => {
     q.abort(blocker);
   });
 
+  it("concurrent jobs with different runners each execute their own runner", async () => {
+    q = new JobQueue({ concurrency: 1 });
+    const results: Record<string, string> = {};
+
+    function makeRunner(answer: string) {
+      return async function* (_spec: { task: string }, _sig: AbortSignal): AsyncIterable<AgentEvent> {
+        await new Promise((r) => setTimeout(r, 10));
+        results[answer] = answer;
+        yield {
+          traceId: "t",
+          parentTraceId: null,
+          channel: "text",
+          event: "final_answer",
+          data: { answer },
+          timestampMs: Date.now(),
+        } as AgentEvent;
+      };
+    }
+
+    const idA = q.submit({ task: "a" }, makeRunner("answer-A"));
+    const idB = q.submit({ task: "b" }, makeRunner("answer-B"));
+
+    await waitFor(() => q.get(idA), (r) => r?.status === "done");
+    await waitFor(() => q.get(idB), (r) => r?.status === "done");
+
+    const recA = await q.get(idA);
+    const recB = await q.get(idB);
+    expect(recA?.finalAnswer).toBe("answer-A");
+    expect(recB?.finalAnswer).toBe("answer-B");
+  });
+
+  it("aborting a queued job does not leave a stale runner reference", async () => {
+    q = new JobQueue({ concurrency: 1 });
+    let blockerDone = false;
+
+    const blocker = q.submit({ task: "block" }, async function* (_s, sig) {
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => { blockerDone = true; resolve(); }, 50);
+        sig.addEventListener("abort", () => { clearTimeout(t); resolve(); });
+      });
+    });
+
+    let queuedRan = false;
+    const queued = q.submit({ task: "queued" }, async function* () {
+      queuedRan = true;
+      yield { traceId: "t", parentTraceId: null, channel: "text", event: "final_answer", data: { answer: "x" }, timestampMs: Date.now() } as AgentEvent;
+    });
+
+    await new Promise((r) => setTimeout(r, 5));
+    expect(q.abort(queued)).toBe(true);
+    const rec = await q.get(queued);
+    expect(rec?.status).toBe("aborted");
+    expect(queuedRan).toBe(false);
+    q.abort(blocker);
+  });
+
   it("abort returns false on unknown or already-terminal jobs", async () => {
     q = new JobQueue();
     expect(q.abort("nope")).toBe(false);

@@ -12,62 +12,36 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout wasmagent-js FIRST into a sibling directory so bscode's
-      # workspace ("../wasmagent-js/packages/*") resolves correctly.
-      - name: Checkout wasmagent-js
-        uses: actions/checkout@v4
-        with:
-          repository: WasmAgent/wasmagent-js
-          path: wasmagent-js
-          ref: main
-
       - name: Checkout bscode
         uses: actions/checkout@v4
-        with:
-          path: bscode
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Make wasmagent-js available as a sibling of bscode
-        run: |
-          ls -la "$GITHUB_WORKSPACE"
-          echo "--- wasmagent-js packages ---"
-          ls -la "$GITHUB_WORKSPACE/wasmagent-js/packages" || echo "MISSING"
-
-      - name: Install dependencies (wasmagent-js — build deps first)
-        working-directory: wasmagent-js
+      # Dependencies resolve from npm (@wasmagent/* ^0.2.0) — no sibling checkout needed.
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build wasmagent-js packages (so dist/ exists for typecheck)
-        working-directory: wasmagent-js
-        run: bun run build
-
-      - name: Install dependencies (bscode)
-        working-directory: bscode
-        run: bun install
-
       - name: Typecheck (worker)
-        working-directory: bscode/apps/worker
+        working-directory: apps/worker
         run: bunx tsc --noEmit
 
       - name: Typecheck (web)
-        working-directory: bscode/apps/web
+        working-directory: apps/web
         run: bunx tsc --noEmit
 
-      - name: Test (web)
-        working-directory: bscode/apps/web
+      - name: Test (worker)
+        working-directory: apps/worker
         run: bun run test
 
-      - name: Test (worker — if vitest config exists)
-        working-directory: bscode/apps/worker
-        run: |
-          if [ -f vitest.config.ts ]; then bun run vitest run; else echo "no vitest config — skipping"; fi
+      - name: Test (web)
+        working-directory: apps/web
+        run: bun run test
 
       - name: Build (web)
-        working-directory: bscode/apps/web
+        working-directory: apps/web
         run: bun run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
@@ -83,13 +57,11 @@ jobs:
       # keeps PRs from forks from breaking the pipeline (forks can't see
       # the secrets) without needing a separate workflow file.
       #
-      # Custom domain bindings (bscode.byteslim.com etc.) are configured
-      # ONCE in the Cloudflare dashboard — wrangler.toml does not pin them
-      # because the domain belongs to the operator, not the repo.
+      # Custom domain bindings are configured ONCE in the Cloudflare dashboard —
+      # wrangler.toml does not pin them because the domain belongs to the operator.
 
       - name: Deploy worker to Cloudflare
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: bscode
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "Skipping worker deploy: Cloudflare secrets not configured."
@@ -102,7 +74,6 @@ jobs:
 
       - name: Deploy web to Cloudflare Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: bscode
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "Skipping web deploy: Cloudflare secrets not configured."
@@ -112,9 +83,41 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # In the deployed UI, the web client must call the deployed worker
-          # rather than localhost. Setting this at build time bakes the URL
-          # into the static bundle (next.config.ts reads NEXT_PUBLIC_WORKER_URL).
-          # Override via repo variable BSCODE_WORKER_URL if you bind the
-          # worker to a different domain.
           NEXT_PUBLIC_WORKER_URL: ${{ vars.BSCODE_WORKER_URL || 'https://bscode-worker.byteslim.com' }}
+
+  # Nightly job: verify bscode still works against wasmagent-js@main (unreleased).
+  # This catches regressions before they reach a published npm version.
+  nightly-wasmagent-main:
+    name: Nightly (wasmagent-js@main)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout bscode
+        uses: actions/checkout@v4
+
+      - name: Checkout wasmagent-js main
+        uses: actions/checkout@v4
+        with:
+          repository: WasmAgent/wasmagent-js
+          path: .wasmagent-local
+          ref: main
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build wasmagent-js packages
+        working-directory: .wasmagent-local
+        run: bun install --frozen-lockfile && bun run build
+
+      - name: Link local wasmagent packages
+        run: node scripts/link-wasmagent-local.mjs .wasmagent-local
+
+      - name: Install dependencies (with local overrides)
+        run: bun install
+
+      - name: Test (worker — against wasmagent-js@main)
+        working-directory: apps/worker
+        run: bun run test

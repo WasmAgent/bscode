@@ -86,15 +86,19 @@ export function createSearchCodeTool(
     inputSchema: z.object({
       query: z.string().describe("Text to search for"),
       path: z.string().optional().describe("Limit search to this file path"),
+      maxFiles: z.number().min(1).max(500).default(200).optional().describe("Maximum number of files to scan (default 200)"),
     }),
     outputSchema: z.string(),
     readOnly: true,
     idempotent: true,
-    forward: async ({ query, path }) => {
+    forward: async ({ query, path, maxFiles = 200 }) => {
       if (!kv) return "Error: file system unavailable — bind a KV store (BSCODE_FILES) and retry";
       const list = await kv.list({ prefix: path ? `file:${path}` : "file:" });
+      const cap = Math.min(maxFiles, 500);
+      const keys = list.keys.slice(0, cap);
+      const truncated = list.keys.length > cap;
       const results: string[] = [];
-      for (const key of list.keys.slice(0, 20)) {
+      for (const key of keys) {
         const content = await kv.get(key.name);
         if (!content) continue;
         const filePath = key.name.replace(/^file:/, "");
@@ -104,7 +108,8 @@ export function createSearchCodeTool(
           }
         });
       }
-      return results.length > 0 ? results.join("\n") : `No matches found for: ${query}`;
+      const suffix = truncated ? `\n[truncated: searched ${cap} of ${list.keys.length} files]` : "";
+      return results.length > 0 ? results.join("\n") + suffix : `No matches found for: ${query}${suffix}`;
     },
   };
 }

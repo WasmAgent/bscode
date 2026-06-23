@@ -41,6 +41,27 @@ export interface ModelPreferences {
 }
 
 // ── AES-256-GCM encryption for stored API keys ────────────────────────────────
+//
+// Security model by deployment tier:
+//
+//   Open-source demo / self-host (default):
+//     The AES-256-GCM encryption key is generated on first use and stored in the
+//     same KV namespace as the ciphertext. This prevents accidental exposure in
+//     logs or UI responses, but does NOT protect against an attacker who can read
+//     the entire KV namespace (e.g. a compromised Cloudflare account token).
+//     Suitable for personal or dev deployments where KV access ≈ full trust.
+//
+//   Enterprise / team deployment:
+//     Replace getOrCreateEncKey() with a Cloudflare Secrets / KMS-backed key so
+//     the encryption key never touches the same KV as the ciphertext. Example:
+//       const encKey = await crypto.subtle.importKey("raw",
+//         hexToBytes(env.ENCRYPTION_KEY_HEX), "AES-GCM", false, ["encrypt","decrypt"])
+//     Set ENCRYPTION_KEY_HEX via `wrangler secret put ENCRYPTION_KEY_HEX`.
+//
+//   Multi-tenant SaaS:
+//     Use per-tenant key wrapping: generate a data-encryption key (DEK) per
+//     tenant, wrap it with a key-encryption key (KEK) from KMS, store only the
+//     wrapped DEK in KV. Add key rotation and an audit log for DEK unwraps.
 
 const STORE_KEY_KV = "meta:storeKey";
 const CUSTOM_MODELS_KV = "meta:customModels";

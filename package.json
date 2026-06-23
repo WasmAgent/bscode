@@ -4,8 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "workspaces": [
-    "apps/*",
-    "../wasmagent-js/packages/*"
+    "apps/*"
   ],
   "scripts": {
     "dev:worker": "bun --filter @bscode/worker dev",
@@ -24,7 +23,9 @@
     "test:cli": "node scripts/bscode.mjs",
     "test:code": "node scripts/bscode.mjs --mode code --steps 8",
     "test:tool": "node scripts/bscode.mjs --mode tool --steps 10",
-    "test:full": "node scripts/test-full.mjs --url http://localhost:8788"
+    "test:full": "node scripts/test-full.mjs --url http://localhost:8788",
+    "link:wasmagent-local": "node scripts/link-wasmagent-local.mjs",
+    "unlink:wasmagent-local": "node scripts/unlink-wasmagent-local.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",

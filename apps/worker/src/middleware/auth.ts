@@ -7,7 +7,7 @@ export function createAuthMiddleware(config: AppConfig) {
     const method = c.req.method;
     const path = new URL(c.req.url).pathname;
     if (method === "GET" && (path === "/health" || path === "/capabilities")) return next();
-    if (path === "/mcp" || path.startsWith("/mcp/")) return next();
+    if ((path === "/mcp" || path.startsWith("/mcp/")) && config.publicMcpEnabled) return next();
     const auth = c.req.header("Authorization") ?? "";
     if (!timingSafeEqual(auth, `Bearer ${config.clientToken}`))
       return c.json({ error: "Unauthorized" }, 401);

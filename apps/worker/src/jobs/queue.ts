@@ -26,6 +26,7 @@ import type { JobQueueOptions, JobRecord, JobRunner, JobSpec, JobStatus } from "
 interface JobState {
   id: string;
   spec: JobSpec;
+  runner: JobRunner;
   status: JobStatus;
   /** AbortController whose signal is forwarded to the runner. */
   controller: AbortController;
@@ -90,6 +91,7 @@ export class JobQueue {
     const state: JobState = {
       id,
       spec,
+      runner,
       status: "queued",
       controller: new AbortController(),
       eventCount: 0,
@@ -104,7 +106,7 @@ export class JobQueue {
     };
     this.#jobs.set(id, state);
     this.#pending.push(id);
-    this.#drainSoon(runner);
+    this.#drainSoon();
     return id;
   }
 
@@ -191,19 +193,20 @@ export class JobQueue {
    * block the caller — `submit` returns synchronously, and the actual run
    * happens via a background promise (optionally pinned with waitUntil).
    */
-  #drainSoon(runner: JobRunner): void {
+  #drainSoon(): void {
     while (this.#running < this.#concurrency && this.#pending.length > 0) {
       const id = this.#pending.shift();
       if (id === undefined) break;
       const state = this.#jobs.get(id);
       if (state?.status !== "queued") continue;
       this.#running += 1;
-      const promise = this.#runOne(state, runner);
+      const promise = this.#runOne(state);
       if (this.#waitUntil) this.#waitUntil(promise);
     }
   }
 
-  async #runOne(state: JobState, runner: JobRunner): Promise<void> {
+  async #runOne(state: JobState): Promise<void> {
+    const runner = state.runner;
     state.status = "running";
     state.startedAtMs = Date.now();
     try {
@@ -273,7 +276,7 @@ export class JobQueue {
           console.warn("[jobs] onAfterFinish hook threw:", err);
         }
       }
-      this.#drainSoon(runner);
+      this.#drainSoon();
     }
   }
 

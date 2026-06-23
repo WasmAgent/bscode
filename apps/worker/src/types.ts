@@ -76,4 +76,10 @@ export interface AppConfig {
    * Passed to JobQueue concurrency; default 4.
    */
   rolloutConcurrency?: number;
+  /**
+   * When true, /mcp and /mcp/* are accessible without the clientToken. Use only
+   * for intentionally public MCP deployments. Default: false (MCP is protected
+   * by the same clientToken as all other endpoints).
+   */
+  publicMcpEnabled?: boolean;
 }
