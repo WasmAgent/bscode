@@ -486,5 +486,11 @@ export function assertWorkspacePath(path: string): void {
 }
 
 function normalizeKey(path: string): string {
-  return `file:${path.replace(/^\/+/, "")}`;
+  assertWorkspacePath(path);
+  const clean = path.replace(/^\/+/, "");
+  const RESERVED = ["session:", "meta:", "build-result:", "job:"];
+  if (RESERVED.some((p) => clean.startsWith(p))) {
+    throw new Error(`InvalidPath: reserved key prefix not allowed (${clean})`);
+  }
+  return `file:${clean}`;
 }

@@ -761,13 +761,19 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     } catch {
       return c.json({ error: "Invalid JSON body" }, 400);
     }
-    if (config.clientToken) {
+    if (config.buildResultsKv) {
       const nonce = body.nonce;
       const entry = nonce ? buildResultNonces.get(nonce) : undefined;
       if (!entry || entry.expiresAt < Date.now() || entry.sessionId !== sessionId) {
         return c.json({ error: "invalid or missing build-result nonce" }, 401);
       }
       buildResultNonces.delete(nonce!);
+    }
+    if (typeof body.stderr === "string" && body.stderr.length > 64_000) {
+      return c.json({ error: "stderr too large" }, 413);
+    }
+    if (typeof body.previewUrl === "string" && !/^https?:\/\//i.test(body.previewUrl)) {
+      return c.json({ error: "invalid previewUrl" }, 400);
     }
     const status = body.status;
     if (status !== "success" && status !== "failed" && status !== "running") {
@@ -1456,8 +1462,18 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
           return;
         }
 
-        const model: Model =
-          modelIds && modelIds.length > 1 ? new FallbackModel([primaryModel]) : primaryModel;
+        let model: Model = primaryModel;
+        if (modelIds && modelIds.length > 1) {
+          const additionalModels: Model[] = [];
+          for (const mid of modelIds) {
+            if (mid === modelId) continue;
+            const m = await resolveModelFromRegistry(mid, config, store);
+            if (m) additionalModels.push(m);
+          }
+          if (additionalModels.length > 0) {
+            model = new FallbackModel([primaryModel, ...additionalModels]);
+          }
+        }
 
         const filesKv = resolveFilesKv(sessionId, config);
 
