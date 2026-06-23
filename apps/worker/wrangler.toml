@@ -16,6 +16,32 @@ AGENTKIT_LOG_LEVEL = "info"
 # Set this to the actual deployment origin in production — "*" is unsafe for a deployed worker with auth.
 BSCODE_ALLOWED_ORIGIN = "http://localhost:5173"
 
+# ── API keys (set via `wrangler secret put <NAME>`, never in [vars]) ──────────
+#
+# Anthropic (Claude):
+#   wrangler secret put ANTHROPIC_API_KEY
+#
+# Volcengine Ark (Doubao / 火山引擎):
+#   wrangler secret put DOUBAO_API_KEY
+# Optional endpoint override (non-sensitive, can go in [vars]):
+# DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+#
+# DeepSeek:
+#   wrangler secret put DEEPSEEK_API_KEY
+# Optional endpoint override:
+# DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+#
+# GLM / GLM Coding Plan (智谱):
+#   wrangler secret put GLM_API_KEY
+# Choose ONE base URL (comment/uncomment as needed):
+#   Standard GLM:      GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+#   Coding Plan:       GLM_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
+#   Anthropic protocol: GLM_BASE_URL = "https://open.bigmodel.cn/api/anthropic"
+# GLM_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
+#
+# Auth token (required for all deployments):
+#   wrangler secret put BSCODE_CLIENT_TOKEN
+
 # Optional embedding endpoint — swaps the default TF-IDF embedder for a real
 # vector one. Works with OpenAI, TEI, Ollama, vLLM, anything OpenAI-shaped.
 # Falls back to TF-IDF when missing.

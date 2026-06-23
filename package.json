@@ -49,6 +49,7 @@
     "@wasmagent/model-deepseek": "^1.0.0",
     "@wasmagent/model-doubao": "^1.0.0",
     "@wasmagent/model-openai": "^1.0.0",
+    "@wasmagent/model-zhipu": "^1.0.0",
     "@wasmagent/react": "^1.0.2",
     "@wasmagent/tools-browser": "^1.0.0",
     "@wasmagent/tools-rag": "^1.0.0",

@@ -21,7 +21,27 @@ export interface AppConfig {
   anthropicBaseUrl?: string;
   anthropicAuthToken?: string;
   doubaoApiKey?: string;
+  /**
+   * Volcengine Ark base URL override.
+   * Default: https://ark.cn-beijing.volces.com/api/v3
+   * Use to point at a regional endpoint or internal proxy.
+   */
+  doubaoBaseUrl?: string;
   deepseekApiKey?: string;
+  /**
+   * DeepSeek base URL override.
+   * Default: https://api.deepseek.com/v1
+   */
+  deepseekBaseUrl?: string;
+  /** Zhipu GLM API key (open.bigmodel.cn). Also covers GLM Coding Plan. */
+  glmApiKey?: string;
+  /**
+   * GLM base URL override. Defaults to https://open.bigmodel.cn/api/paas/v4.
+   * GLM Coding Plan (OpenAI protocol): https://open.bigmodel.cn/api/coding/paas/v4
+   * GLM via Anthropic protocol: set this to https://open.bigmodel.cn/api/anthropic
+   *   and use AnthropicModel with this baseUrl instead of ZhipuModel.
+   */
+  glmBaseUrl?: string;
   e2bApiKey?: string;
   clientToken?: string;
   allowedOrigin?: string;

@@ -11,8 +11,25 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
   ANTHROPIC_AUTH_TOKEN?: string;
+  /** Volcengine Ark API key for Doubao models. */
   DOUBAO_API_KEY?: string;
+  /** Override Volcengine Ark base URL (default: ark.cn-beijing.volces.com/api/v3). */
+  DOUBAO_BASE_URL?: string;
   DEEPSEEK_API_KEY?: string;
+  /** Override DeepSeek base URL (default: api.deepseek.com/v1). */
+  DEEPSEEK_BASE_URL?: string;
+  /**
+   * Zhipu GLM API key.
+   * Works for: standard GLM endpoint, GLM Coding Plan, GLM via Anthropic protocol.
+   */
+  GLM_API_KEY?: string;
+  /**
+   * GLM base URL override.
+   * Standard:      https://open.bigmodel.cn/api/paas/v4  (default)
+   * Coding Plan:   https://open.bigmodel.cn/api/coding/paas/v4
+   * Anthropic API: https://open.bigmodel.cn/api/anthropic  (use with ANTHROPIC_BASE_URL)
+   */
+  GLM_BASE_URL?: string;
   BSCODE_CLIENT_TOKEN?: string;
   BSCODE_ALLOWED_ORIGIN?: string;
   AGENTKIT_LOG_LEVEL?: string;
@@ -43,7 +60,11 @@ export default {
       anthropicBaseUrl: env.ANTHROPIC_BASE_URL,
       anthropicAuthToken: env.ANTHROPIC_AUTH_TOKEN,
       doubaoApiKey: env.DOUBAO_API_KEY,
+      doubaoBaseUrl: env.DOUBAO_BASE_URL,
       deepseekApiKey: env.DEEPSEEK_API_KEY,
+      deepseekBaseUrl: env.DEEPSEEK_BASE_URL,
+      glmApiKey: env.GLM_API_KEY,
+      glmBaseUrl: env.GLM_BASE_URL,
       clientToken: env.BSCODE_CLIENT_TOKEN,
       allowedOrigin: env.BSCODE_ALLOWED_ORIGIN,
       filesKv: env.BSCODE_FILES ? kvFromNamespace(env.BSCODE_FILES) : undefined,

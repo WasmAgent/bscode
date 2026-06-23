@@ -62,6 +62,7 @@
         "@wasmagent/model-deepseek": "^1.0.0",
         "@wasmagent/model-doubao": "^1.0.0",
         "@wasmagent/model-openai": "^1.0.0",
+        "@wasmagent/model-zhipu": "^1.0.0",
         "@wasmagent/tools-browser": "^1.0.0",
         "@wasmagent/tools-rag": "^1.0.0",
         "diff": "^9.0.0",
@@ -90,6 +91,7 @@
     "@wasmagent/model-deepseek": "^1.0.0",
     "@wasmagent/model-doubao": "^1.0.0",
     "@wasmagent/model-openai": "^1.0.0",
+    "@wasmagent/model-zhipu": "^1.0.0",
     "@wasmagent/react": "^1.0.2",
     "@wasmagent/tools-browser": "^1.0.0",
     "@wasmagent/tools-rag": "^1.0.0",
@@ -616,6 +618,8 @@
     "@wasmagent/model-doubao": ["@wasmagent/model-doubao@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-HzWOTLZy193NQ1bjcBMSC50k5oN4N4GNjLChPbgLPBlozQpDY9p8tWTw2UDIQ+RCNktdbyrogrpNvfPSNArOXw=="],
 
     "@wasmagent/model-openai": ["@wasmagent/model-openai@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "openai": ">=4.90.0" } }, "sha512-9EgsLAEl5n/BZrlT+c7rLEyDRiWfvYWeRNYFRodB03es8CfJFGkf+Dd4KX2f/ERyToP4ze/GXRbutrpAh2a5RQ=="],
+
+    "@wasmagent/model-zhipu": ["@wasmagent/model-zhipu@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-XyO6z6bqu2g+navlHfCP4rKIBwVyDndKbcGb7/Qsp1+z6yCMpmttH6teU14w+sotWfUsMO0hdJY7AR9XlcoBhA=="],
 
     "@wasmagent/react": ["@wasmagent/react@1.0.2", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "react": ">=18.0.0" } }, "sha512-j2fZmU21knaFEl65naZLEmJTPdGJd1FudLxUjZuFxwH6etoMJmQTWDpYadBjibMIz2vX1DtaiDMCzbXbbWnUPA=="],
 

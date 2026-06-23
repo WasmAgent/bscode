@@ -137,7 +137,7 @@ describe("savePreferences + loadPreferences", () => {
 describe("getBuiltinModels", () => {
   beforeEach(() => _resetForTests());
 
-  it("always lists 7 builtin entries (3 Claude + 2 DeepSeek + 2 Doubao); without keys all are available:false", async () => {
+  it("always lists 9 builtin entries (3 Claude + 2 DeepSeek + 2 Doubao + 2 GLM); without keys all are available:false", async () => {
     // Pre-2026-06-17 we returned [] when no key was configured. The
     // ModelManager then showed "No models available" while the navbar
     // hard-coded a Claude dropdown — visually inconsistent and unhelpful
@@ -145,7 +145,7 @@ describe("getBuiltinModels", () => {
     // need). New contract: builtin entries are always returned; the
     // `available` flag reflects whether the matching key/baseUrl is set.
     const list = await getBuiltinModels({}, new MemKvStore());
-    expect(list.length).toBe(7);
+    expect(list.length).toBe(9);
     expect(list.every((m) => m.available === false)).toBe(true);
     expect(list.map((m) => m.id).sort()).toEqual([
       "claude-haiku-4-5-20251001",
@@ -155,6 +155,8 @@ describe("getBuiltinModels", () => {
       "deepseek-v4-pro",
       "doubao-seed-2-0-lite-260215",
       "doubao-seed-2-0-pro",
+      "glm-4-coding",
+      "glm-5",
     ]);
   });
 
@@ -196,6 +198,23 @@ describe("getBuiltinModels", () => {
       "doubao-seed-2-0-lite-260215",
       "doubao-seed-2-0-pro",
     ]);
+  });
+
+  it("glmApiKey unlocks GLM entries", async () => {
+    const list = await getBuiltinModels({ glmApiKey: "test-glm-key" }, new MemKvStore());
+    const glm = list.filter((m) => m.provider === "glm");
+    expect(glm.length).toBeGreaterThan(0);
+    expect(glm.every((m) => m.available)).toBe(true);
+  });
+
+  it("glmApiKey with glmBaseUrl (Coding Plan) still resolves GLM entries", async () => {
+    const list = await getBuiltinModels({
+      glmApiKey: "test-glm-key",
+      glmBaseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+    }, new MemKvStore());
+    const glm = list.filter((m) => m.provider === "glm");
+    expect(glm.length).toBeGreaterThan(0);
+    expect(glm.every((m) => m.available)).toBe(true);
   });
 
   it("custom models registered earlier appear with source=custom", async () => {

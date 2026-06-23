@@ -14,6 +14,7 @@ import { OpenAIModel } from "@wasmagent/core";
 import { AnthropicModel } from "@wasmagent/model-anthropic";
 import { DeepSeekModel } from "@wasmagent/model-deepseek";
 import { DoubaoModel } from "@wasmagent/model-doubao";
+import { ZhipuModel } from "@wasmagent/model-zhipu";
 import type { AppConfig, KvStore } from "../platform.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -278,6 +279,7 @@ export async function getBuiltinModels(config: AppConfig, store: KvStore): Promi
   const hasAnthropic = !!(config.anthropicApiKey || config.anthropicAuthToken);
   const hasDeepSeek = !!config.deepseekApiKey;
   const hasDoubao = !!config.doubaoApiKey;
+  const hasGlm = !!config.glmApiKey;
 
   // Anthropic / DeepSeek / Doubao built-ins are ALWAYS listed so the
   // ModelManager UI can show users which providers are supported and
@@ -344,6 +346,26 @@ export async function getBuiltinModels(config: AppConfig, store: KvStore): Promi
       source: "builtin",
     }
   );
+  // GLM Coding Plan uses a different base URL from standard GLM.
+  // Both are listed; the active base URL from config.glmBaseUrl routes them correctly.
+  // Model IDs change frequently — add any model via POST /models/custom using
+  // provider: "glm" and the id/label you want. These are just convenient defaults.
+  entries.push(
+    {
+      id: "glm-4-coding",
+      label: "GLM-4 Coding (Coding Plan)",
+      provider: "glm",
+      available: hasGlm,
+      source: "builtin",
+    },
+    {
+      id: "glm-5",
+      label: "GLM-5",
+      provider: "glm",
+      available: hasGlm,
+      source: "builtin",
+    }
+  );
 
   // Custom models from persistent store
   const customs = await listCustomModels(store);
@@ -381,11 +403,33 @@ export async function resolveModelFromRegistry(
   }
   if (id.startsWith("doubao")) {
     if (!config.doubaoApiKey) return null;
-    return new DoubaoModel(id as string & {}, config.doubaoApiKey);
+    return new DoubaoModel(id as string & {}, {
+      apiKey: config.doubaoApiKey,
+      ...(config.doubaoBaseUrl ? { baseUrl: config.doubaoBaseUrl } : {}),
+    });
   }
   if (id.startsWith("deepseek")) {
     if (!config.deepseekApiKey) return null;
-    return new DeepSeekModel(id as string & {}, config.deepseekApiKey);
+    return new DeepSeekModel(id as string & {}, {
+      apiKey: config.deepseekApiKey,
+      ...(config.deepseekBaseUrl ? { baseUrl: config.deepseekBaseUrl } : {}),
+    });
+  }
+  if (id.startsWith("glm") || id.startsWith("chatglm")) {
+    if (!config.glmApiKey) return null;
+    // GLM via Anthropic protocol: redirect to AnthropicModel when GLM_BASE_URL
+    // is set to https://open.bigmodel.cn/api/anthropic
+    if (config.glmBaseUrl?.includes("/api/anthropic")) {
+      return new AnthropicModel(id as string & {}, {
+        apiKey: config.glmApiKey,
+        baseURL: config.glmBaseUrl,
+      });
+    }
+    // GLM via OpenAI protocol (default, including Coding Plan)
+    return new ZhipuModel(id as string & {}, {
+      apiKey: config.glmApiKey,
+      ...(config.glmBaseUrl ? { baseUrl: config.glmBaseUrl } : {}),
+    });
   }
 
   // Custom registered models (decrypted)
