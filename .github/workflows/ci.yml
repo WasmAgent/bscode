@@ -12,56 +12,65 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # bscode depends on wasmagent-js APIs that may not yet be published to npm.
+      # Build from source (wasmagent-js@main) so the typecheck and tests always
+      # reflect the latest API surface. When wasmagent-js cuts a release, the
+      # overrides in package.json will resolve cleanly from npm.
+      - name: Checkout wasmagent-js
+        uses: actions/checkout@v4
+        with:
+          repository: WasmAgent/wasmagent-js
+          path: wasmagent-js
+          ref: main
+
       - name: Checkout bscode
         uses: actions/checkout@v4
+        with:
+          path: bscode
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      # Dependencies resolve from npm (@wasmagent/* ^0.2.0) — no sibling checkout needed.
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Build wasmagent-js packages
+        working-directory: wasmagent-js
+        run: bun install --frozen-lockfile && bun run build
+
+      - name: Link local wasmagent packages into bscode
+        working-directory: bscode
+        run: node scripts/link-wasmagent-local.mjs ../wasmagent-js
+
+      - name: Install dependencies (bscode)
+        working-directory: bscode
+        run: bun install
 
       - name: Typecheck (worker)
-        working-directory: apps/worker
+        working-directory: bscode/apps/worker
         run: bunx tsc --noEmit
 
       - name: Typecheck (web)
-        working-directory: apps/web
+        working-directory: bscode/apps/web
         run: bunx tsc --noEmit
 
       - name: Test (worker)
-        working-directory: apps/worker
+        working-directory: bscode/apps/worker
         run: bun run test
 
       - name: Test (web)
-        working-directory: apps/web
+        working-directory: bscode/apps/web
         run: bun run test
 
       - name: Build (web)
-        working-directory: apps/web
+        working-directory: bscode/apps/web
         run: bun run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
       # ── Cloudflare deploy (only on push to main; gated on secrets) ────────────
-      #
-      # Two artefacts get deployed:
-      #   1. Worker  (apps/worker)  — the agent runtime backend
-      #   2. Web     (apps/web)     — the Next.js UI via @cloudflare/next-on-pages
-      #
-      # The deploy steps short-circuit cleanly if the repo doesn't have CF
-      # secrets configured — same pattern wasmagent-js's ci.yml uses. That
-      # keeps PRs from forks from breaking the pipeline (forks can't see
-      # the secrets) without needing a separate workflow file.
-      #
-      # Custom domain bindings are configured ONCE in the Cloudflare dashboard —
-      # wrangler.toml does not pin them because the domain belongs to the operator.
-
       - name: Deploy worker to Cloudflare
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: bscode
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "Skipping worker deploy: Cloudflare secrets not configured."
@@ -74,6 +83,7 @@ jobs:
 
       - name: Deploy web to Cloudflare Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: bscode
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "Skipping web deploy: Cloudflare secrets not configured."
@@ -85,10 +95,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NEXT_PUBLIC_WORKER_URL: ${{ vars.BSCODE_WORKER_URL || 'https://bscode-worker.byteslim.com' }}
 
-  # Nightly job: verify bscode still works against wasmagent-js@main (unreleased).
-  # This catches regressions before they reach a published npm version.
-  nightly-wasmagent-main:
-    name: Nightly (wasmagent-js@main)
+  # Nightly: verify bscode installs cleanly from published npm packages.
+  # Catches "workspace:* shipped in npm tarball" regressions.
+  nightly-npm-install:
+    name: Nightly (npm published packages)
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
 
@@ -96,28 +106,14 @@ jobs:
       - name: Checkout bscode
         uses: actions/checkout@v4
 
-      - name: Checkout wasmagent-js main
-        uses: actions/checkout@v4
-        with:
-          repository: WasmAgent/wasmagent-js
-          path: .wasmagent-local
-          ref: main
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Build wasmagent-js packages
-        working-directory: .wasmagent-local
-        run: bun install --frozen-lockfile && bun run build
+      - name: Install from npm (no local wasmagent-js)
+        run: bun install --frozen-lockfile
 
-      - name: Link local wasmagent packages
-        run: node scripts/link-wasmagent-local.mjs .wasmagent-local
-
-      - name: Install dependencies (with local overrides)
-        run: bun install
-
-      - name: Test (worker — against wasmagent-js@main)
+      - name: Typecheck (worker)
         working-directory: apps/worker
-        run: bun run test
+        run: bunx tsc --noEmit
