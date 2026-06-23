@@ -35,10 +35,10 @@ npm add @wasmagent/core   # the framework itself, on npm
 ```bash
 git clone https://github.com/WasmAgent/bscode
 cd bscode
-pnpm install                                          # 1
+bun install                                           # 1
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars # 2 — fill ANTHROPIC_API_KEY
-pnpm dev:worker                                        # 3 — http://localhost:8787
-pnpm dev:web                                           # 4 — http://localhost:3000  (in another terminal)
+bun dev:worker                                         # 3 — http://localhost:8787
+bun dev:web                                            # 4 — http://localhost:3000  (in another terminal)
 ```
 
 That's it. KV bindings are optional — bscode silently falls back to in-memory
@@ -63,8 +63,8 @@ wrangler kv namespace create BSCODE_BUILD_RESULTS
 # paste each ID into apps/worker/wrangler.toml under [[kv_namespaces]]
 # then:
 wrangler secret put ANTHROPIC_API_KEY
-pnpm deploy:worker
-pnpm deploy:web
+bun deploy:worker
+bun deploy:web
 ```
 
 ---
@@ -178,7 +178,7 @@ Streamable HTTP):
 }
 ```
 
-For `pnpm dev:worker` running locally, that's `http://localhost:8787/mcp`.
+For `bun dev:worker` running locally, that's `http://localhost:8787/mcp`.
 
 The host now sees one tool — `execute_code` — and the model's snippet
 calls bscode's read-only file tools via `callTool(name, args)`. Write
