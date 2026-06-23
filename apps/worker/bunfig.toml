@@ -1,0 +1,11 @@
+[test]
+# app.test.ts uses vi.mock() for registry, shell, web-search, and tool-agent.
+# Without isolation those mocks bleed into other test files (integration.test.ts,
+# shell.test.ts, web-search.test.ts, registry.test.ts) that run in the same
+# Bun process and use await import() for the real implementations.
+#
+# NOTE: Bun 1.3.14 has a bug where `isolate = true` here is NOT applied when
+# `bun test <path>` is invoked from a parent directory (the bunfig.toml is only
+# read when CWD matches). The package.json "test" script uses `bun test --isolate`
+# explicitly so `bun run test` (or `cd apps/worker && bun test --isolate`) works.
+isolate = true

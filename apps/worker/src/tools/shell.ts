@@ -2,18 +2,14 @@ import type { ToolDefinition } from "@wasmagent/core";
 import { z } from "zod";
 import type { AppConfig } from "../types.js";
 
-/**
- * Creates a real shell runner using Bun.spawn.
- * Returns undefined when enableShell is false (edge runtime / CF Workers).
- */
 export function createShellRunner(
   config: AppConfig
-): ((cmd: string) => Promise<string>) | undefined {
+): ((argv: string[]) => Promise<string>) | undefined {
   if (!config.enableShell || !config.workdir) return undefined;
 
   const workdir = config.workdir;
-  return async (command: string) => {
-    const proc = Bun.spawn(["bash", "-c", command], {
+  return async (argv: string[]) => {
+    const proc = Bun.spawn(argv, {
       cwd: workdir,
       stdout: "pipe",
       stderr: "pipe",
@@ -41,7 +37,7 @@ export function createGitTools(config: AppConfig): ToolDefinition[] {
       outputSchema: z.string(),
       readOnly: true,
       idempotent: true,
-      forward: async () => runner("git status --short"),
+      forward: async () => runner(["git", "status", "--short"]),
     },
     {
       name: "git_diff",
@@ -54,10 +50,10 @@ export function createGitTools(config: AppConfig): ToolDefinition[] {
       readOnly: true,
       idempotent: true,
       forward: async ({ staged, path }) => {
-        const args = ["git", "diff", staged ? "--cached" : "", path ?? ""]
-          .filter(Boolean)
-          .join(" ");
-        return runner(args);
+        const argv = ["git", "diff"];
+        if (staged) argv.push("--cached");
+        if (path) argv.push("--", path);
+        return runner(argv);
       },
     },
     {
@@ -69,7 +65,7 @@ export function createGitTools(config: AppConfig): ToolDefinition[] {
       outputSchema: z.string(),
       readOnly: true,
       idempotent: true,
-      forward: async ({ n }) => runner(`git log --oneline -${n ?? 10}`),
+      forward: async ({ n }) => runner(["git", "log", "--oneline", `-${n ?? 10}`]),
     },
     {
       name: "git_commit",
@@ -80,8 +76,11 @@ export function createGitTools(config: AppConfig): ToolDefinition[] {
       outputSchema: z.string(),
       readOnly: false,
       idempotent: false,
-      forward: async ({ message }) =>
-        runner(`git add -A && git commit -m ${JSON.stringify(message)}`),
+      forward: async ({ message }) => {
+        const stage = await runner(["git", "add", "-A"]);
+        const commit = await runner(["git", "commit", "-m", message]);
+        return `${stage}\n${commit}`.trim();
+      },
     },
     {
       name: "git_checkout",
@@ -93,7 +92,12 @@ export function createGitTools(config: AppConfig): ToolDefinition[] {
       outputSchema: z.string(),
       readOnly: false,
       idempotent: false,
-      forward: async ({ branch, create }) => runner(`git checkout ${create ? "-b " : ""}${branch}`),
+      forward: async ({ branch, create }) => {
+        const argv = ["git", "checkout"];
+        if (create) argv.push("-b");
+        argv.push(branch);
+        return runner(argv);
+      },
     },
   ];
 }

@@ -348,7 +348,7 @@ export function createListFileVersionsTool(
 }
 
 export function createRunCommandTool(
-  shellRunner?: (cmd: string) => Promise<string>
+  shellRunner?: (argv: string[]) => Promise<string>
 ): ToolDefinition<{ command: string; code?: string }, string> {
   return {
     name: "run_command",
@@ -386,7 +386,7 @@ export function createRunCommandTool(
         if (blocked)
           return "Error: Command blocked (destructive operation requires explicit confirmation)";
 
-        const output = await shellRunner(safeCommand);
+        const output = await shellRunner(safeCommand.split(/\s+/).filter(Boolean));
 
         // Post-execution error classification (bolt.diy pattern)
         if (/exit:[1-9]/.test(output)) {

@@ -12,7 +12,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 AGENTKIT_LOG_LEVEL = "info"
-BSCODE_ALLOWED_ORIGIN = "*"
+# Set this to the actual deployment origin in production — "*" is unsafe for a deployed worker with auth.
+BSCODE_ALLOWED_ORIGIN = "http://localhost:5173"
 
 # Optional embedding endpoint — swaps the default TF-IDF embedder for a real
 # vector one. Works with OpenAI, TEI, Ollama, vLLM, anything OpenAI-shaped.
@@ -30,6 +31,7 @@ BSCODE_ALLOWED_ORIGIN = "*"
 # id = "YOUR_KV_ID_HERE"
 
 # Session/prompt-cache result caching (warm replays across cold starts).
+# Job records are mirrored here for cross-recycle persistence (durableKv).
 #   wrangler kv namespace create BSCODE_SESSIONS
 # [[kv_namespaces]]
 # binding = "BSCODE_SESSIONS"

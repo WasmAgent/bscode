@@ -33,17 +33,17 @@ const MODELS = {
   "qwen2.5-0.5b": {
     label: "Qwen2.5-0.5B q4_0",
     sizeBytes: 397_807_936,
-    path: "/Users/I041705/.ollama/models/blobs/sha256-c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
+    path: process.env.MODEL_QWEN2_5_0_5B ?? "",
   },
   "evo-qwen3-1.7b-q3km": {
     label: "evo-Qwen3-1.7B q3_k_m",
     sizeBytes: 939_538_272,
-    path: "/Users/I041705/.ollama/models/blobs/sha256-e0e684fc428b5c89fd5e8096f0d4db4b3125ca622552d7571e9da1eca3730e28",
+    path: process.env.MODEL_EVO_QWEN3_1_7B ?? "",
   },
   "evomerge-qwen2.5-1.5b": {
     label: "evomerge-Qwen2.5-1.5B",
     sizeBytes: 1_646_572_512,
-    path: "/Users/I041705/.ollama/models/blobs/sha256-5dfa9656b7f88477ce5d0bd1e61ecfbb59093bf6ccd61f1376f4c73c0ccca3c3",
+    path: process.env.MODEL_EVOMERGE_QWEN2_5_1_5B ?? "",
   },
 };
 

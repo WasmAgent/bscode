@@ -69,6 +69,15 @@ bun deploy:web
 
 ---
 
+## Security & Production Deployment
+
+- **Authentication** — All stateful API endpoints require `Authorization: Bearer <BSCODE_CLIENT_TOKEN>` when `BSCODE_CLIENT_TOKEN` is configured in the Worker environment. The worker runs locally without any Cloudflare bindings (in-memory fallback) and without authentication when the token is unset.
+- **CORS** — Set `BSCODE_ALLOWED_ORIGIN` to your deployment domain (e.g. `https://bscode.example.com`) in production. The default (`localhost:5173`) is safe for local dev but must not be used in production.
+- **Build-result nonce** — `/build-result` requires a per-job nonce in production mode. Obtain it with `GET /jobs/:id/build-nonce` before posting a result. This prevents result-injection across jobs (BSCODE-004).
+- **Job state persistence** — Job state is persisted to the `BSCODE_SESSIONS` KV namespace when configured, making the Worker restart-safe. Without the binding the worker falls back to in-memory state (lost on restart).
+
+---
+
 ## What this demonstrates
 
 Each row maps to a published wasmagent-js capability — bscode just wires

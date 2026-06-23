@@ -309,37 +309,37 @@ describe("run_command", () => {
   });
 
   it("delegates to shellRunner and returns its output", async () => {
-    const calls: string[] = [];
-    const runner = async (cmd: string) => {
-      calls.push(cmd);
+    const calls: string[][] = [];
+    const runner = async (argv: string[]) => {
+      calls.push(argv);
       return "exit:0\nhello world";
     };
     const tool = createRunCommandTool(runner);
     const out = await tool.forward({ command: "echo hello world" });
-    expect(calls).toEqual(["echo hello world"]);
+    expect(calls).toEqual([["echo", "hello", "world"]]);
     expect(out).toBe("exit:0\nhello world");
   });
 
   it("auto-rewrites bare `rm` to `rm -f` to dodge No-such-file failures", async () => {
-    const calls: string[] = [];
-    const runner = async (cmd: string) => {
-      calls.push(cmd);
+    const calls: string[][] = [];
+    const runner = async (argv: string[]) => {
+      calls.push(argv);
       return "exit:0\n";
     };
     const tool = createRunCommandTool(runner);
     await tool.forward({ command: "rm /tmp/some-thing" });
-    expect(calls[0]).toBe("rm -f /tmp/some-thing");
+    expect(calls[0]).toEqual(["rm", "-f", "/tmp/some-thing"]);
   });
 
   it("auto-rewrites bare `mkdir` to `mkdir -p` to dodge already-exists failures", async () => {
-    const calls: string[] = [];
-    const runner = async (cmd: string) => {
-      calls.push(cmd);
+    const calls: string[][] = [];
+    const runner = async (argv: string[]) => {
+      calls.push(argv);
       return "exit:0\n";
     };
     const tool = createRunCommandTool(runner);
     await tool.forward({ command: "mkdir foo/bar" });
-    expect(calls[0]).toBe("mkdir -p foo/bar");
+    expect(calls[0]).toEqual(["mkdir", "-p", "foo/bar"]);
   });
 
   it("blocks rm -rf / with 'Error: Command blocked'", async () => {

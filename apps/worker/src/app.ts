@@ -60,6 +60,7 @@ import {
   resolveModelFromRegistry,
   savePreferences,
 } from "./models/registry.js";
+import { createAuthMiddleware } from "./middleware/auth.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
 import {
@@ -98,6 +99,8 @@ export type { AppConfig } from "./platform.js";
 
 const SESSION_TTL = 3600;
 const MAX_TASK_BYTES = 10_240;
+const MAX_BULK_FILES = 100;
+const MAX_BULK_TOTAL_BYTES = 2 * 1024 * 1024;
 const MAX_STEPS_CAP = 30;
 const MAX_KV_EVENTS = 500;
 
@@ -190,6 +193,14 @@ function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }):
 // the closure inside createApp() can carry per-AppConfig embedder choice.
 // Each app instance maintains its own Map below; we rebind via factory.
 type IndexerFor = (c: { req: { header: (n: string) => string | undefined } }) => SemanticIndexer;
+
+const buildResultNonces = new Map<string, { jobId: string; expiresAt: number }>();
+
+function issueBuildResultNonce(_sessionId: string, jobId: string): string {
+  const nonce = crypto.randomUUID();
+  buildResultNonces.set(nonce, { jobId, expiresAt: Date.now() + 15 * 60 * 1000 });
+  return nonce;
+}
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {
@@ -290,13 +301,7 @@ export function createApp(config: AppConfig) {
   });
 
   // ── Auth ───────────────────────────────────────────────────────────────────
-  app.use("/run", async (c, next) => {
-    if (!config.clientToken) return next();
-    const auth = c.req.header("Authorization") ?? "";
-    if (!timingSafeEqual(auth, `Bearer ${config.clientToken}`))
-      return c.json({ error: "Unauthorized" }, 401);
-    return next();
-  });
+  app.use("*", createAuthMiddleware(config));
 
   // ── Health ────────────────────────────────────────────────────────────────
   app.get("/health", (c) =>
@@ -745,12 +750,23 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
    * Returns 400 for malformed payloads; KV mirroring is best-effort.
    */
   app.post("/build-result", async (c) => {
+    const now = Date.now();
+    for (const [k, v] of buildResultNonces) {
+      if (v.expiresAt < now) buildResultNonces.delete(k);
+    }
     const sessionId = sessionIdOf(c);
-    let body: Partial<BuildResultSnapshot>;
+    let body: Partial<BuildResultSnapshot> & { nonce?: string };
     try {
-      body = await c.req.json<Partial<BuildResultSnapshot>>();
+      body = await c.req.json<Partial<BuildResultSnapshot> & { nonce?: string }>();
     } catch {
       return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    if (config.clientToken) {
+      const nonce = body.nonce;
+      if (!nonce || !buildResultNonces.has(nonce)) {
+        return c.json({ error: "invalid or missing build-result nonce" }, 401);
+      }
+      buildResultNonces.delete(nonce);
     }
     const status = body.status;
     if (status !== "success" && status !== "failed" && status !== "running") {
@@ -924,6 +940,16 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     return c.json(job);
   });
 
+  /** GET /jobs/:id/build-nonce — issue a one-time nonce for POST /build-result. */
+  app.get("/jobs/:id/build-nonce", async (c) => {
+    const jobId = c.req.param("id");
+    const job = await jobQueue.get(jobId);
+    if (!job) return c.json({ error: "job not found" }, 404);
+    const sessionId = sessionIdOf(c);
+    const nonce = issueBuildResultNonce(sessionId, jobId);
+    return c.json({ nonce });
+  });
+
   /** DELETE /jobs/:id — cooperative abort. Returns whether the abort took. */
   app.delete("/jobs/:id", (c) => {
     const ok = jobQueue.abort(c.req.param("id"));
@@ -1092,6 +1118,23 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     const { files } = await c.req.json<{ files: { path: string; content: string }[] }>();
     if (!Array.isArray(files) || files.length === 0)
       return c.json({ error: "files array required" }, 400);
+    if (files.length > MAX_BULK_FILES)
+      return c.json({ error: `too many files: max ${MAX_BULK_FILES}` }, 413);
+    const enc = new TextEncoder();
+    let totalBytes = 0;
+    for (const f of files) {
+      try {
+        assertWorkspacePath(f.path);
+      } catch (err) {
+        return c.json({ error: `invalid path: ${f.path}` }, 400);
+      }
+      const bytes = enc.encode(f.content ?? "").byteLength;
+      if (bytes > MAX_FILE_BYTES)
+        return c.json({ error: `file too large: ${f.path}` }, 413);
+      totalBytes += bytes;
+      if (totalBytes > MAX_BULK_TOTAL_BYTES)
+        return c.json({ error: "bulk payload too large" }, 413);
+    }
     await Promise.all(
       files.map(({ path, content }) => kv.put(`file:${path.replace(/^\/+/, "")}`, content ?? ""))
     );
@@ -1250,6 +1293,11 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const path = c.req.param("path");
     if (!kv) return c.json({ error: "KV not bound" }, 503);
+    try {
+      assertWorkspacePath(path);
+    } catch (err) {
+      return c.json({ error: `invalid path: ${path}` }, 400);
+    }
     if (typeof kv.delete !== "function") {
       return c.json({ error: "KV backend does not support delete" }, 501);
     }
@@ -1439,7 +1487,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
           const shell = createShellRunner(config);
           if (shell) {
             const [status, readme, pkg] = await Promise.all([
-              shell("git status --short 2>/dev/null || echo '(not a git repo)'"),
+              shell(["git", "status", "--short"]).catch(() => "(not a git repo)"),
               filesKv?.get("file:README.md") ?? Promise.resolve(null),
               filesKv?.get("file:package.json") ?? Promise.resolve(null),
             ]);
@@ -2461,16 +2509,6 @@ async function getRelevantFileContents(
   // Use FileTreeManager's semantic scoring (path + content keywords + recency)
   const scored = tree.getRelevantFiles(task, maxFiles, 2000);
   return scored.map((f) => ({ path: f.path, content: f.content }));
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const aB = enc.encode(a),
-    bB = enc.encode(b);
-  const len = Math.max(aB.length, bB.length);
-  let diff = aB.length ^ bB.length;
-  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0);
-  return diff === 0;
 }
 
 async function contentHash(inputs: object): Promise<string> {

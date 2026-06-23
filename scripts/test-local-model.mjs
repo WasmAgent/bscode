@@ -34,8 +34,7 @@ const { values } = parseArgs({
   options: {
     gguf: {
       type: "string",
-      default:
-        "/Users/I041705/.ollama/models/blobs/sha256-c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515",
+      default: process.env.OLLAMA_MODEL_PATH ?? "",
     },
     task: {
       type: "string",
