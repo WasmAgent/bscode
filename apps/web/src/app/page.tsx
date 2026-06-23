@@ -5,6 +5,10 @@ import JSZip from "jszip";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { ClarifyPanel } from "@/components/ClarifyPanel";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { NavBar } from "@/components/NavBar";
+import { PreviewPane } from "@/components/PreviewPane";
 import { TurnBlock } from "@/components/TurnBlock";
 import type { ConversationTurn, GoalCriterion, GoalDoneSummary } from "@/lib/conversationTypes";
 
@@ -44,7 +48,7 @@ const IsolationDemoModal = dynamic(
   { ssr: false, loading: () => null }
 );
 
-import { type PreviewContent, Terminal } from "@/components/Terminal";
+import type { PreviewContent } from "@/components/Terminal";
 import { TokenMeter } from "@/components/TokenMeter";
 import { type AgentConfig, useAgent } from "@/hooks/useAgent";
 import { useGitHub } from "@/hooks/useGitHub";
@@ -84,17 +88,6 @@ const mono: React.CSSProperties = { fontFamily: "JetBrains Mono, monospace" };
 function cardTypeForPath(path: string): CardBlock["type"] {
   return /\.d2$/i.test(path) ? "d2" : "markdown";
 }
-
-const iconBtn = (color = theme.textMuted): React.CSSProperties => ({
-  padding: "4px 8px",
-  borderRadius: 3,
-  border: "none",
-  background: "transparent",
-  color,
-  fontSize: 11,
-  cursor: "pointer",
-  whiteSpace: "nowrap" as const,
-});
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -969,268 +962,20 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
       </div>
 
       {/* ── Top navbar ── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          rowGap: 6,
-          padding: "0 16px",
-          minHeight: 44,
-          background: "#161b22",
-          borderBottom: "1px solid #30363d",
-          flexShrink: 0,
-        }}
-      >
-        {/* Left: logo + mode */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ color: "#58a6ff", fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>
-            BSCode
-          </span>
-          {/* B-D1 (2026-06): unified funnel CTA. The same string lives in
-              README.md so both surfaces send the same signal. The
-              source=ui-pill query param distinguishes UI clicks from
-              README-link / deploy-button traffic in any aggregation. */}
-          <a
-            href="https://www.npmjs.com/package/@wasmagent/core?source=bscode-ui-pill"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="bscode is a thin template; the framework lives at @wasmagent/core"
-            style={{
-              fontSize: 10,
-              padding: "2px 7px",
-              borderRadius: 999,
-              background: "#3fb95022",
-              color: "#3fb950",
-              textDecoration: "none",
-              border: "1px solid #3fb95044",
-              whiteSpace: "nowrap",
-            }}
-          >
-            npm add @wasmagent/core →
-          </a>
-          {/* Direction 6 reverse-funnel entry: "their framework + our kernel".
-              Visible alongside the npm pill so a visitor on Vercel AI SDK 6 /
-              Cloudflare codemode / Mastra / Anthropic / OpenAI Agents JS
-              sees the runtime pitch immediately, not only after exploring
-              the CodeAgent demo. */}
-          <a
-            href="/recipes?source=bscode-ui-recipes-pill"
-            title="Drop the agentkit kernel into the framework you already use"
-            style={{
-              fontSize: 10,
-              padding: "2px 7px",
-              borderRadius: 999,
-              background: "#9b9bff22",
-              color: "#9b9bff",
-              textDecoration: "none",
-              border: "1px solid #9b9bff44",
-              whiteSpace: "nowrap",
-            }}
-          >
-            their framework + our kernel →
-          </a>
-          {/* Mode toggle */}
-          <div style={{ display: "flex", gap: 3 }}>
-            {(["code", "tool"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setConfig((c) => ({ ...c, agentMode: mode, framework: null }))}
-                style={{
-                  padding: "3px 8px",
-                  borderRadius: 3,
-                  fontSize: 10,
-                  border: "none",
-                  cursor: "pointer",
-                  background:
-                    config.agentMode === mode && !config.framework ? "#1f6feb33" : "transparent",
-                  color:
-                    config.agentMode === mode && !config.framework ? "#58a6ff" : theme.textMuted,
-                  fontWeight: 600,
-                }}
-              >
-                {mode === "code" ? "Code" : "Tool"}
-              </button>
-            ))}
-            {/*
-              2026-06-18 (revised same day): the manual 🎯 Goal toggle was
-              removed. The classifier (`POST /classify`) now emits a
-              `loop: "single" | "verify"` axis; useAgent maps `loop=verify`
-              + non-framework mode onto agentMode="goalDirected" without
-              user intervention. The agentMode value is still threaded all
-              the way through to the worker, so any caller that sets it
-              explicitly (the `agentkit goal` CLI, raw POST /run, future
-              advanced UI) keeps working — UI users just don't see a dial.
-              The mode badge shown by TurnBlock carries a "🎯" suffix when
-              loop=verify so the classifier's choice stays visible.
-            */}
-            <button
-              type="button"
-              onClick={() =>
-                setConfig((c) => ({
-                  ...c,
-                  agentMode: "tool",
-                  framework: c.framework ? null : "react",
-                }))
-              }
-              style={{
-                padding: "3px 8px",
-                borderRadius: 3,
-                fontSize: 10,
-                border: "none",
-                cursor: "pointer",
-                background: config.framework ? "#23863622" : "transparent",
-                color: config.framework ? "#3fb950" : theme.textMuted,
-                fontWeight: 600,
-              }}
-            >
-              {config.framework ? `⚡ ${config.framework}` : "Framework"}
-            </button>
-          </div>
-          {/* Framework selector */}
-          {config.framework && (
-            <div style={{ display: "flex", gap: 3 }}>
-              {(["react", "vue", "svelte", "vanilla"] as const).map((fw) => (
-                <button
-                  key={fw}
-                  type="button"
-                  onClick={() => setConfig((c) => ({ ...c, framework: fw }))}
-                  style={{
-                    padding: "2px 7px",
-                    borderRadius: 3,
-                    fontSize: 10,
-                    border: "none",
-                    cursor: "pointer",
-                    background: config.framework === fw ? "#3fb95022" : "transparent",
-                    color: config.framework === fw ? "#3fb950" : theme.textMuted,
-                  }}
-                >
-                  {fw === "react"
-                    ? "React"
-                    : fw === "vue"
-                      ? "Vue"
-                      : fw === "svelte"
-                        ? "Svelte"
-                        : "Vanilla"}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* Auto-detect badge */}
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              cursor: "pointer",
-              fontSize: 10,
-              color: theme.textMuted,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={config.autoMode ?? true}
-              onChange={(e) => setConfig((c) => ({ ...c, autoMode: e.target.checked }))}
-              style={{ accentColor: "#58a6ff", width: 11, height: 11 }}
-            />
-            Auto-detect
-          </label>
-        </div>
-
-        {/* Right: model + tools */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <select
-            id="bscode-model-select"
-            name="model"
-            aria-label="Model"
-            title="Select language model"
-            value={config.modelId}
-            onChange={(e) => setConfig((c) => ({ ...c, modelId: e.target.value }))}
-            style={{
-              background: "#21262d",
-              border: "1px solid #30363d",
-              borderRadius: 4,
-              color: "#c9d1d9",
-              fontSize: 11,
-              padding: "3px 6px",
-              cursor: "pointer",
-            }}
-          >
-            <option value="claude-sonnet-4-6">Sonnet 4.6</option>
-            <option value="claude-opus-4-8">Opus 4.8</option>
-            <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
-          </select>
-          <button
-            type="button"
-            onClick={handleImportDir}
-            disabled={importing}
-            style={iconBtn(importing ? theme.textMuted : "#c9d1d9")}
-            title="Import from directory"
-          >
-            ⬆ Dir
-          </button>
-          <button
-            type="button"
-            onClick={handleImportZip}
-            disabled={importing}
-            style={iconBtn(importing ? theme.textMuted : "#c9d1d9")}
-            title="Import ZIP"
-          >
-            ⬆ ZIP
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadZip}
-            disabled={isDownloading}
-            style={iconBtn("#58a6ff")}
-            title="Download ZIP"
-          >
-            ⬇ ZIP
-          </button>
-          <button
-            type="button"
-            onClick={handleGitHub}
-            disabled={pushing}
-            style={{
-              ...iconBtn(user ? "#3fb950" : theme.textMuted),
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-            title={user ? `Push to GitHub (${user.login})` : "Connect GitHub"}
-          >
-            {user ? (
-              // biome-ignore lint/performance/noImgElement: avatar from GitHub CDN — using next/image would require remotePatterns config and adds no perf benefit for a 13×13 px image
-              <img
-                src={user.avatar_url}
-                alt={user.login}
-                width={13}
-                height={13}
-                style={{ borderRadius: "50%" }}
-              />
-            ) : null}
-            {pushing ? "…" : user ? "Push" : "GitHub"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setApiMapOpen(true)}
-            style={iconBtn(theme.textMuted)}
-            title="What you see ↔ what you can copy (B1, 2026-06)"
-          >
-            ?
-          </button>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen((o) => !o)}
-            style={iconBtn(theme.textMuted)}
-            title="Settings"
-          >
-            ⚙
-          </button>
-        </div>
-      </div>
+      <NavBar
+        config={config}
+        onConfigChange={(update) => setConfig((c) => ({ ...c, ...update }))}
+        importing={importing}
+        isDownloading={isDownloading}
+        pushing={pushing}
+        user={user}
+        onImportDir={handleImportDir}
+        onImportZip={handleImportZip}
+        onDownloadZip={handleDownloadZip}
+        onGitHub={handleGitHub}
+        onOpenApiMap={() => setApiMapOpen(true)}
+        onOpenSettings={() => setSettingsOpen((o) => !o)}
+      />
 
       {/* D6 (2026-06-13) — three differentiated demos. Sits below the
           navbar so first-paint includes the funnel signals; collapses
@@ -1390,272 +1135,39 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             {/* Clarifying questions — Claude Code style: options + free text + auto-continue */}
             {clarifyingQuestions &&
               clarifyingQuestions.length > 0 &&
-              !isRunning &&
-              (() => {
-                // Check if all questions have been answered
-                const allAnswered = clarifyingQuestions.every((_, i) =>
-                  (clarifyAnswers[i] ?? "").trim()
-                );
-
-                const submitWithAnswers = () => {
-                  const answerSuffix = clarifyingQuestions
-                    .map((q, i) => `${q.text}: ${(clarifyAnswers[i] ?? "").replace(/^other:/, "")}`)
-                    .join("\n");
-                  // Build enriched task: original task + Q&A answers
-                  const baseTask = lastSubmittedTask.current || inputText.trim();
-                  const enrichedTask = baseTask ? `${baseTask}\n\n${answerSuffix}` : answerSuffix;
-                  dismissClarify();
-                  setClarifyAnswers({});
-                  // skipClarify=true so this doesn't trigger another clarify round
-                  handleSubmit(enrichedTask, true);
-                };
-
-                return (
-                  <div
-                    style={{
-                      marginBottom: 10,
-                      background: "#0d1b2a",
-                      border: "1px solid #1f6feb55",
-                      borderRadius: 8,
-                      padding: "12px 14px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "#58a6ff",
-                        fontWeight: 700,
-                        marginBottom: 10,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <span>
-                        💬{" "}
-                        {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
-                          ? "几个问题帮我更好地理解需求："
-                          : "A few questions before I start:"}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          dismissClarify();
-                          setClarifyAnswers({});
-                          // Use the original task (before inputText was cleared), skipClarify=true
-                          handleSubmit(lastSubmittedTask.current || inputText, true);
-                        }}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: theme.textMuted,
-                          fontSize: 10,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
-                          ? "跳过，直接运行 →"
-                          : "Skip, run anyway →"}
-                      </button>
-                    </div>
-
-                    {clarifyingQuestions.map((q, qi) => (
-                      <div
-                        // biome-ignore lint/suspicious/noArrayIndexKey: questions render once per clarification round; index IS identity
-                        key={qi}
-                        style={{ marginBottom: qi < clarifyingQuestions.length - 1 ? 12 : 8 }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "#c9d1d9",
-                            marginBottom: 6,
-                            fontWeight: 500,
-                          }}
-                        >
-                          {qi + 1}. {q.text}
-                        </div>
-
-                        {/* Option buttons */}
-                        {q.options.length > 0 && (
-                          <div
-                            style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}
-                          >
-                            {q.options.map((opt, oi) => {
-                              const selected = clarifyAnswers[qi] === opt;
-                              return (
-                                <button
-                                  // biome-ignore lint/suspicious/noArrayIndexKey: option list is fixed per question — index IS identity
-                                  key={oi}
-                                  type="button"
-                                  onClick={() =>
-                                    setClarifyAnswers((prev) => ({
-                                      ...prev,
-                                      [qi]: selected ? "" : opt,
-                                    }))
-                                  }
-                                  style={{
-                                    padding: "5px 12px",
-                                    borderRadius: 20,
-                                    border: `1px solid ${selected ? "#58a6ff" : "#30363d"}`,
-                                    background: selected ? "#1f6feb22" : "transparent",
-                                    color: selected ? "#58a6ff" : theme.textMuted,
-                                    fontSize: 11,
-                                    cursor: "pointer",
-                                    fontFamily: "inherit",
-                                    transition: "all 0.1s",
-                                  }}
-                                >
-                                  {opt}
-                                </button>
-                              );
-                            })}
-                            {/* "Other" option to show free text */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setClarifyAnswers((prev) => ({
-                                  ...prev,
-                                  [qi]: prev[qi] && !q.options.includes(prev[qi]) ? "" : "other:",
-                                }))
-                              }
-                              style={{
-                                padding: "5px 12px",
-                                borderRadius: 20,
-                                border: `1px solid ${clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]) ? "#58a6ff" : "#30363d"}`,
-                                background:
-                                  clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi])
-                                    ? "#1f6feb22"
-                                    : "transparent",
-                                color:
-                                  clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi])
-                                    ? "#58a6ff"
-                                    : theme.textMuted,
-                                fontSize: 11,
-                                cursor: "pointer",
-                                fontFamily: "inherit",
-                              }}
-                            >
-                              {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
-                                ? "其他…"
-                                : "Other…"}
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Free text — shown when "Other" selected or no options */}
-                        {(q.options.length === 0 ||
-                          (clarifyAnswers[qi] && !q.options.includes(clarifyAnswers[qi]))) && (
-                          <input
-                            type="text"
-                            placeholder={
-                              /[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
-                                ? "请输入..."
-                                : "Type your answer..."
-                            }
-                            value={clarifyAnswers[qi]?.replace(/^other:/, "") ?? ""}
-                            onChange={(e) =>
-                              setClarifyAnswers((prev) => ({
-                                ...prev,
-                                [qi]: e.target.value || "other:",
-                              }))
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && allAnswered) submitWithAnswers();
-                            }}
-                            style={{
-                              width: "100%",
-                              background: "#161b22",
-                              border: "1px solid #30363d",
-                              borderRadius: 6,
-                              color: "#c9d1d9",
-                              fontSize: 12,
-                              padding: "6px 10px",
-                              fontFamily: "inherit",
-                              outline: "none",
-                            }}
-                            // biome-ignore lint/a11y/noAutofocus: intentional focus for UX
-                            autoFocus={qi === 0}
-                          />
-                        )}
-                      </div>
-                    ))}
-
-                    {/* Submit button — enabled when all answered */}
-                    <button
-                      type="button"
-                      onClick={submitWithAnswers}
-                      disabled={!allAnswered}
-                      style={{
-                        marginTop: 4,
-                        padding: "7px 16px",
-                        borderRadius: 6,
-                        border: "none",
-                        background: allAnswered ? "#1f6feb" : "#21262d",
-                        color: allAnswered ? "#fff" : theme.textMuted,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: allAnswered ? "pointer" : "default",
-                        fontFamily: "inherit",
-                        transition: "background 0.15s",
-                      }}
-                    >
-                      {/[一-龥]/.test(clarifyingQuestions[0]?.text ?? "")
-                        ? "确认并运行 ▶"
-                        : "Submit & Run ▶"}
-                    </button>
-                  </div>
-                );
-              })()}
+              !isRunning && (
+                <ClarifyPanel
+                  questions={clarifyingQuestions}
+                  answers={clarifyAnswers}
+                  onAnswerChange={(qi, value) =>
+                    setClarifyAnswers((prev) => ({ ...prev, [qi]: value }))
+                  }
+                  onSubmit={() => {
+                    const answerSuffix = clarifyingQuestions
+                      .map(
+                        (q, i) =>
+                          `${q.text}: ${(clarifyAnswers[i] ?? "").replace(/^other:/, "")}`
+                      )
+                      .join("\n");
+                    const baseTask = lastSubmittedTask.current || inputText.trim();
+                    const enrichedTask = baseTask
+                      ? `${baseTask}\n\n${answerSuffix}`
+                      : answerSuffix;
+                    dismissClarify();
+                    setClarifyAnswers({});
+                    handleSubmit(enrichedTask, true);
+                  }}
+                  onSkip={() => {
+                    dismissClarify();
+                    setClarifyAnswers({});
+                    handleSubmit(lastSubmittedTask.current || inputText, true);
+                  }}
+                />
+              )}
 
             {/* Fix error banner */}
             {lastTurnError && !isRunning && (
-              <div
-                style={{
-                  marginBottom: 10,
-                  background: "#1a0a0a",
-                  border: "1px solid #f8514933",
-                  borderRadius: 6,
-                  padding: "8px 12px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 8,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "#f85149",
-                    flex: 1,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  ✗ {lastTurnError.slice(0, 120)}
-                  {lastTurnError.length > 120 ? "…" : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleFix}
-                  style={{
-                    flexShrink: 0,
-                    padding: "4px 12px",
-                    borderRadius: 4,
-                    border: "none",
-                    background: "#f85149",
-                    color: "#fff",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  ⚡ Fix Error
-                </button>
-              </div>
+              <ErrorBanner error={lastTurnError} onFix={handleFix} />
             )}
 
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
@@ -1783,115 +1295,25 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             header chrome on the closed column, which both wastes work
             and leaves stale event listeners attached. */}
         {hasPreview && (
-          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* Preview header */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "0 12px",
-                height: 36,
-                background: "#161b22",
-                borderBottom: "1px solid #30363d",
-                flexShrink: 0,
-                fontSize: 11,
-                color: theme.textMuted,
-              }}
-            >
-              <span style={{ textTransform: "uppercase", letterSpacing: 0.8 }}>
-                Preview
-                {!isRunning && wcStatus === "installing" && (
-                  <span
-                    style={{
-                      marginLeft: 8,
-                      color: "#e3b341",
-                      animation: "pulse 1.2s ease-in-out infinite",
-                    }}
-                  >
-                    ● installing
-                  </span>
-                )}
-                {!isRunning && wcStatus === "starting" && (
-                  <span
-                    style={{
-                      marginLeft: 8,
-                      color: "#e3b341",
-                      animation: "pulse 1.2s ease-in-out infinite",
-                    }}
-                  >
-                    ● starting
-                  </span>
-                )}
-                {!isRunning && wcStatus === "ready" && previewUrl && (
-                  <span style={{ marginLeft: 8, color: "#3fb950" }}>● live</span>
-                )}
-              </span>
-              <div style={{ display: "flex", gap: 4 }}>
-                {(["preview", "messages", "events"] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setPreviewView(v)}
-                    style={{
-                      padding: "3px 8px",
-                      borderRadius: 3,
-                      border: "none",
-                      background: previewView === v ? "#1f6feb33" : "transparent",
-                      color:
-                        previewView === v
-                          ? "#58a6ff"
-                          : v === "preview" && hasPreview && previewView !== "preview"
-                            ? "#e3b341"
-                            : theme.textMuted,
-                      fontSize: 10,
-                      cursor: "pointer",
-                      fontWeight: previewView === v ? 600 : 400,
-                    }}
-                  >
-                    {v.charAt(0).toUpperCase() + v.slice(1)}
-                    {v === "preview" && hasPreview && previewView !== "preview" ? " ●" : ""}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Reset agent state, drop all conversation turns,
-                    // wipe preview pane, and reset the WebContainers
-                    // mount. The previous behaviour only reset the
-                    // agent + preview, leaving stale turns visible.
-                    resetAll();
-                    setTurns([]);
-                    setPreview(undefined);
-                    wcReset();
-                  }}
-                  style={{
-                    padding: "3px 8px",
-                    borderRadius: 3,
-                    border: "none",
-                    background: "transparent",
-                    color: "#f85149",
-                    fontSize: 10,
-                    cursor: "pointer",
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-            <div style={{ flex: 1, overflow: "hidden" }}>
-              <Terminal
-                messages={messages}
-                rawEvents={rawEvents}
-                isRunning={isRunning}
-                viewMode={previewView}
-                preview={selectedCard ? { ...preview, card: selectedCard } : preview}
-                wcLines={wcLines}
-                wcStatus={wcStatus}
-                streamingArtifacts={streamingArtifacts.size > 0 ? streamingArtifacts : undefined}
-              />
-            </div>
-          </div>
+          <PreviewPane
+            messages={messages}
+            rawEvents={rawEvents}
+            isRunning={isRunning}
+            previewView={previewView}
+            onViewChange={setPreviewView}
+            preview={preview}
+            selectedCard={selectedCard}
+            wcLines={wcLines}
+            wcStatus={wcStatus}
+            previewUrl={previewUrl}
+            streamingArtifacts={streamingArtifacts.size > 0 ? streamingArtifacts : undefined}
+            onClear={() => {
+              resetAll();
+              setTurns([]);
+              setPreview(undefined);
+              wcReset();
+            }}
+          />
         )}
       </div>
 
