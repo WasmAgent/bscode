@@ -2,7 +2,7 @@ const SESSION_KEY = "bscode.sessionId";
 const SESSION_ID_RE = /^[a-zA-Z0-9._-]{8,128}$/;
 
 export function getOrCreateSessionId(): string {
-  if (typeof window === "undefined") return "ssr-placeholder";
+  if (typeof window === "undefined") return crypto.randomUUID();
   try {
     const existing = window.localStorage.getItem(SESSION_KEY);
     if (existing && SESSION_ID_RE.test(existing)) return existing;

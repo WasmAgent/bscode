@@ -1099,7 +1099,7 @@ async function* ptcAgentRun(
     const registry = new ToolRegistry();
     for (const t of tools) registry.register(t);
 
-    const orchestrator = new ProgrammaticOrchestrator(kernel, registry);
+    const orchestrator = new ProgrammaticOrchestrator(kernel, registry, {}, { resetKernelPerRun: true });
 
     // Generate script via model
     const collectModelText = async (msgs: ModelMessage[]) => {

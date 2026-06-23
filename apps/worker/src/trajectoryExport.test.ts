@@ -28,7 +28,7 @@ describe("buildRolloutRecord", () => {
     expect(rec.total_score).toBe(0);
   });
 
-  it("sets objective_score=0 when no build result", () => {
+  it("sets objective_score=0.5 (neutral/pending) when no build result", () => {
     const rec = buildRolloutRecord({
       jobId: "job-abc12345",
       jobSpec: { task: "x" } as never,
@@ -36,7 +36,9 @@ describe("buildRolloutRecord", () => {
       branchIndex: 0,
       buildResult: null,
     });
-    expect(rec.objective_score).toBe(0);
+    // 0.5 = neutral/pending — WebContainer hasn't reported yet.
+    // This distinguishes "no result" from "explicit failure" (0).
+    expect(rec.objective_score).toBe(0.5);
   });
 });
 

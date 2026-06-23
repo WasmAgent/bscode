@@ -155,7 +155,7 @@ export function useAgent(
   const { messages, status, isRunning, finalAnswer, run, abort, reset } = useAgentRun(
     `${workerUrl}/run`,
     // biome-ignore lint/suspicious/noExplicitAny: useAgentRun onEvent callback type
-    { onEvent: onEvent as any, headers: { "X-Session-Id": getOrCreateSessionId() } }
+    { onEvent: onEvent as any, headers: () => ({ "X-Session-Id": getOrCreateSessionId() }) }
   );
 
   const submit = useCallback(

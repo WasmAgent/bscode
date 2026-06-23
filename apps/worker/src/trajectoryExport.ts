@@ -61,7 +61,12 @@ export function buildRolloutRecord(opts: {
     finalAnswer = "",
   } = opts;
 
-  const objectiveScore = buildResult?.status === "success" ? 1 : 0;
+  // Three-valued encoding: null (no build triggered) → 0.5 neutral/unknown,
+  // 'success' → 1, any failure/running state → 0.
+  // Using 0 for null would make un-built rollouts indistinguishable from failed
+  // builds, corrupting RolloutRanker preference pairs in RLAIF training data.
+  const objectiveScore =
+    buildResult === null ? 0.5 : buildResult.status === "success" ? 1 : 0;
 
   return {
     schema_version: "rollout-wire/v1",

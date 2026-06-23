@@ -39,7 +39,11 @@ export function mountBuildResultRoutes(
     } catch {
       return c.json({ error: "Invalid JSON body" }, 400);
     }
-    if (config.buildResultsKv) {
+    // Nonce check is the sole auth gate when clientToken middleware is absent.
+    // It must run unconditionally — skipping it when buildResultsKv is unbound
+    // would let any caller POST arbitrary build results against a public endpoint.
+    // The only intentional bypass is an explicit dev-mode flag.
+    if (!config.allowLocalSessionFallback) {
       const nonce = body.nonce;
       const entry = nonce ? buildResultNonces.get(nonce) : undefined;
       if (!entry || entry.expiresAt < Date.now() || entry.sessionId !== sessionId) {

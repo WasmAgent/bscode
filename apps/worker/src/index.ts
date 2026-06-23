@@ -4,6 +4,7 @@
  * platform-independent createApp() factory.
  */
 import { type AppConfig, createApp } from "./app.js";
+import { checkProductionConfig, warnOptionalConfig } from "./config/productionGuard.js";
 import { kvFromNamespace } from "./platform.js";
 
 export interface Env {
@@ -54,6 +55,14 @@ export default {
       ...(embedding ? { embedding } : {}),
     };
     const app = createApp(config);
+    warnOptionalConfig(config);
+    const guardResult = checkProductionConfig(config);
+    if (!guardResult.ok && !config.allowLocalSessionFallback) {
+      return new Response(
+        JSON.stringify({ error: "Missing required bindings", missing: guardResult.missing }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
     return app.fetch(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;
