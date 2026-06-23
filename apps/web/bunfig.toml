@@ -1,2 +1,6 @@
 [test]
 preload = ["./test-setup.ts"]
+# Multiple test files use vi.mock() at module scope. Without isolation, mocks
+# bleed across files and cause cross-test state pollution. isolate = true runs
+# each file in a fresh global context (equivalent to --isolate CLI flag).
+isolate = true

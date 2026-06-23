@@ -1,6 +1,7 @@
 "use client";
 import { type FileSystemTree, WebContainer } from "@webcontainer/api";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getOrCreateSessionId } from "@/lib/session";
 import { getWorkerUrl } from "@/lib/workerUrl";
 
 export type WcStatus = "idle" | "booting" | "installing" | "starting" | "ready" | "error";
@@ -84,9 +85,7 @@ export function useWebContainer(): UseWebContainerReturn {
   const reportBuildResult = useCallback(async (payload: BuildResultPayload) => {
     try {
       const workerUrl = getWorkerUrl();
-      const sessionId =
-        (typeof window !== "undefined" && window.localStorage.getItem("bscode.sessionId")) ||
-        "default";
+      const sessionId = getOrCreateSessionId();
       await fetch(`${workerUrl}/build-result`, {
         method: "POST",
         headers: {

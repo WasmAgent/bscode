@@ -82,4 +82,9 @@ export interface AppConfig {
    * by the same clientToken as all other endpoints).
    */
   publicMcpEnabled?: boolean;
+  /**
+   * When true, requests missing X-Session-Id fall back to "default" instead
+   * of returning 400. Use only for local CLI/dev flows. Never set in production.
+   */
+  allowLocalSessionFallback?: boolean;
 }

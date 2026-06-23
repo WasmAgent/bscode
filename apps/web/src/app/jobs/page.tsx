@@ -7,24 +7,20 @@
  * conversation page but does NOT share React state — each Tab is its own
  * surface. The conversational page stays untouched (low-risk integration).
  *
- * Pulls X-Session-Id from localStorage so per-session filters work; falls
- * back to "default" so the page is usable in a fresh browser without
- * setup.
+ * Uses getOrCreateSessionId() so every browser has a stable, valid session
+ * ID on first load — no more "default" fallback that mixes sessions.
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { JobsPanel } from "@/components/JobsPanel";
+import { getOrCreateSessionId } from "@/lib/session";
 import { theme } from "@/lib/theme";
 
 export default function JobsPage() {
-  const [sessionId, setSessionId] = useState<string>("default");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("bscode.sessionId");
-    if (stored) setSessionId(stored);
-  }, []);
+  const [sessionId] = useState<string>(() =>
+    typeof window !== "undefined" ? getOrCreateSessionId() : "initializing"
+  );
 
   return (
     <main style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
@@ -44,3 +40,4 @@ export default function JobsPage() {
     </main>
   );
 }
+

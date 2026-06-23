@@ -175,12 +175,25 @@ function checkpointerFor(config: AppConfig): InMemoryCheckpointer | KvCheckpoint
 // compatibility with existing CLI flows that pre-date the header.
 const sessionFileTrees = new Map<string, FileTreeManager>();
 
-function sessionIdOf(c: { req: { header: (n: string) => string | undefined } }): string {
-  return c.req.header("X-Session-Id") ?? "default";
+const SESSION_ID_RE = /^[a-zA-Z0-9._#-]{8,128}$/;
+
+function parseSessionId(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  return SESSION_ID_RE.test(trimmed) ? trimmed : null;
 }
 
-function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }): FileTreeManager {
-  const id = sessionIdOf(c);
+function sessionIdOf(c: { req: { header: (n: string) => string | undefined } }, config?: AppConfig): string {
+  const raw = c.req.header("X-Session-Id");
+  const id = parseSessionId(raw);
+  if (id) return id;
+  if (raw && !id) throw new Error("invalid X-Session-Id format");
+  if (config?.allowLocalSessionFallback) return "default";
+  throw new Error("X-Session-Id required");
+}
+
+function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }, config: AppConfig): FileTreeManager {
+  const id = sessionIdOf(c, config);
   let tree = sessionFileTrees.get(id);
   if (!tree) {
     tree = new FileTreeManager();
@@ -252,7 +265,7 @@ export function createApp(config: AppConfig) {
     sharedEmbedder = undefined; // resolved on first use
   }
   const indexerFor: IndexerFor = (c) => {
-    const id = sessionIdOf(c);
+    const id = sessionIdOf(c, config);
     let idx = sessionIndexers.get(id);
     if (!idx) {
       // Use the embedder if it was already resolved; otherwise fall back to
@@ -302,6 +315,27 @@ export function createApp(config: AppConfig) {
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   app.use("*", createAuthMiddleware(config));
+
+  // ── Session enforcement — reject missing/malformed X-Session-Id early ─────
+  // OPTIONS are already handled by the CORS middleware above (returns 204).
+  // Health and metrics are public. All paths under /files, /run, /build-result,
+  // /jobs, /checkpoints, and /rollouts require a valid session header.
+  const SESSION_EXEMPT_PATHS = new Set(["/health", "/metrics"]);
+  app.use("*", async (c, next) => {
+    if (c.req.method === "OPTIONS") return next();
+    const path = new URL(c.req.url).pathname;
+    if (SESSION_EXEMPT_PATHS.has(path)) return next();
+    const needsSession = /^\/(files|run|build-result|jobs|checkpoints|rollouts)/.test(path);
+    if (!needsSession) return next();
+    const raw = c.req.header("X-Session-Id");
+    if (!raw && !config.allowLocalSessionFallback) {
+      return c.json({ error: "X-Session-Id header required" }, 400);
+    }
+    if (raw && !parseSessionId(raw)) {
+      return c.json({ error: "invalid X-Session-Id format (8-128 alphanumeric/._#-)" }, 400);
+    }
+    return next();
+  });
 
   // ── Health ────────────────────────────────────────────────────────────────
   app.get("/health", (c) =>
@@ -754,7 +788,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     for (const [k, v] of buildResultNonces) {
       if (v.expiresAt < now) buildResultNonces.delete(k);
     }
-    const sessionId = sessionIdOf(c);
+    const sessionId = sessionIdOf(c, config);
     let body: Partial<BuildResultSnapshot> & { nonce?: string };
     try {
       body = await c.req.json<Partial<BuildResultSnapshot> & { nonce?: string }>();
@@ -798,14 +832,14 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
 
   /** GET /build-result — debug readback; the agent uses the tool, not this. */
   app.get("/build-result", async (c) => {
-    const sessionId = sessionIdOf(c);
+    const sessionId = sessionIdOf(c, config);
     const snap = await getBuildResult(sessionId, config.buildResultsKv);
     return c.json(snap);
   });
 
   /** DELETE /build-result — clears stale state on session reset. */
   app.delete("/build-result", async (c) => {
-    const sessionId = sessionIdOf(c);
+    const sessionId = sessionIdOf(c, config);
     await clearBuildResult(sessionId, config.buildResultsKv);
     return c.json({ ok: true });
   });
@@ -952,7 +986,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     const jobId = c.req.param("id");
     const job = await jobQueue.get(jobId);
     if (!job) return c.json({ error: "job not found" }, 404);
-    const sessionId = sessionIdOf(c);
+    const sessionId = sessionIdOf(c, config);
     const nonce = issueBuildResultNonce(sessionId, jobId);
     return c.json({ nonce });
   });
@@ -1151,7 +1185,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
   // ── File version history (v0.dev checkpoint pattern) ─────────────────────
   app.get("/files/:path{.+}/versions", async (c) => {
     const path = c.req.param("path");
-    const versions = fileTreeFor(c).getVersions(path);
+    const versions = fileTreeFor(c, config).getVersions(path);
     return c.json({
       path,
       versions: versions.map((v) => ({ version: v.version, hash: v.hash, savedAtMs: v.savedAtMs })),
@@ -1164,7 +1198,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     const path = c.req.param("path");
     const versionNum = Number(c.req.param("version"));
     if (Number.isNaN(versionNum)) return c.json({ error: "version must be a number" }, 400);
-    const versions = fileTreeFor(c).getVersions(path);
+    const versions = fileTreeFor(c, config).getVersions(path);
     const target = versions.find((v) => v.version === versionNum);
     if (!target) return c.json({ error: `version ${versionNum} not found` }, 404);
     return c.json({
@@ -1180,7 +1214,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     const path = c.req.param("path");
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     const { version } = await c.req.json<{ version: number }>();
-    const content = fileTreeFor(c).rollback(path, version);
+    const content = fileTreeFor(c, config).rollback(path, version);
     if (!content) return c.json({ error: `Version ${version} not found for ${path}` }, 404);
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
     return c.json({ ok: true, path, version, chars: content.length });
@@ -1261,7 +1295,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     }
     if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
     // Keep FileTreeManager in sync for conflict detection and context relevance
-    fileTreeFor(c).recordWrite(path.replace(/^\/+/, ""), content);
+    fileTreeFor(c, config).recordWrite(path.replace(/^\/+/, ""), content);
     return c.json({ ok: true, path });
   });
 
@@ -1283,7 +1317,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
   app.delete("/files", async (c) => {
     const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
     if (!kv) return c.json({ error: "KV not bound" }, 503);
-    if (typeof kv.delete !== "function") {
+    if (typeof config.filesKv?.delete !== "function") {
       // Fail loud rather than silently no-op — the caller is asking us
       // to clear state and we must not pretend success when we can't.
       return c.json({ error: "KV backend does not support delete" }, 501);
@@ -1292,7 +1326,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     await Promise.all(list.keys.map((k) => kv.delete?.(k.name)));
     // Also reset the in-memory file tree (and version history) for this
     // session — otherwise stale versions linger after a workspace wipe.
-    sessionFileTrees.delete(sessionIdOf(c));
+    sessionFileTrees.delete(sessionIdOf(c, config));
     return c.json({ ok: true, cleared: list.keys.length });
   });
 
@@ -1305,13 +1339,13 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     } catch (err) {
       return c.json({ error: `invalid path: ${path}` }, 400);
     }
-    if (typeof kv.delete !== "function") {
+    if (typeof config.filesKv?.delete !== "function") {
       return c.json({ error: "KV backend does not support delete" }, 501);
     }
     await kv.delete(`file:${path}`);
     // Drop the in-memory entry + its version history so a follow-up
     // GET /files/:path/versions doesn't return phantom versions.
-    fileTreeFor(c).remove(path);
+    fileTreeFor(c, config).remove(path);
     return c.json({ ok: true, path });
   });
 
@@ -1526,7 +1560,7 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
               ? ["run_command", "git_status", "git_diff", "git_log", "git_commit", "git_checkout"]
               : []),
           ],
-          fileTreeFor(c),
+          fileTreeFor(c, config),
           indexerFor(c),
           sessionId,
           Boolean(body.framework)
@@ -2028,7 +2062,8 @@ function getModelId(model: Model): string {
 function resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvStore | undefined {
   if (!config.filesKv) return undefined;
   if (sessionId) return new SessionKvStore(config.filesKv, sessionId);
-  return config.filesKv;
+  if (config.allowLocalSessionFallback) return new SessionKvStore(config.filesKv, "default");
+  throw new Error("resolveFilesKv: sessionId is required");
 }
 
 /**

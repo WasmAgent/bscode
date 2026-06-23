@@ -1,6 +1,7 @@
 "use client";
 import { useAgentRun } from "@wasmagent/react";
 import { useCallback, useRef, useState } from "react";
+import { getOrCreateSessionId } from "@/lib/session";
 import { getWorkerUrl } from "@/lib/workerUrl";
 
 export interface TokenStats {
@@ -154,7 +155,7 @@ export function useAgent(
   const { messages, status, isRunning, finalAnswer, run, abort, reset } = useAgentRun(
     `${workerUrl}/run`,
     // biome-ignore lint/suspicious/noExplicitAny: useAgentRun onEvent callback type
-    { onEvent: onEvent as any }
+    { onEvent: onEvent as any, headers: { "X-Session-Id": getOrCreateSessionId() } }
   );
 
   const submit = useCallback(

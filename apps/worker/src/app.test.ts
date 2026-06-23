@@ -110,6 +110,7 @@ function makeApp(overrides: Record<string, unknown> = {}) {
     allowedOrigin: "*",
     filesKv: new MemKvStore(),
     sessionsKv: new MemKvStore(),
+    allowLocalSessionFallback: true,
     ...overrides,
   });
 }
@@ -518,23 +519,23 @@ describe("Files KV routes", () => {
     await app.fetch(
       new Request("http://localhost/files", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "s1" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-s1" },
         body: JSON.stringify({ path: "f.ts", content: "session-1" }),
       })
     );
     await app.fetch(
       new Request("http://localhost/files", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "s2" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-s2" },
         body: JSON.stringify({ path: "f.ts", content: "session-2" }),
       })
     );
 
     const r1 = await app.fetch(
-      new Request("http://localhost/files/f.ts", { headers: { "X-Session-Id": "s1" } })
+      new Request("http://localhost/files/f.ts", { headers: { "X-Session-Id": "session-s1" } })
     );
     const r2 = await app.fetch(
-      new Request("http://localhost/files/f.ts", { headers: { "X-Session-Id": "s2" } })
+      new Request("http://localhost/files/f.ts", { headers: { "X-Session-Id": "session-s2" } })
     );
     expect(((await r1.json()) as { content: string }).content).toBe("session-1");
     expect(((await r2.json()) as { content: string }).content).toBe("session-2");
@@ -779,7 +780,7 @@ describe("Build result reverse channel (B2)", () => {
     const post = await app.fetch(
       new Request("http://localhost/build-result", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "sess-1" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-sess-1" },
         body: JSON.stringify({
           status: "failed",
           stage: "install",
@@ -791,7 +792,7 @@ describe("Build result reverse channel (B2)", () => {
     expect(post.status).toBe(200);
     const get = await app.fetch(
       new Request("http://localhost/build-result", {
-        headers: { "X-Session-Id": "sess-1" },
+        headers: { "X-Session-Id": "session-sess-1" },
       })
     );
     expect(get.status).toBe(200);
@@ -829,20 +830,20 @@ describe("Build result reverse channel (B2)", () => {
     await app.fetch(
       new Request("http://localhost/build-result", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "sess-2" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-sess-2" },
         body: JSON.stringify({ status: "success" }),
       })
     );
     const del = await app.fetch(
       new Request("http://localhost/build-result", {
         method: "DELETE",
-        headers: { "X-Session-Id": "sess-2" },
+        headers: { "X-Session-Id": "session-sess-2" },
       })
     );
     expect(del.status).toBe(200);
     const get = await app.fetch(
       new Request("http://localhost/build-result", {
-        headers: { "X-Session-Id": "sess-2" },
+        headers: { "X-Session-Id": "session-sess-2" },
       })
     );
     const body = (await get.json()) as { status: string };
@@ -854,25 +855,25 @@ describe("Build result reverse channel (B2)", () => {
     await app.fetch(
       new Request("http://localhost/build-result", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-alice" },
         body: JSON.stringify({ status: "success" }),
       })
     );
     await app.fetch(
       new Request("http://localhost/build-result", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "bob" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-bob" },
         body: JSON.stringify({ status: "failed", stage: "build", stderr: "TS2339" }),
       })
     );
     const a = await (
       await app.fetch(
-        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "alice" } })
+        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "session-alice" } })
       )
     ).json();
     const b = await (
       await app.fetch(
-        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "bob" } })
+        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "session-bob" } })
       )
     ).json();
     expect((a as { status: string }).status).toBe("success");
@@ -992,7 +993,7 @@ describe("Job queue (B1)", () => {
     const sub = await app.fetch(
       new Request("http://localhost/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "list-1" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-list-1" },
         body: JSON.stringify({
           jobs: [
             { task: "first", agentMode: "code" },
@@ -1004,7 +1005,7 @@ describe("Job queue (B1)", () => {
     const { jobIds } = (await sub.json()) as { jobIds: string[] };
     for (const id of jobIds) await waitForTerminal(app, id);
 
-    const list = await app.fetch(new Request("http://localhost/jobs?sessionId=list-1"));
+    const list = await app.fetch(new Request("http://localhost/jobs?sessionId=session-list-1"));
     const body = (await list.json()) as {
       jobs: Array<{ id: string; spec: { task: string } }>;
       stats: { total: number };
@@ -1605,12 +1606,12 @@ describe("C2 — per-job session isolation + diff/merge", () => {
 
   it("snapshots parent files into the derived session before the job runs", async () => {
     const app = makeApp({ filesKv: new MemKvStore() });
-    await putFile(app, "alice", "src/a.ts", "v0");
+    await putFile(app, "session-alice", "src/a.ts", "v0");
 
     const submit = await app.fetch(
       new Request("http://localhost/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-alice" },
         body: JSON.stringify({ task: "noop", agentMode: "code" }),
       })
     );
@@ -1620,22 +1621,22 @@ describe("C2 — per-job session isolation + diff/merge", () => {
     if (!id) return;
     await waitForTerminal(app, id);
 
-    const derived = `alice#${id}`;
+    const derived = `session-alice#${id}`;
     expect(await getFile(app, derived, "src/a.ts")).toBe("v0");
     // Parent untouched.
-    expect(await getFile(app, "alice", "src/a.ts")).toBe("v0");
+    expect(await getFile(app, "session-alice", "src/a.ts")).toBe("v0");
   });
 
   it("/jobs/:id/diff reports added/modified/deleted relative to the snapshot", async () => {
     const app = makeApp({ filesKv: new MemKvStore() });
-    await putFile(app, "alice", "keep.ts", "0");
-    await putFile(app, "alice", "change.ts", "0");
-    await putFile(app, "alice", "gone.ts", "0");
+    await putFile(app, "session-alice", "keep.ts", "0");
+    await putFile(app, "session-alice", "change.ts", "0");
+    await putFile(app, "session-alice", "gone.ts", "0");
 
     const submit = await app.fetch(
       new Request("http://localhost/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-alice" },
         body: JSON.stringify({ task: "noop", agentMode: "code" }),
       })
     );
@@ -1646,7 +1647,7 @@ describe("C2 — per-job session isolation + diff/merge", () => {
     await waitForTerminal(app, id);
 
     // Simulate the job's edits by writing into the derived session directly.
-    const derived = `alice#${id}`;
+    const derived = `session-alice#${id}`;
     await putFile(app, derived, "change.ts", "1");
     await putFile(app, derived, "new.ts", "fresh");
     await app.fetch(
@@ -1668,12 +1669,12 @@ describe("C2 — per-job session isolation + diff/merge", () => {
 
   it("/jobs/:id/merge applies changes to parent when there is no concurrent edit", async () => {
     const app = makeApp({ filesKv: new MemKvStore() });
-    await putFile(app, "alice", "a.ts", "v0");
+    await putFile(app, "session-alice", "a.ts", "v0");
 
     const submit = await app.fetch(
       new Request("http://localhost/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-alice" },
         body: JSON.stringify({ task: "noop", agentMode: "code" }),
       })
     );
@@ -1683,7 +1684,7 @@ describe("C2 — per-job session isolation + diff/merge", () => {
     if (!id) return;
     await waitForTerminal(app, id);
 
-    await putFile(app, `alice#${id}`, "a.ts", "v1");
+    await putFile(app, `session-alice#${id}`, "a.ts", "v1");
 
     const merge = await app.fetch(
       new Request(`http://localhost/jobs/${id}/merge`, {
@@ -1701,17 +1702,17 @@ describe("C2 — per-job session isolation + diff/merge", () => {
     expect(result.conflicts).toEqual([]);
     expect(result.applied).toEqual(["a.ts"]);
     expect(result.cleanedUp).toBe(true);
-    expect(await getFile(app, "alice", "a.ts")).toBe("v1");
+    expect(await getFile(app, "session-alice", "a.ts")).toBe("v1");
   });
 
   it("concurrent base edit produces a structured conflict — parent is NOT silently overwritten", async () => {
     const app = makeApp({ filesKv: new MemKvStore() });
-    await putFile(app, "alice", "x.ts", "v0");
+    await putFile(app, "session-alice", "x.ts", "v0");
 
     const submit = await app.fetch(
       new Request("http://localhost/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-alice" },
         body: JSON.stringify({ task: "noop", agentMode: "code" }),
       })
     );
@@ -1722,8 +1723,8 @@ describe("C2 — per-job session isolation + diff/merge", () => {
     await waitForTerminal(app, id);
 
     // Both sides edit x.ts after the snapshot was taken.
-    await putFile(app, `alice#${id}`, "x.ts", "v-job");
-    await putFile(app, "alice", "x.ts", "v-base");
+    await putFile(app, `session-alice#${id}`, "x.ts", "v-job");
+    await putFile(app, "session-alice", "x.ts", "v-base");
 
     const merge = await app.fetch(
       new Request(`http://localhost/jobs/${id}/merge`, {
@@ -1744,16 +1745,16 @@ describe("C2 — per-job session isolation + diff/merge", () => {
     ]);
     expect(result.cleanedUp).toBe(false);
     // Parent must NOT have been silently overwritten.
-    expect(await getFile(app, "alice", "x.ts")).toBe("v-base");
+    expect(await getFile(app, "session-alice", "x.ts")).toBe("v-base");
   });
 
   it("DELETE /jobs/:id/branch drops the derived session", async () => {
     const app = makeApp({ filesKv: new MemKvStore() });
-    await putFile(app, "alice", "a.ts", "v0");
+    await putFile(app, "session-alice", "a.ts", "v0");
     const submit = await app.fetch(
       new Request("http://localhost/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-alice" },
         body: JSON.stringify({ task: "noop", agentMode: "code" }),
       })
     );
@@ -1767,9 +1768,9 @@ describe("C2 — per-job session isolation + diff/merge", () => {
       new Request(`http://localhost/jobs/${id}/branch`, { method: "DELETE" })
     );
     expect(del.status).toBe(200);
-    expect(await getFile(app, `alice#${id}`, "a.ts")).toBeNull();
+    expect(await getFile(app, `session-alice#${id}`, "a.ts")).toBeNull();
     // Parent untouched.
-    expect(await getFile(app, "alice", "a.ts")).toBe("v0");
+    expect(await getFile(app, "session-alice", "a.ts")).toBe("v0");
   });
 });
 
@@ -1918,13 +1919,13 @@ describe("E2E P1 — /files versions + rollback", () => {
 
   it("version history is per-session — different X-Session-Id keeps timelines isolated", async () => {
     const app = makeApp();
-    await writeFile(app, "shared.ts", "alpha-1", "alice");
-    await writeFile(app, "shared.ts", "alpha-2", "alice");
-    await writeFile(app, "shared.ts", "bravo-1", "bob");
+    await writeFile(app, "shared.ts", "alpha-1", "session-alice");
+    await writeFile(app, "shared.ts", "alpha-2", "session-alice");
+    await writeFile(app, "shared.ts", "bravo-1", "session-bob");
 
     const aliceList = await app.fetch(
       new Request("http://localhost/files/shared.ts/versions", {
-        headers: { "X-Session-Id": "alice" },
+        headers: { "X-Session-Id": "session-alice" },
       })
     );
     const aliceBody = (await aliceList.json()) as { versions: unknown[] };
@@ -1932,7 +1933,7 @@ describe("E2E P1 — /files versions + rollback", () => {
 
     const bobList = await app.fetch(
       new Request("http://localhost/files/shared.ts/versions", {
-        headers: { "X-Session-Id": "bob" },
+        headers: { "X-Session-Id": "session-bob" },
       })
     );
     const bobBody = (await bobList.json()) as { versions: unknown[] };
@@ -2021,6 +2022,7 @@ describe("E2E P1 — /jobs additional error / filter branches", () => {
       anthropicApiKey: "sk-test",
       allowedOrigin: "*",
       sessionsKv: new MemKvStore(),
+      allowLocalSessionFallback: true,
       // filesKv intentionally omitted
     });
     // Submit a job first so we have a real id (the route checks filesKv before
@@ -2167,12 +2169,12 @@ describe("C4 — AGENTS.md project instructions", () => {
     // Cheap path: spy on createToolAgent to capture extras.projectInstructions.
     const filesKv = new MemKvStore();
     const app = makeApp({ filesKv });
-    await putFile(app, "alice", "AGENTS.md", "PROJECT-RULE-XYZ");
+    await putFile(app, "session-alice", "AGENTS.md", "PROJECT-RULE-XYZ");
 
     // Stub the tool agent factory so we can read what app.ts hands it.
     const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
     // Build the same loader+resolver app.ts uses on the per-session KV view.
-    const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "alice");
+    const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "session-alice");
     const loader = makeKvAgentsMdLoader({
       get: (k) => sessKv.get(k),
       put: (k, v) => sessKv.put(k, v),
@@ -2188,11 +2190,11 @@ describe("C4 — AGENTS.md project instructions", () => {
   it("nested AGENTS.md (packages/api/AGENTS.md) is included in the resolved instructions", async () => {
     const filesKv = new MemKvStore();
     const app = makeApp({ filesKv });
-    await putFile(app, "alice", "AGENTS.md", "ROOT-RULES");
-    await putFile(app, "alice", "packages/api/AGENTS.md", "API-RULES");
+    await putFile(app, "session-alice", "AGENTS.md", "ROOT-RULES");
+    await putFile(app, "session-alice", "packages/api/AGENTS.md", "API-RULES");
 
     const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
-    const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "alice");
+    const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "session-alice");
     const loader = makeKvAgentsMdLoader({
       get: (k) => sessKv.get(k),
       put: (k, v) => sessKv.put(k, v),
@@ -2209,7 +2211,7 @@ describe("C4 — AGENTS.md project instructions", () => {
   it("empty workspace: ProjectInstructions returns empty text — no header injection", async () => {
     const filesKv = new MemKvStore();
     const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
-    const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "alice");
+    const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "session-alice");
     const loader = makeKvAgentsMdLoader({
       get: (k) => sessKv.get(k),
       put: (k, v) => sessKv.put(k, v),
@@ -2268,26 +2270,26 @@ describe("E2E P2 — KV failure + multi-tenant isolation", () => {
     await app.fetch(
       new Request("http://localhost/files", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "alice" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-alice" },
         body: JSON.stringify({ path: "shared.ts", content: "alice-content" }),
       })
     );
     await app.fetch(
       new Request("http://localhost/files", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Session-Id": "bob" },
+        headers: { "Content-Type": "application/json", "X-Session-Id": "session-bob" },
         body: JSON.stringify({ path: "shared.ts", content: "bob-content" }),
       })
     );
 
     const aliceRead = await app.fetch(
       new Request("http://localhost/files/shared.ts", {
-        headers: { "X-Session-Id": "alice" },
+        headers: { "X-Session-Id": "session-alice" },
       })
     );
     const bobRead = await app.fetch(
       new Request("http://localhost/files/shared.ts", {
-        headers: { "X-Session-Id": "bob" },
+        headers: { "X-Session-Id": "session-bob" },
       })
     );
     expect(((await aliceRead.json()) as { content: string }).content).toBe("alice-content");
@@ -2393,7 +2395,7 @@ describe("E2E P2 — KV failure + multi-tenant isolation", () => {
       app.fetch(
         new Request("http://localhost/files", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Session-Id": "race" },
+          headers: { "Content-Type": "application/json", "X-Session-Id": "session-race" },
           body: JSON.stringify({ path: "race.ts", content }),
         })
       )
@@ -2402,7 +2404,7 @@ describe("E2E P2 — KV failure + multi-tenant isolation", () => {
     for (const r of responses) expect(r.status).toBe(200);
 
     const read = await app.fetch(
-      new Request("http://localhost/files/race.ts", { headers: { "X-Session-Id": "race" } })
+      new Request("http://localhost/files/race.ts", { headers: { "X-Session-Id": "session-race" } })
     );
     expect(read.status).toBe(200);
     const body = (await read.json()) as { content: string };
@@ -2416,6 +2418,7 @@ describe("E2E P2 — KV failure + multi-tenant isolation", () => {
       anthropicApiKey: "sk-test",
       allowedOrigin: "*",
       sessionsKv: new MemKvStore(),
+      allowLocalSessionFallback: true,
       // filesKv intentionally omitted
     });
     const res = await app.fetch(new Request("http://localhost/files/anything.ts"));
