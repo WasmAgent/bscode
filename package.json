@@ -37,20 +37,20 @@
     "diff": "^9.0.0"
   },
   "overrides": {
-    "@wasmagent/agent-prompts": "^0.2.0",
-    "@wasmagent/core": "^0.2.0",
-    "@wasmagent/kernel-pyodide": "^0.2.0",
-    "@wasmagent/kernel-quickjs": "^0.2.0",
-    "@wasmagent/kernel-remote": "^0.2.0",
-    "@wasmagent/mcp-server": "^0.2.0",
-    "@wasmagent/model-anthropic": "^0.2.0",
-    "@wasmagent/model-deepseek": "^0.2.0",
-    "@wasmagent/model-doubao": "^0.2.0",
-    "@wasmagent/model-openai": "^0.2.0",
-    "@wasmagent/react": "^0.2.0",
-    "@wasmagent/tools-browser": "^0.2.0",
-    "@wasmagent/tools-rag": "^0.2.0",
-    "@wasmagent/ui-cards": "^0.2.0",
-    "@wasmagent/ui-cards-react": "^0.2.0"
+    "@wasmagent/agent-prompts": "^1.0.0",
+    "@wasmagent/core": "^1.0.0",
+    "@wasmagent/kernel-pyodide": "^1.0.0",
+    "@wasmagent/kernel-quickjs": "^1.0.0",
+    "@wasmagent/kernel-remote": "^1.0.0",
+    "@wasmagent/mcp-server": "^1.0.0",
+    "@wasmagent/model-anthropic": "^1.0.0",
+    "@wasmagent/model-deepseek": "^1.0.0",
+    "@wasmagent/model-doubao": "^1.0.0",
+    "@wasmagent/model-openai": "^1.0.0",
+    "@wasmagent/react": "^1.0.0",
+    "@wasmagent/tools-browser": "^1.0.0",
+    "@wasmagent/tools-rag": "^1.0.0",
+    "@wasmagent/ui-cards": "^1.0.0",
+    "@wasmagent/ui-cards-react": "^1.0.0"
   }
 }

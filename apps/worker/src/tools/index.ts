@@ -78,7 +78,7 @@ export function createListFilesTool(
 
 export function createSearchCodeTool(
   kv: KvStore | undefined
-): ToolDefinition<{ query: string; path?: string }, string> {
+): ToolDefinition<{ query: string; path?: string; maxFiles?: number }, string> {
   return {
     name: "search_code",
     description:
