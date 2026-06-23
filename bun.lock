@@ -5,7 +5,6 @@
     "": {
       "name": "bscode",
       "dependencies": {
-        "@wasmagent/core": "1.0.1",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
         "diff": "^9.0.0",
@@ -82,11 +81,11 @@
   },
   "overrides": {
     "@wasmagent/agent-prompts": "^1.0.0",
-    "@wasmagent/core": "^1.0.0",
+    "@wasmagent/core": "^1.0.1",
     "@wasmagent/kernel-pyodide": "^1.0.0",
     "@wasmagent/kernel-quickjs": "^1.0.0",
     "@wasmagent/kernel-remote": "^1.0.0",
-    "@wasmagent/mcp-server": "^1.0.0",
+    "@wasmagent/mcp-server": "^1.0.1",
     "@wasmagent/model-anthropic": "^1.0.0",
     "@wasmagent/model-deepseek": "^1.0.0",
     "@wasmagent/model-doubao": "^1.0.0",
@@ -600,7 +599,7 @@
 
     "@wasmagent/agent-prompts": ["@wasmagent/agent-prompts@1.0.0", "", {}, "sha512-foxrnJd3Bi1Tp89e892IE2y46GLnhT9PTO+p8AfNNXtjrTCIIUW+81dCAkVf5aNgLvHYVn59QU4u0H3RDMB2Xw=="],
 
-    "@wasmagent/core": ["@wasmagent/core@1.0.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.0", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-NEUYRqG11WkRXwsNC5ymIrY1+IT4VxOKkHWkzlDqLV0+VWzNh+kIfmF0bNbTJr5Lf48CBFSDN32/593bi+uBCw=="],
+    "@wasmagent/core": ["@wasmagent/core@1.0.1", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.0", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-ALqFE6oJ28qnNPCc9uH8bkAmrfAWCrISJQM6OUa7XDM4WDXd7mPyennryqN8/ONWoHXfmiWHf/sTmNca+c83Ug=="],
 
     "@wasmagent/kernel-pyodide": ["@wasmagent/kernel-pyodide@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "pyodide": ">=0.26.0" } }, "sha512-LL82g3f9O+hAXsVaUudp6Km3iduXiRCwBZ49mWZoi+dBhbfiyqHbd72HkRRobyVVV1tQkleN66GmnnhseinHDg=="],
 
@@ -608,7 +607,7 @@
 
     "@wasmagent/kernel-remote": ["@wasmagent/kernel-remote@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "e2b": ">=1.0.0" }, "optionalPeers": ["e2b"] }, "sha512-fNaFgPJOhZ/AftgamKc6OLwD7eRzBn5zicnFZ+nlut1tL4gsHQXOs/tC7lSCrq4BeYng2qJfZf+478GUak/Qyw=="],
 
-    "@wasmagent/mcp-server": ["@wasmagent/mcp-server@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "bin": { "agentkit-mcp-server": "dist/stdio.js" } }, "sha512-8j68a3m19MJ+qpxglHPtLcsacBr2fb+GUWohx62SUrpuVZr5s4RhWZHCzVuT8OKY6W3Lv6HWZInMyZsFClwGUw=="],
+    "@wasmagent/mcp-server": ["@wasmagent/mcp-server@1.0.1", "", { "dependencies": { "@wasmagent/core": "^1.0.1" }, "bin": { "wasmagent-mcp-server": "dist/stdio.js" } }, "sha512-hDwTCr2wllIKqMuk4pClMmIxtDjC1SoQPwGegvI/FT+YcVur6LLc01fBVOpQRvvBmGmc7P5647fEr+zPc9CdVw=="],
 
     "@wasmagent/model-anthropic": ["@wasmagent/model-anthropic@1.0.0", "", { "dependencies": { "@wasmagent/core": "^1.0.0" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.55.0" } }, "sha512-vZOIi1f+kHMlwk4WnA5bo0aNzKTrZ6XsZqpx6nkKhW6EMhoHZr2xNu7M3AEzMPq29+4laCQ0TNfFVJX6rcc7QQ=="],
 
