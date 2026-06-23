@@ -30,6 +30,20 @@ npm add @wasmagent/core   # the framework itself, on npm
 
 ---
 
+## WasmAgent Ecosystem
+
+| Repo | Role |
+|---|---|
+| [wasmagent-js](https://github.com/WasmAgent/wasmagent-js) | Embedded Agent Runtime / WASM Kernel / policy / verifier / adapters |
+| **bscode** (this repo) | Cloudflare flagship demo and deploy template for safe coding agents |
+| [evomerge](https://github.com/WasmAgent/evomerge) | Public datafactory and eval-trust backend for rollout data |
+
+```text
+Task → Safe Runtime → Verifiable Rollout → Trajectory Export → DPO/PPO Data → Better Models
+```
+
+---
+
 ## Quick start (local, ~2 minutes)
 
 ```bash
