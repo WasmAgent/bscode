@@ -34,17 +34,18 @@
     "turbo": "^2.0.0"
   },
   "dependencies": {
+    "@wasmagent/core": "1.0.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "diff": "^9.0.0"
   },
   "overrides": {
     "@wasmagent/agent-prompts": "^1.0.0",
-    "@wasmagent/core": "^1.0.0",
+    "@wasmagent/core": "^1.0.1",
     "@wasmagent/kernel-pyodide": "^1.0.0",
     "@wasmagent/kernel-quickjs": "^1.0.0",
     "@wasmagent/kernel-remote": "^1.0.0",
-    "@wasmagent/mcp-server": "^1.0.0",
+    "@wasmagent/mcp-server": "^1.0.1",
     "@wasmagent/model-anthropic": "^1.0.0",
     "@wasmagent/model-deepseek": "^1.0.0",
     "@wasmagent/model-doubao": "^1.0.0",
