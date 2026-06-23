@@ -25,7 +25,9 @@
     "test:tool": "node scripts/bscode.mjs --mode tool --steps 10",
     "test:full": "node scripts/test-full.mjs --url http://localhost:8788",
     "link:wasmagent-local": "node scripts/link-wasmagent-local.mjs",
-    "unlink:wasmagent-local": "node scripts/unlink-wasmagent-local.mjs"
+    "unlink:wasmagent-local": "node scripts/unlink-wasmagent-local.mjs",
+    "verify:claims": "node scripts/verify-claims.mjs",
+    "verify:claims:strict": "node scripts/verify-claims.mjs --strict"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",

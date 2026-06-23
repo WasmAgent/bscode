@@ -1,0 +1,54 @@
+# Claim Registry — bscode
+#
+# Each entry pins a verifiable claim about bscode's behavior.
+# Fields match the wasmagent-js claims format.
+
+- id: session-isolation-enforced
+  claim: "/files, /run, /build-result, /jobs endpoints return 400 when X-Session-Id is absent"
+  evidence_script: "bun test apps/worker/src/app.test.ts --test-name-pattern 'session'"
+  last_verified: "2026-06-23"
+  ci_mode: "per-pr"
+  tolerance: "exact"
+  notes: >
+    Enforced by session middleware in createApp(). allowLocalSessionFallback
+    flag enables legacy CLI behavior; production deployments must not set it.
+
+- id: build-result-nonce-required
+  claim: "/build-result POST requires a valid nonce when buildResultsKv is configured"
+  evidence_script: "bun test apps/worker/src/build-results.test.ts"
+  last_verified: "2026-06-23"
+  ci_mode: "per-pr"
+  tolerance: "exact"
+  notes: >
+    nonce is bound to sessionId + expiresAt. Prevents forged build results
+    from polluting the training data signal.
+
+- id: workspace-path-guard
+  claim: "File tools reject absolute paths, traversal segments, reserved KV prefixes, and control chars"
+  evidence_script: "bun test apps/worker/src/tools/file-tools.test.ts --test-name-pattern 'workspace path'"
+  last_verified: "2026-06-23"
+  ci_mode: "per-pr"
+  tolerance: "exact"
+  notes: >
+    normalizeKey() calls assertWorkspacePath() + checks reserved prefixes
+    (session:, meta:, build-result:, job:) before any KV write.
+
+- id: rollout-export-schema
+  claim: "/rollouts/export returns rollout-wire/v1 JSONL consumable by evomerge datafactory"
+  evidence_script: "bun test apps/worker/src/trajectoryExport.test.ts"
+  last_verified: "2026-06-23"
+  ci_mode: "per-pr"
+  tolerance: "exact"
+  notes: >
+    schema_version field must be 'rollout-wire/v1'. objective_score=1 for
+    successful builds, 0 otherwise. See fixtures/data-loop/manifest.json.
+
+- id: model-fallback-multi-model
+  claim: "FallbackModel receives all resolved models when multiple modelIds are provided"
+  evidence_script: "bun test apps/worker/src/app.test.ts --test-name-pattern 'FallbackModel'"
+  last_verified: "2026-06-23"
+  ci_mode: "per-pr"
+  tolerance: "exact"
+  notes: >
+    Fixed bug where FallbackModel([primaryModel]) only used primary even when
+    multiple modelIds were requested.

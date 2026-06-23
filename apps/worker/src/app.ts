@@ -48,18 +48,7 @@ import {
   snapshotSession,
 } from "./jobs/jobBranches.js";
 import { createMcpFetchHandler } from "./mcp.js";
-import {
-  type CustomModelConfig,
-  discoverLocalModels,
-  getBuiltinModels,
-  listCustomModels,
-  loadPreferences,
-  type ModelPreferences,
-  registerCustomModel,
-  removeCustomModel,
-  resolveModelFromRegistry,
-  savePreferences,
-} from "./models/registry.js";
+import { resolveModelFromRegistry } from "./models/registry.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
@@ -70,7 +59,6 @@ import {
   PolicyPresets,
 } from "./policies/approvalPolicy.js";
 import {
-  assertWorkspacePath,
   createDeleteFileTool,
   createGitHubPrTool,
   createInitAgentsMdTool,
@@ -89,18 +77,17 @@ import {
   createVisualVerifyTool,
   createWriteFileTool,
   importGithubRepo,
-  MAX_FILE_BYTES,
   type SemanticIndexer,
 } from "./tools/index.js";
 import { createGitTools, createShellRunner } from "./tools/shell.js";
 import { createWebSearchTool } from "./tools/web-search.js";
+import { mountFilesRoutes } from "./routes/files.js";
+import { mountModelRoutes } from "./routes/models.js";
 
 export type { AppConfig } from "./platform.js";
 
 const SESSION_TTL = 3600;
 const MAX_TASK_BYTES = 10_240;
-const MAX_BULK_FILES = 100;
-const MAX_BULK_TOTAL_BYTES = 2 * 1024 * 1024;
 const MAX_STEPS_CAP = 30;
 const MAX_KV_EVENTS = 500;
 
@@ -1146,152 +1133,10 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
   app.get("/errors", (c) => c.json({ errors: [...errorLog].reverse(), count: errorLog.length }));
 
   // ── Model Registry ────────────────────────────────────────────────────────
-
-  /** GET /models — list all models (builtin + custom + locally discovered) */
-  app.get("/models", async (c) => {
-    const store = getModelStore(config);
-    const [builtin, local, prefs] = await Promise.all([
-      getBuiltinModels(config, store),
-      discoverLocalModels(),
-      loadPreferences(store),
-    ]);
-    return c.json({
-      models: [...builtin, ...local],
-      preferences: prefs ?? { primaryModelId: "claude-sonnet-4-6" },
-    });
-  });
-
-  /** POST /models/custom — add or update a custom model (apiKey encrypted at rest) */
-  app.post("/models/custom", async (c) => {
-    const store = getModelStore(config);
-    const body = await c.req.json<CustomModelConfig>();
-    if (!body.id || !body.baseUrl) return c.json({ error: "id and baseUrl required" }, 400);
-    await registerCustomModel(body, store);
-    return c.json({ ok: true, id: body.id });
-  });
-
-  /** DELETE /models/custom/:id — remove a custom model */
-  app.delete("/models/custom/:id", async (c) => {
-    const store = getModelStore(config);
-    const id = decodeURIComponent(c.req.param("id"));
-    const deleted = await removeCustomModel(id, store);
-    return deleted ? c.json({ ok: true }) : c.json({ error: "not found" }, 404);
-  });
-
-  /** GET /models/custom — list custom models (keys redacted) */
-  app.get("/models/custom", async (c) => {
-    const store = getModelStore(config);
-    return c.json({ models: await listCustomModels(store) });
-  });
-
-  /** PUT /models/preferences — save primary/economy model selection */
-  app.put("/models/preferences", async (c) => {
-    const store = getModelStore(config);
-    const prefs = await c.req.json<ModelPreferences>();
-    if (!prefs.primaryModelId) return c.json({ error: "primaryModelId required" }, 400);
-    await savePreferences(prefs, store);
-    return c.json({ ok: true, prefs });
-  });
+  mountModelRoutes(app, config);
 
   // ── Files ─────────────────────────────────────────────────────────────────
-  app.get("/files", async (c) => {
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    if (!kv) return c.json({ files: [] });
-    const list = await kv.list({ prefix: "file:" });
-    const files = list.keys.map((k) => ({
-      path: k.name.replace(/^file:/, ""),
-      name:
-        k.name
-          .replace(/^file:/, "")
-          .split("/")
-          .pop() ?? "",
-    }));
-    return c.json({ files });
-  });
-
-  // Bulk fetch — returns all files with their contents in one request.
-  // Used by the frontend to mount the workspace into WebContainers without N+1 fetches.
-  app.get("/files/bulk", async (c) => {
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    if (!kv) return c.json({ files: [] });
-    const list = await kv.list({ prefix: "file:" });
-    const files = await Promise.all(
-      list.keys.map(async (k) => {
-        const path = k.name.replace(/^file:/, "");
-        const content = await kv.get(k.name);
-        return { path, content: content ?? "" };
-      })
-    );
-    return c.json({ files });
-  });
-
-  // Batch write — import multiple files in one request (used by ZIP/directory import).
-  app.post("/files/bulk", async (c) => {
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    if (!kv) return c.json({ error: "KV not bound" }, 503);
-    const { files } = await c.req.json<{ files: { path: string; content: string }[] }>();
-    if (!Array.isArray(files) || files.length === 0)
-      return c.json({ error: "files array required" }, 400);
-    if (files.length > MAX_BULK_FILES)
-      return c.json({ error: `too many files: max ${MAX_BULK_FILES}` }, 413);
-    const enc = new TextEncoder();
-    let totalBytes = 0;
-    for (const f of files) {
-      try {
-        assertWorkspacePath(f.path);
-      } catch (err) {
-        return c.json({ error: `invalid path: ${f.path}` }, 400);
-      }
-      const bytes = enc.encode(f.content ?? "").byteLength;
-      if (bytes > MAX_FILE_BYTES)
-        return c.json({ error: `file too large: ${f.path}` }, 413);
-      totalBytes += bytes;
-      if (totalBytes > MAX_BULK_TOTAL_BYTES)
-        return c.json({ error: "bulk payload too large" }, 413);
-    }
-    await Promise.all(
-      files.map(({ path, content }) => kv.put(`file:${path.replace(/^\/+/, "")}`, content ?? ""))
-    );
-    return c.json({ ok: true, count: files.length, paths: files.map((f) => f.path) });
-  });
-
-  // ── File version history (v0.dev checkpoint pattern) ─────────────────────
-  app.get("/files/:path{.+}/versions", async (c) => {
-    const path = c.req.param("path");
-    const versions = fileTreeFor(c, config).getVersions(path);
-    return c.json({
-      path,
-      versions: versions.map((v) => ({ version: v.version, hash: v.hash, savedAtMs: v.savedAtMs })),
-    });
-  });
-
-  // Fetch the actual content of a specific historical version. Used by the
-  // DiffViewer to show before/after content side-by-side.
-  app.get("/files/:path{.+}/versions/:version", async (c) => {
-    const path = c.req.param("path");
-    const versionNum = Number(c.req.param("version"));
-    if (Number.isNaN(versionNum)) return c.json({ error: "version must be a number" }, 400);
-    const versions = fileTreeFor(c, config).getVersions(path);
-    const target = versions.find((v) => v.version === versionNum);
-    if (!target) return c.json({ error: `version ${versionNum} not found` }, 404);
-    return c.json({
-      path,
-      version: target.version,
-      content: target.content,
-      hash: target.hash,
-      savedAtMs: target.savedAtMs,
-    });
-  });
-
-  app.post("/files/:path{.+}/rollback", async (c) => {
-    const path = c.req.param("path");
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    const { version } = await c.req.json<{ version: number }>();
-    const content = fileTreeFor(c, config).rollback(path, version);
-    if (!content) return c.json({ error: `Version ${version} not found for ${path}` }, 404);
-    if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
-    return c.json({ ok: true, path, version, chars: content.length });
-  });
+  mountFilesRoutes(app, config, { sessionFileTrees, resolveFilesKv, sessionIdOf, fileTreeFor });
 
   // ── B3 — POST /import/github ─────────────────────────────────────────────
   // Pull every text file in a repository into the worker's KV file store and
@@ -1352,74 +1197,6 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
       recordError(`/import/github: ${msg}`);
       return c.json({ error: msg }, 502);
     }
-  });
-
-  app.post("/files", async (c) => {
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    const { path, content } = await c.req.json<{ path: string; content: string }>();
-    if (!path || content === undefined) return c.json({ error: "path and content required" }, 400);
-    try {
-      assertWorkspacePath(path);
-    } catch (e) {
-      return c.json({ error: (e as Error).message }, 400);
-    }
-    if (typeof content === "string" && content.length > MAX_FILE_BYTES) {
-      return c.json({ error: `file exceeds ${MAX_FILE_BYTES} bytes` }, 413);
-    }
-    if (kv) await kv.put(`file:${path.replace(/^\/+/, "")}`, content);
-    // Keep FileTreeManager in sync for conflict detection and context relevance
-    fileTreeFor(c, config).recordWrite(path.replace(/^\/+/, ""), content);
-    return c.json({ ok: true, path });
-  });
-
-  app.get("/files/:path{.+}", async (c) => {
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    const path = c.req.param("path");
-    try {
-      assertWorkspacePath(path);
-    } catch (e) {
-      return c.json({ error: (e as Error).message }, 400);
-    }
-    if (!kv) return c.json({ error: "KV not bound" }, 503);
-    const content = await kv.get(`file:${path}`);
-    if (content === null) return c.json({ error: "not found" }, 404);
-    return c.json({ path, content });
-  });
-
-  // DELETE /files — clear ALL workspace files (called before each new framework run)
-  app.delete("/files", async (c) => {
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    if (!kv) return c.json({ error: "KV not bound" }, 503);
-    if (typeof config.filesKv?.delete !== "function") {
-      // Fail loud rather than silently no-op — the caller is asking us
-      // to clear state and we must not pretend success when we can't.
-      return c.json({ error: "KV backend does not support delete" }, 501);
-    }
-    const list = await kv.list({ prefix: "file:" });
-    await Promise.all(list.keys.map((k) => kv.delete?.(k.name)));
-    // Also reset the in-memory file tree (and version history) for this
-    // session — otherwise stale versions linger after a workspace wipe.
-    sessionFileTrees.delete(sessionIdOf(c, config));
-    return c.json({ ok: true, cleared: list.keys.length });
-  });
-
-  app.delete("/files/:path{.+}", async (c) => {
-    const kv = resolveFilesKv(c.req.header("X-Session-Id"), config);
-    const path = c.req.param("path");
-    if (!kv) return c.json({ error: "KV not bound" }, 503);
-    try {
-      assertWorkspacePath(path);
-    } catch (err) {
-      return c.json({ error: `invalid path: ${path}` }, 400);
-    }
-    if (typeof config.filesKv?.delete !== "function") {
-      return c.json({ error: "KV backend does not support delete" }, 501);
-    }
-    await kv.delete(`file:${path}`);
-    // Drop the in-memory entry + its version history so a follow-up
-    // GET /files/:path/versions doesn't return phantom versions.
-    fileTreeFor(c, config).remove(path);
-    return c.json({ ok: true, path });
   });
 
   // ── POST /run ─────────────────────────────────────────────────────────────
