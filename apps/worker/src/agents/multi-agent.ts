@@ -1,5 +1,6 @@
 import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@wasmagent/core";
-import { ParallelForkJoinRunner, ToolCallingAgent } from "@wasmagent/core";
+import { ParallelForkJoinRunner } from "@wasmagent/core/beta";
+import { ToolCallingAgent } from "@wasmagent/core";
 import { createToolAgent } from "./tool-agent.js";
 
 /**

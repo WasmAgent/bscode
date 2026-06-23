@@ -2172,7 +2172,7 @@ describe("C4 — AGENTS.md project instructions", () => {
     await putFile(app, "session-alice", "AGENTS.md", "PROJECT-RULE-XYZ");
 
     // Stub the tool agent factory so we can read what app.ts hands it.
-    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
+    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core/beta");
     // Build the same loader+resolver app.ts uses on the per-session KV view.
     const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "session-alice");
     const loader = makeKvAgentsMdLoader({
@@ -2193,7 +2193,7 @@ describe("C4 — AGENTS.md project instructions", () => {
     await putFile(app, "session-alice", "AGENTS.md", "ROOT-RULES");
     await putFile(app, "session-alice", "packages/api/AGENTS.md", "API-RULES");
 
-    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
+    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core/beta");
     const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "session-alice");
     const loader = makeKvAgentsMdLoader({
       get: (k) => sessKv.get(k),
@@ -2210,7 +2210,7 @@ describe("C4 — AGENTS.md project instructions", () => {
 
   it("empty workspace: ProjectInstructions returns empty text — no header injection", async () => {
     const filesKv = new MemKvStore();
-    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core");
+    const { ProjectInstructions, makeKvAgentsMdLoader } = await import("@wasmagent/core/beta");
     const sessKv = new (await import("./platform.js")).SessionKvStore(filesKv, "session-alice");
     const loader = makeKvAgentsMdLoader({
       get: (k) => sessKv.get(k),

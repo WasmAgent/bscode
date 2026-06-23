@@ -1,33 +1,33 @@
 import type { AgentEvent, Model, ModelMessage, Scorer, ToolDefinition } from "@wasmagent/core";
 import {
-  BudgetForcingRunner,
   CheckpointableRun,
   createMemoryTool,
   EventLog,
-  exactMatch,
   FallbackModel,
-  FileTreeManager,
-  finalAnswerLength,
   forbiddenPhrases,
   formatSseFrame,
   InMemoryCheckpointer,
-  InMemorySpanExporter,
   KvCheckpointer,
   MapKvBackend,
-  makeKvAgentsMdLoader,
   maxInputLength,
-  OtelBridge,
-  type ParallelForkJoinRunner,
   ProgrammaticOrchestrator,
+  ToolRegistry,
+} from "@wasmagent/core";
+import {
+  BudgetForcingRunner,
+  exactMatch,
+  FileTreeManager,
+  finalAnswerLength,
+  makeKvAgentsMdLoader,
+  type ParallelForkJoinRunner,
   ProjectInstructions,
   ReflectRefineRunner,
   runEval,
   SelfConsistencyRunner,
-  ToolRegistry,
   toolCallAccuracy,
   trajectoryValidity,
-  withOtel,
-} from "@wasmagent/core";
+} from "@wasmagent/core/beta";
+import { InMemorySpanExporter, OtelBridge, withOtel } from "@wasmagent/core/experimental";
 import { Hono } from "hono";
 import { createCodeAgent } from "./agents/code-agent.js";
 import { type MultiAgentMode, multiAgentRun, runPlanFirstExecution } from "./agents/multi-agent.js";

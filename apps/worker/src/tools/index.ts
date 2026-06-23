@@ -1,5 +1,5 @@
 import type { ToolDefinition } from "@wasmagent/core";
-import { type FileTreeManager, globalFileLock } from "@wasmagent/core";
+import { type FileTreeManager, globalFileLock } from "@wasmagent/core/beta";
 import { applyPatch } from "diff";
 import { z } from "zod";
 import type { KvStore } from "../types.js";
