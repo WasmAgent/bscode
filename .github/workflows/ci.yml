@@ -49,7 +49,6 @@ jobs:
       # ── Cloudflare deploy (only on push to main; gated on secrets) ────────────
       - name: Deploy worker to Cloudflare
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        environment: production
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "Skipping worker deploy: Cloudflare secrets not configured."
@@ -62,7 +61,6 @@ jobs:
 
       - name: Deploy web to Cloudflare Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        environment: production
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "Skipping web deploy: Cloudflare secrets not configured."
