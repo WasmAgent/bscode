@@ -55,11 +55,11 @@ describe("read_file", () => {
     expect(out).toMatch(/^Error: file system unavailable/);
   });
 
-  it("normalises leading slashes — read('/x.ts') matches stored 'x.ts'", async () => {
+  it("rejects absolute paths — read('/x.ts') throws InvalidPath", async () => {
     const kv = new MemKvStore();
     await kv.put("file:x.ts", "one");
     const tool = createReadFileTool(kv);
-    expect(await tool.forward({ path: "/x.ts" })).toBe("one");
+    await expect(tool.forward({ path: "/x.ts" })).rejects.toThrow(/InvalidPath/);
   });
 });
 
