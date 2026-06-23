@@ -1069,6 +1069,79 @@ or {"mode":"tool","framework":null,"loop":"single"}`;
     return c.json({ ok: true, derivedSessionId: derived });
   });
 
+  // ── RLAIF trajectory export ───────────────────────────────────────────────
+
+  /**
+   * GET /jobs/:id/rollout-export — export a completed job as a rollout-wire
+   * JSONL record for RLAIF training (wasmagent-js RolloutRanker / evomerge).
+   *
+   * Query params:
+   *   format=jsonl  (default) — application/x-ndjson response
+   *   format=json             — single JSON object response
+   */
+  app.get("/jobs/:id/rollout-export", async (c) => {
+    const jobId = c.req.param("id");
+    const job = await jobQueue.get(jobId);
+    if (!job) return c.json({ error: "job not found" }, 404);
+
+    const { buildRolloutRecord, toJsonl } = await import("./trajectoryExport.js");
+    const sessionId = job.spec.sessionId ?? sessionIdOf(c, config);
+    const derived = deriveJobSessionId(sessionId, jobId);
+    const buildResult = await getBuildResult(derived, config.buildResultsKv);
+
+    const record = buildRolloutRecord({
+      jobId,
+      jobSpec: job.spec,
+      sessionId,
+      branchIndex: 0,
+      buildResult: buildResult.status !== "unknown" ? buildResult : null,
+      finalAnswer: job.finalAnswer ?? "",
+    });
+
+    const format = c.req.query("format") ?? "jsonl";
+    if (format === "json") return c.json(record);
+    return new Response(toJsonl([record]), {
+      headers: { "Content-Type": "application/x-ndjson" },
+    });
+  });
+
+  /**
+   * GET /rollouts/export — export all completed/failed jobs for the current
+   * session as JSONL (for evomerge datafactory ingestion).
+   *
+   * Query params:
+   *   sessionId — override the X-Session-Id header for the filter
+   */
+  app.get("/rollouts/export", async (c) => {
+    const sessionId = sessionIdOf(c, config);
+    const { buildRolloutRecord, toJsonl } = await import("./trajectoryExport.js");
+
+    const jobs = jobQueue.list({ sessionId });
+    const terminal = jobs.filter((j) => j.status === "done" || j.status === "failed");
+
+    const records = await Promise.all(
+      terminal.map(async (j, i) => {
+        const derived = deriveJobSessionId(sessionId, j.id);
+        const buildSnap = await getBuildResult(derived, config.buildResultsKv);
+        return buildRolloutRecord({
+          jobId: j.id,
+          jobSpec: j.spec,
+          sessionId,
+          branchIndex: i,
+          buildResult: buildSnap.status !== "unknown" ? buildSnap : null,
+          finalAnswer: j.finalAnswer ?? "",
+        });
+      }),
+    );
+
+    return new Response(toJsonl(records), {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Content-Disposition": `attachment; filename="rollouts-${sessionId.slice(0, 8)}.jsonl"`,
+      },
+    });
+  });
+
   // ── Error log (last 50 agent errors for debugging) ────────────────────────
   app.get("/errors", (c) => c.json({ errors: [...errorLog].reverse(), count: errorLog.length }));
 
