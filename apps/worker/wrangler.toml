@@ -3,6 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+
 # ============================================================================
 # Local development works with NO bindings — bscode falls back to in-memory.
 # For a real Cloudflare deploy, uncomment the [[kv_namespaces]] blocks below
