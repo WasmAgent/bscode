@@ -6,7 +6,7 @@
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode&utm_source=bscode-readme-deploy-button)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![wasmagent-js](https://img.shields.io/badge/built%20on-wasmagent--js-646cff.svg)](https://github.com/WasmAgent/wasmagent-js)
-[![evomerge](https://img.shields.io/badge/trains-evomerge-orange.svg)](https://github.com/telleroutlook/evomerge)
+[![evomerge](https://img.shields.io/badge/trains-evomerge-orange.svg)](https://github.com/WasmAgent/evomerge)
 
 bscode is **not** competing with Cursor, Claude Code, or Codex. It is the
 fastest way to see wasmagent-js running end-to-end on a real edge runtime —
@@ -104,7 +104,7 @@ them up against the Cloudflare runtime.
 | Durable checkpoints + SSE resume | [`@wasmagent/core`](https://wasmagent.github.io/wasmagent-js/guides/durable-runtime) — `KvCheckpointer`, `EventLog`, `Last-Event-ID` |
 | Multi-agent shapes (parallel / planFirst) | `ParallelForkJoinRunner` + stateless HITL primitive in core |
 | **RLAIF rollout adapter** *(2026-06-22)* | `apps/worker/src/rollout-adapter.ts` — `makeBuildResultReader` / `makeVisualResultReader` bridge bscode's KV build-result channel to `BuildPassesVerifier` / `VisualAssertVerifier` in `@wasmagent/core`. `AppConfig.rolloutConcurrency` controls the job queue cap for batch sampling runs. |
-| **Training data pipeline** *(2026-06-22)* | B2 build signals + C3 visual assertions feed `RolloutRanker` in wasmagent-js, which ranks rollout branches by objective score. Ranked branches are exported as DPO/PPO JSONL by [evomerge `src/datafactory/`](https://github.com/telleroutlook/evomerge) for downstream RL post-training. |
+| **Training data pipeline** *(2026-06-22)* | B2 build signals + C3 visual assertions feed `RolloutRanker` in wasmagent-js, which ranks rollout branches by objective score. Ranked branches are exported as DPO/PPO JSONL by [evomerge `src/datafactory/`](https://github.com/WasmAgent/evomerge) for downstream RL post-training. |
 | Per-job session isolation + diff/merge | `BranchableWorkspace` in core |
 | Tiered approval policy | `needsApproval` lifecycle hook in core |
 | Visual verifier (CDP + vision judge) | [`@wasmagent/tools-browser`](https://github.com/WasmAgent/wasmagent-js/tree/main/packages/tools-browser) — CDP session driver |
