@@ -24,7 +24,7 @@ import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const localPath = resolve(here, "../../agentkit-js/packages/model-local/dist/index.js");
+const localPath = resolve(here, "../../wasmagent-js/packages/model-local/dist/index.js");
 const { LocalModel } = await import(localPath);
 
 // ── Models under test ────────────────────────────────────────────────────────

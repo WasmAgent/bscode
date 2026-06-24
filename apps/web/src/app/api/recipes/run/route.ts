@@ -11,7 +11,7 @@
  * Instead the handler runs the recipe's stub script in a small
  * sandboxed evaluator built directly here. The shape of what we ship
  * back — { patch, calls, error? } — exactly matches what the real
- * agentkit kernel + tool surface would produce, so the page's UI
+ * WasmAgent kernel + tool surface would produce, so the page's UI
  * does not have to switch between modes.
  *
  * Recipes are keyed off the same id slugs as `apps/web/src/app/recipes/page.tsx`.
@@ -32,7 +32,7 @@ interface FakeRepoTools {
 /**
  * One recipe = one tiny stub script that the user-facing UI labels as
  * "what the model would have emitted". The script speaks the same
- * `tools.fn(args)` shape `agentkitCodemodeExecutor` produces; it is
+ * `tools.fn(args)` shape `createCodemodeExecutor` produces; it is
  * evaluated against an in-memory fake repo. The framework name is
  * baked into the patch so the UI can show concrete "this ran for
  * Vercel AI SDK 6" output.
@@ -44,7 +44,7 @@ const RECIPE_SCRIPTS: Record<string, { framework: string; stub: string }> = {
       const before = await tools.readFile({ path: "src/main.ts" });
       await tools.writeFile({
         path: "src/main.ts",
-        content: "// Vercel AI SDK 6 + agentkit kernel — patched\\n" + before.content,
+        content: "// Vercel AI SDK 6 + WasmAgent kernel — patched\\n" + before.content,
       });
       const diff = await tools.gitDiff();
       return diff.patch;
@@ -56,7 +56,7 @@ const RECIPE_SCRIPTS: Record<string, { framework: string; stub: string }> = {
       const before = await tools.readFile({ path: "agent.ts" });
       await tools.writeFile({
         path: "agent.ts",
-        content: "// Cloudflare codemode + agentkitCodemodeExecutor — patched\\n" + before.content,
+        content: "// Cloudflare codemode + createCodemodeExecutor — patched\\n" + before.content,
       });
       const diff = await tools.gitDiff();
       return diff.patch;
@@ -68,7 +68,7 @@ const RECIPE_SCRIPTS: Record<string, { framework: string; stub: string }> = {
       const before = await tools.readFile({ path: "mastra.config.ts" });
       await tools.writeFile({
         path: "mastra.config.ts",
-        content: "// Mastra + agentkitMastraSandbox — patched\\n" + before.content,
+        content: "// Mastra + createMastraSandbox — patched\\n" + before.content,
       });
       const diff = await tools.gitDiff();
       return diff.patch;

@@ -96,7 +96,7 @@ export function NavBar({
             the CodeAgent demo. */}
         <a
           href="/recipes?source=bscode-ui-recipes-pill"
-          title="Drop the agentkit kernel into the framework you already use"
+          title="Drop the WasmAgent kernel into the framework you already use"
           style={{
             fontSize: 10,
             padding: "2px 7px",
@@ -140,7 +140,7 @@ export function NavBar({
             + non-framework mode onto agentMode="goalDirected" without
             user intervention. The agentMode value is still threaded all
             the way through to the worker, so any caller that sets it
-            explicitly (the `agentkit goal` CLI, raw POST /run, future
+            explicitly (the `wasmagent goal` CLI, raw POST /run, future
             advanced UI) keeps working — UI users just don't see a dial.
             The mode badge shown by TurnBlock carries a "🎯" suffix when
             loop=verify so the classifier's choice stays visible.

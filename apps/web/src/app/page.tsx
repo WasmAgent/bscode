@@ -995,11 +995,10 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           // section of the existing app." The other three demos all
           // exist as flows in the existing UI.
           const toastMessages: Record<typeof demoId, string> = {
-            portal: "Try: prompt 'federate fs + github MCP servers and list the wasmagent repos'",
-            resume:
-              "Try: start any run, then DevTools → Network → throttle Offline; the run resumes when you go back online",
-            fork: "Try: run any task, then click the EventLog timeline → Fork from this step",
             isolation: "Watch four OWASP Agentic Top 10 attacks hit the kernel and bounce.",
+            rollout: "Try: run a task with 2+ branches; the build verifier selects the winner automatically.",
+            export: "Try: after a run, open Settings → Export rollout data → download rollout-wire JSONL.",
+            fork: "Try: run any task, then click the EventLog timeline → Fork from this step",
           };
           addToast(toastMessages[demoId], "info");
           if (demoId === "isolation") {

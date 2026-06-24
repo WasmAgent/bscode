@@ -18,7 +18,7 @@ red CI run.
 ### 1. Cloudflare account prerequisites
 
 1. A Cloudflare account with Workers + Pages enabled (free tier is fine).
-2. A zone (a domain) you control; e.g. `byteslim.com`. The custom subdomains
+2. A zone (a domain) you control; e.g. `your-domain.com`. The custom subdomains
    below assume one — if you don't have one, both pieces will get auto-
    generated `*.workers.dev` / `*.pages.dev` URLs and that's also fine for
    a demo.
@@ -44,10 +44,10 @@ Once the first deploy has run and created the worker / pages projects,
 bind custom domains in the Cloudflare dashboard:
 
 - `apps/worker` → Workers & Pages → `bscode-worker` → Triggers → Custom
-  Domain → `bscode-worker.byteslim.com` (or whatever subdomain you want
+  Domain → `bscode-worker.your-domain.com` (or whatever subdomain you want
   for the API).
 - `apps/web` → Workers & Pages → `bscode-web` (Pages project) →
-  Custom domains → `bscode.byteslim.com`.
+  Custom domains → `bscode.your-domain.com`.
 
 These bindings live on the Cloudflare side, not in `wrangler.toml`,
 because the domain belongs to the operator, not the repo. The repo
@@ -58,7 +58,7 @@ stays portable — anyone forking it gets `*.workers.dev` /
 
 The web client needs to know where to find the worker at runtime. By
 default, the deploy job builds with
-`NEXT_PUBLIC_WORKER_URL=https://bscode-worker.byteslim.com`. Override
+`NEXT_PUBLIC_WORKER_URL=https://bscode-worker.example.com`. Override
 that by setting a **repository variable** (not a secret — it's not
 sensitive) named `BSCODE_WORKER_URL` to whichever URL your worker
 actually lives at:
@@ -67,7 +67,7 @@ actually lives at:
 - New repository variable: `BSCODE_WORKER_URL`
 - Value: e.g. `https://bscode-worker.your-account.workers.dev`
 
-If you skip this, the workflow uses the byteslim.com default. If you
+If you skip this, the workflow uses the `example.com` placeholder. If you
 neither bind the custom domain nor set the variable, the web build
 will point at a domain that doesn't resolve — the build will succeed
 but the deployed UI won't be able to reach the backend. Pick one.
@@ -131,10 +131,10 @@ for convenience, or set them in your shell profile.
   command (`wrangler pages deploy --branch=<pr-branch>`). When the
   funnel justifies it, we'll add it.
 
-## Mirror with agentkit-js
+## Mirror with wasmagent-js
 
-agentkit-js uses the same secret names + the same gate pattern in its
-[`ci.yml`](https://github.com/telleroutlook/agentkit-js/blob/main/.github/workflows/ci.yml).
+wasmagent-js uses the same secret names + the same gate pattern in its
+[`ci.yml`](https://github.com/WasmAgent/wasmagent-js/blob/main/.github/workflows/ci.yml).
 Lifecycle stays in lockstep — both repos deploy on push to `main`, both
 gate on the same two CF secrets, both leave domain binding to the
 operator. If you change the CF token in one, change it in both.

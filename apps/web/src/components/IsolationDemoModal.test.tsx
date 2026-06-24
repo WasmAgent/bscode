@@ -43,7 +43,7 @@ describe("IsolationDemoModal (D7)", () => {
 
   it("renders the verbatim intercepted error strings — these match deployed kernel output", () => {
     render(<IsolationDemoModal onClose={() => {}} />);
-    // These are the strings the agentkit kernel actually returns. If
+    // These are the strings the WasmAgent kernel actually returns. If
     // they need to change, the kernel changes first; the modal reflects.
     expect(
       screen.getByText(/network access denied — host "attacker.example" not in allowedHosts/)

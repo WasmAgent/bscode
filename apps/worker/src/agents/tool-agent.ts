@@ -40,7 +40,7 @@ export interface ToolAgentExtras {
   projectInstructions?: string;
   /**
    * B4 — Checkpointer used by `ToolCallingAgent` to gate tools whose
-   * `needsApproval` evaluates true. Without one, agentkit-core silently
+   * `needsApproval` evaluates true. Without one, wasmagent core silently
    * skips the gate (see core/ToolCallingAgent.ts L683 — the
    * `if (this.#checkpointer)` guard). bscode therefore wires
    * `checkpointerFor(config)` here unconditionally so the policy presets

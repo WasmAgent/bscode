@@ -129,5 +129,5 @@ Any OpenAI-API-shape embedder server drops in (TEI, Ollama with
 
 - `apps/worker/src/tools/githubImport.ts` — implementation
 - `apps/worker/src/tools/githubPr.ts` — companion OUT path
-- [@wasmagent/tools-rag](../../../agentkit-js/packages/tools-rag/src/HttpEmbedder.ts)
+- [@wasmagent/tools-rag](../../../wasmagent-js/packages/tools-rag/src/HttpEmbedder.ts)
   — true-vector embedder

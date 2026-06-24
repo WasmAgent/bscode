@@ -39,7 +39,7 @@ const RECIPES: Recipe[] = [
     id: "aisdk",
     framework: "Vercel AI SDK 6",
     blurb:
-      "streamText({ tools }) keeps every primitive you have. Replace your sandboxed code-exec tool with one backed by an agentkit kernel — no Docker / E2B server.",
+      "streamText({ tools }) keeps every primitive you have. Replace your sandboxed code-exec tool with one backed by a WasmAgent kernel — no Docker / E2B server.",
     npmInstall: "npm add @wasmagent/aisdk @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { streamText } from "ai";
 import { sandboxedJsTool } from "@wasmagent/aisdk";
@@ -63,15 +63,15 @@ await streamText({
     id: "cf-codemode",
     framework: "Cloudflare codemode",
     blurb:
-      "DynamicWorkerExecutor binds you to Workers. agentkitCodemodeExecutor runs the same codemode shape on Node / Bun / Vercel / Lambda, plus optional Python via PyodideKernel.",
+      "DynamicWorkerExecutor binds you to Workers. createCodemodeExecutor runs the same codemode shape on Node / Bun / Vercel / Lambda, plus optional Python via PyodideKernel.",
     npmInstall: "npm add @wasmagent/aisdk @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { Agent } from "@cloudflare/agents/codemode";
-import { agentkitCodemodeExecutor } from "@wasmagent/aisdk";
+import { createCodemodeExecutor } from "@wasmagent/aisdk";
 import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const agent = new Agent({
   tools: { /* your existing codemode tool surface */ },
-  executor: agentkitCodemodeExecutor({
+  executor: createCodemodeExecutor({
     kernel: new QuickJSKernel(),
     capabilities: { allowedHosts: ["api.example.com"], cpuMs: 5000 },
   }),
@@ -87,11 +87,11 @@ const agent = new Agent({
       "Mastra's sandbox provider takes any backend. wasmagent gives you WASM isolation (in-process or remote) without Blaxel / E2B service standoff.",
     npmInstall: "npm add @wasmagent/mastra-sandbox @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { Mastra } from "@mastra/core";
-import { agentkitMastraSandbox } from "@wasmagent/mastra-sandbox";
+import { createMastraSandbox } from "@wasmagent/mastra-sandbox";
 import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const mastra = new Mastra({
-  sandbox: agentkitMastraSandbox({
+  sandbox: createMastraSandbox({
     kernel: new QuickJSKernel(),
     capabilities: { allowedHosts: [], cpuMs: 5000 },
   }),
@@ -131,7 +131,7 @@ await client.messages.create({
     id: "openai-agents",
     framework: "OpenAI Agents JS",
     blurb:
-      "@openai/agents takes Tool<T> with a Zod parameters schema and execute(). sandboxedJsAgentTool wires that to an agentkit kernel.",
+      "@openai/agents takes Tool<T> with a Zod parameters schema and execute(). sandboxedJsAgentTool wires that to a WasmAgent kernel.",
     npmInstall: "npm add @wasmagent/openai-agents @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import { Agent, run } from "@openai/agents";
 import { sandboxedJsAgentTool } from "@wasmagent/openai-agents";
