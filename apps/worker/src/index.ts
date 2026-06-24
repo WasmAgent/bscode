@@ -39,6 +39,8 @@ export interface Env {
   BSCODE_CHECKPOINTS?: KVNamespace;
   /** B2 — KV namespace for browser-reported build/install/test outcomes. */
   BSCODE_BUILD_RESULTS?: KVNamespace;
+  /** Rate limiting KV — stores per-session request counters for POST /run. */
+  BSCODE_RATE_KV?: KVNamespace;
   /** B3 follow-up — OpenAI-API-shape embedding endpoint (api key, base url, model). */
   EMBEDDING_API_KEY?: string;
   EMBEDDING_BASE_URL?: string;
@@ -73,6 +75,7 @@ export default {
       buildResultsKv: env.BSCODE_BUILD_RESULTS
         ? kvFromNamespace(env.BSCODE_BUILD_RESULTS)
         : undefined,
+      rateKv: env.BSCODE_RATE_KV ? kvFromNamespace(env.BSCODE_RATE_KV) : undefined,
       ...(embedding ? { embedding } : {}),
     };
     const app = createApp(config);

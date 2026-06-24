@@ -13,6 +13,7 @@ import {
 } from "./jobs/jobBranches.js";
 import { createMcpFetchHandler } from "./mcp.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
+import { createRateLimiter } from "./middleware/rateLimit.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
 import {
@@ -214,8 +215,32 @@ export function createApp(config: AppConfig) {
   }
 
   // ── CORS ──────────────────────────────────────────────────────────────────
+  // Production safety: if BSCODE_ALLOWED_ORIGIN is unset or contains
+  // localhost/127.0.0.1 in production mode, restrict to same-origin only.
+  const isProduction = !config.allowLocalSessionFallback;
+  const configuredOrigin = config.allowedOrigin;
+  const localhostPattern = /localhost|127\.0\.0\.1/i;
+  let _corsWarnedOnce = false;
+
   app.use("*", async (c, next) => {
-    const allowed = config.allowedOrigin ?? "*";
+    let allowed: string;
+
+    if (isProduction && (!configuredOrigin || localhostPattern.test(configuredOrigin))) {
+      // Log the warning once per app instance.
+      if (!_corsWarnedOnce) {
+        _corsWarnedOnce = true;
+        console.warn(
+          "WARN: BSCODE_ALLOWED_ORIGIN includes localhost in production — restricting to same-origin only"
+        );
+      }
+      // Derive same-origin from the request's Host header.
+      const host = c.req.header("Host") ?? "";
+      const proto = c.req.header("X-Forwarded-Proto") ?? "https";
+      allowed = host ? `${proto}://${host}` : "null";
+    } else {
+      allowed = configuredOrigin ?? "*";
+    }
+
     const origin = c.req.header("Origin") ?? "";
     const allowOrigin = allowed === "*" ? "*" : origin === allowed ? origin : "null";
     c.header("Access-Control-Allow-Origin", allowOrigin);
@@ -230,6 +255,9 @@ export function createApp(config: AppConfig) {
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   app.use("*", createAuthMiddleware(config));
+
+  // ── Rate limiting — POST /run only ────────────────────────────────────────
+  app.use("*", createRateLimiter({ rateKv: config.rateKv }));
 
   // ── Session enforcement — reject missing/malformed X-Session-Id early ─────
   // OPTIONS are already handled by the CORS middleware above (returns 204).

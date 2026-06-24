@@ -107,4 +107,12 @@ export interface AppConfig {
    * of returning 400. Use only for local CLI/dev flows. Never set in production.
    */
   allowLocalSessionFallback?: boolean;
+  /**
+   * Optional KV store for per-session rate limiting on POST /run.
+   * Keys use the format `rate:<session_id>:<minute_bucket>` with a 120s TTL.
+   * When unset, rate limiting is disabled (a warning is logged once).
+   * Reads BSCODE_RATE_LIMIT_RPM (default 60) and BSCODE_RATE_LIMIT_BURST
+   * (default 10) from the environment.
+   */
+  rateKv?: KvStore;
 }
