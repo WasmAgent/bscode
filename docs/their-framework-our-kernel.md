@@ -1,17 +1,17 @@
 # Their framework + our kernel
 
-> Direction 6 of the agentkit-js 2026-06-12 optimization brief.
+> Direction 6 of the wasmagent-js 2026-06-12 optimization brief.
 > bscode is the funnel; this page is the funnel's *reverse-up*
 > entry — designed for visitors who already use Vercel AI SDK 6,
 > Mastra, the Anthropic Claude Agent SDK, the OpenAI Agents JS
-> SDK, or Cloudflare codemode, and want to drop agentkit-js'
+> SDK, or Cloudflare codemode, and want to drop wasmagent-js'
 > WASM kernels into the framework they already have.
 
-The premise of [`agentkit-js` Strategy memo
-L1](https://github.com/telleroutlook/agentkit-js/blob/main/docs/strategy/2026-06-competitiveness.md#3-the-three-strategic-lines)
+The premise of [`wasmagent-js` Strategy memo
+L1](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/strategy/2026-06-competitiveness.md#3-the-three-strategic-lines)
 is that the frame race already has a winner and the right play is
 to be **the runtime the leaders embed**. bscode is also the
-showcase. So bscode should not just demo "agentkit's framework
+showcase. So bscode should not just demo "wasmagent's framework
 running on the edge" — it should demo *exactly the reverse-up*: a
 frame the reader already trusts, plus the kernels, plus the
 durable runtime, plus the code-mode MCP server.
@@ -22,7 +22,7 @@ needs a small adapter shim, the shim is named and linked.
 
 ---
 
-## A — Vercel AI SDK 6 + agentkit kernel
+## A — Vercel AI SDK 6 + wasmagent kernel
 
 You already have `streamText({ tools })` in your Next.js / Vercel
 app. You want one of those tools to run user-authored code in a
@@ -36,7 +36,7 @@ import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const safeJsTool = sandboxedJsTool({
   kernel: new QuickJSKernel(),
-  // Same security policy face the rest of agentkit honors.
+  // Same security policy face the rest of wasmagent honors.
   capabilities: { allowedHosts: [], cpuMs: 5000, memoryLimitBytes: 64_000_000 },
 });
 
@@ -66,7 +66,7 @@ UTM tag for click attribution: `?source=bscode-aisdk-recipe`.
 
 ---
 
-## B — Cloudflare codemode + agentkit kernel as custom executor
+## B — Cloudflare codemode + wasmagent kernel as custom executor
 
 The Cloudflare codemode docs explicitly say the
 `DynamicWorkerExecutor` is *one* implementation, and that you can
@@ -78,15 +78,11 @@ AWS Lambda).
 ```ts
 import { Agent } from "@cloudflare/agents/codemode";
 import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
-import { agentkitCodemodeExecutor } from "@wasmagent/aisdk";
-//                                       ^ shim is in flight; see the
-//                                         draft at agentkit-js
-//                                         docs/strategy/upstream-prs/
-//                                         cloudflare-codemode-byo-executor.md
+import { createCodemodeExecutor } from "@wasmagent/aisdk";
 
 const agent = new Agent({
   tools: { /* your existing codemode tool surface */ },
-  executor: agentkitCodemodeExecutor({
+  executor: createCodemodeExecutor({
     kernel: new QuickJSKernel(),
     capabilities: { allowedHosts: ["api.example.com"], cpuMs: 5000 },
   }),
@@ -98,7 +94,7 @@ What you gain over `DynamicWorkerExecutor`:
 - Run codemode **off** Cloudflare too (same kernel runs on Node /
   Bun / Vercel / Lambda).
 - `needsApproval: true` semantics — approval-required tools
-  pause-and-wait via agentkit's `await_human_input` lifecycle
+  pause-and-wait via wasmagent's `await_human_input` lifecycle
   instead of being stripped from the executor.
 - Optional Python tier — swap `QuickJSKernel` for `PyodideKernel`
   when a tool needs CPython.
@@ -107,21 +103,21 @@ UTM tag: `?source=bscode-cf-codemode-recipe`.
 
 ---
 
-## C — Mastra sandbox provider backed by agentkit kernels
+## C — Mastra sandbox provider backed by wasmagent kernels
 
 Mastra's sandbox provider contract treats the underlying isolation
-as a swappable backend (Blaxel, E2B, etc.). The agentkit-backed
+as a swappable backend (Blaxel, E2B, etc.). The wasmagent-backed
 provider gives Mastra users WASM isolation with no external
 service.
 
 ```ts
 import { Mastra } from "@mastra/core";
-import { agentkitMastraSandbox } from "@wasmagent/mastra-sandbox";
+import { createMastraSandbox } from "@wasmagent/mastra-sandbox";
 import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 
 const mastra = new Mastra({
   // …your existing Mastra config…
-  sandbox: agentkitMastraSandbox({
+  sandbox: createMastraSandbox({
     kernel: new QuickJSKernel(),
     capabilities: { allowedHosts: [], cpuMs: 5000 },
   }),
@@ -132,7 +128,7 @@ UTM tag: `?source=bscode-mastra-recipe`.
 
 ---
 
-## D — Anthropic Claude Agent SDK + agentkit kernel as a tool
+## D — Anthropic Claude Agent SDK + wasmagent kernel as a tool
 
 The Claude Agent SDK takes a list of tool descriptors with
 `{name, description, input_schema, handler}`.
@@ -162,7 +158,7 @@ UTM tag: `?source=bscode-claude-agent-sdk-recipe`.
 
 ---
 
-## E — OpenAI Agents JS + agentkit kernel as a Tool
+## E — OpenAI Agents JS + wasmagent kernel as a Tool
 
 `@openai/agents` consumes `Tool<T>` descriptors with Zod
 parameters and `execute()`. `sandboxedJsAgentTool` produces that.
@@ -191,15 +187,15 @@ UTM tag: `?source=bscode-openai-agents-recipe`.
 ## What bscode does *not* try to be on this page
 
 - **A migration ramp.** Nothing here asks the reader to leave the
-  framework they already use. The agentkit packages slot in as
+  framework they already use. The wasmagent packages slot in as
   one tool / one executor / one provider.
 - **A side-by-side comparison.** The recipes above are configured
   identically (same kernel, same capabilities). If you want to
   compare *frameworks*, run the same task through two recipes and
-  point [`agentkit devtools
-  --otel-events-file`](https://github.com/telleroutlook/agentkit-js/blob/main/docs/guides/devtools-cross-framework.md)
+  point [`wasmagent devtools
+  --otel-events-file`](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/devtools-cross-framework.md)
   at both NDJSON traces — the same Studio view renders both.
-- **A pitch for the agentkit framework.** The framework is at
+- **A pitch for the wasmagent framework.** The framework is at
   `@wasmagent/core` and is documented separately. This page is
   the *runtime* pitch — the embedded-runtime thesis is "the
   kernel + the manifest + the evaluator", which is what the
@@ -218,7 +214,7 @@ data, not a hand-wave.
 ## Where to take feedback
 
 - Recipe doesn't compile against your version of the upstream →
-  open an issue on [agentkit-js](https://github.com/telleroutlook/agentkit-js/issues)
+  open an issue on [wasmagent-js](https://github.com/WasmAgent/wasmagent-js/issues)
   tagged `recipe:upstream-mismatch`.
 - Want a recipe for a framework not above (LangGraph.js,
   CrewAI-JS, etc.) → tagged `recipe:request`.

@@ -10,7 +10,7 @@
  *   - ee77938 feat(worker+web): B1 jobs, B2 build-result, B3 GitHub import, B4 approval
  *
  * The legacy scripts/test-full.mjs predates these features and only covers
- * core agentkit capabilities. This file deliberately probes the NEW routes
+ * core @wasmagent/* capabilities. This file deliberately probes the NEW routes
  * and behaviors end-to-end against a live worker.
  *
  * Usage:
@@ -99,7 +99,7 @@ async function runSSE(body, opts = {}) {
       const txt = await res.text();
       throw new Error(`HTTP ${res.status}: ${txt}`);
     }
-    traceId = res.headers.get("X-Agentkit-Trace-Id");
+    traceId = res.headers.get("X-Wasmagent-Trace-Id");
     resumeFlag = res.headers.get("X-Bscode-Resume");
     const events = [];
     const lastEventIds = [];
@@ -533,7 +533,7 @@ await test("B4", "approvalPolicy=balanced — accepted as a value", async () => 
 // ─────────────────────────────────────────────────────────────────────────────
 // C1 — SSE Last-Event-ID resume
 // ─────────────────────────────────────────────────────────────────────────────
-await test("C1", "fresh /run emits X-Agentkit-Trace-Id header", async () => {
+await test("C1", "fresh /run emits X-Wasmagent-Trace-Id header", async () => {
   if (SKIP_LLM) return "skipped";
   const r = await runSSE(
     {

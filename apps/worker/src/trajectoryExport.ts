@@ -19,7 +19,8 @@ export interface RolloutWireRecord {
   tool_call_sequence: ToolCallEvent[];
   final_answer: string;
   build_result: BuildResultSnapshot | null;
-  objective_score: number;
+  objective_score: 0 | 1;
+  objective_status: "pass" | "fail" | "unknown";
   rank: number;
   total_score: number;
   provenance: RolloutProvenance;
@@ -37,6 +38,32 @@ export interface RolloutProvenance {
   job_id: string;
   exported_at_ms: number;
 }
+
+// ── PII redaction ────────────────────────────────────────────────────────────
+
+const PII_PATTERNS: Array<{ re: RegExp; replacement: string }> = [
+  // JWT tokens (three base64url segments starting with eyJ)
+  { re: /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, replacement: "[JWT]" },
+  // API / secret keys: sk-, pk-, api- prefixed tokens of ≥20 chars
+  { re: /\b(sk|pk|api)[_-]?[A-Za-z0-9]{20,}\b/g, replacement: "[REDACTED_KEY]" },
+  // Email addresses
+  { re: /[\w.+-]+@[\w-]+\.[\w.]+/g, replacement: "[EMAIL]" },
+];
+
+/**
+ * Apply basic PII redaction to a plain string.
+ * Replaces email addresses, API keys, and JWT tokens with safe placeholders.
+ * Safe to call on already-clean text — no-op when no patterns match.
+ */
+export function redactPii(text: string): string {
+  let result = text;
+  for (const { re, replacement } of PII_PATTERNS) {
+    result = result.replace(re, replacement);
+  }
+  return result;
+}
+
+// ── Record building ──────────────────────────────────────────────────────────
 
 /**
  * Build a RolloutWireRecord from job metadata and build result.
@@ -61,14 +88,13 @@ export function buildRolloutRecord(opts: {
     finalAnswer = "",
   } = opts;
 
-  // Three-valued encoding: null (no build triggered) → 0.5 neutral/unknown,
-  // 'success' → 1, any failure/running state → 0.
-  // Using 0 for null would make un-built rollouts indistinguishable from failed
-  // builds, corrupting RolloutRanker preference pairs in RLAIF training data.
-  const objectiveScore =
-    buildResult === null ? 0.5 : buildResult.status === "success" ? 1 : 0;
+  // Strict binary encoding: 'success' → 1, any failure → 0, no-build → 0 with status=unknown.
+  // unknown samples should not enter DPO pairs; they're logged for weak-label pools only.
+  const objectiveStatus: "pass" | "fail" | "unknown" =
+    buildResult === null ? "unknown" : buildResult.status === "success" ? "pass" : "fail";
+  const objectiveScore: 0 | 1 = objectiveStatus === "pass" ? 1 : 0;
 
-  return {
+  const record: RolloutWireRecord = {
     schema_version: "rollout-wire/v1",
     rollout_id: jobId,
     task: jobSpec.task,
@@ -79,6 +105,7 @@ export function buildRolloutRecord(opts: {
     final_answer: finalAnswer,
     build_result: buildResult,
     objective_score: objectiveScore,
+    objective_status: objectiveStatus,
     rank: 0,
     total_score: objectiveScore,
     provenance: {
@@ -88,13 +115,86 @@ export function buildRolloutRecord(opts: {
       exported_at_ms: Date.now(),
     },
   };
+  validateRolloutRecord(record);
+  return record;
+}
+
+const VALID_OBJECTIVE_STATUSES = new Set(["pass", "fail", "unknown"]);
+
+/**
+ * Validate a RolloutWireRecord against rollout-wire/v1 schema invariants at runtime.
+ * Throws an Error with a descriptive message if any invariant is violated.
+ * Call this before persisting or exporting any record to prevent malformed
+ * training data from entering the pipeline.
+ */
+export function validateRolloutRecord(record: RolloutWireRecord): void {
+  if (record.schema_version !== "rollout-wire/v1") {
+    throw new Error(
+      `[rollout-export] invalid record: schema_version must be "rollout-wire/v1", got "${record.schema_version}"`,
+    );
+  }
+
+  if (!record.rollout_id || typeof record.rollout_id !== "string") {
+    throw new Error("[rollout-export] invalid record: rollout_id must be a non-empty string");
+  }
+
+  if (!record.task || typeof record.task !== "string") {
+    throw new Error("[rollout-export] invalid record: task must be a non-empty string");
+  }
+
+  if (!record.session_id || typeof record.session_id !== "string") {
+    throw new Error("[rollout-export] invalid record: session_id must be a non-empty string");
+  }
+
+  if (record.objective_score !== 0 && record.objective_score !== 1) {
+    throw new Error(
+      `[rollout-export] invalid record: objective_score must be 0 or 1, got ${record.objective_score}`,
+    );
+  }
+
+  if (!VALID_OBJECTIVE_STATUSES.has(record.objective_status)) {
+    throw new Error(
+      `[rollout-export] invalid record: objective_status must be "pass", "fail", or "unknown", got "${record.objective_status}"`,
+    );
+  }
+
+  if (record.build_result === null && record.objective_status !== "unknown") {
+    throw new Error(
+      `[rollout-export] invalid record: build_result is null but objective_status is "${record.objective_status}" (expected "unknown")`,
+    );
+  }
+
+  if (record.build_result !== null && record.objective_status === "unknown") {
+    throw new Error(
+      `[rollout-export] invalid record: objective_status is "unknown" but build_result is not null`,
+    );
+  }
+
+  if (record.build_result?.status === "success") {
+    if (record.objective_status !== "pass") {
+      throw new Error(
+        `[rollout-export] invalid record: build_result.status is "success" but objective_status is "${record.objective_status}" (expected "pass")`,
+      );
+    }
+    if (record.objective_score !== 1) {
+      throw new Error(
+        `[rollout-export] invalid record: build_result.status is "success" but objective_score is ${record.objective_score} (expected 1)`,
+      );
+    }
+  }
 }
 
 /**
  * Serialize rollout records to JSONL string.
+ * Applies PII redaction to `final_answer` before serialization to prevent
+ * email addresses, API keys, and JWT tokens from entering training data.
  */
 export function toJsonl(records: RolloutWireRecord[]): string {
-  return records.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  return (
+    records
+      .map((r) => JSON.stringify({ ...r, final_answer: redactPii(r.final_answer) }))
+      .join("\n") + "\n"
+  );
 }
 
 /**

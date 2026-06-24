@@ -10,9 +10,9 @@
 # `.open-next/assets/` (static files). `wrangler deploy` then ships
 # both.
 #
-# Custom domain (bscode.byteslim.com) is bound ONCE in the Cloudflare
-# dashboard — it doesn't go here, so anyone forking this repo gets the
-# `bscode-web.workers.dev` default until they add their own domain.
+# Custom domain is bound ONCE in the Cloudflare dashboard — it doesn't
+# go here, so anyone forking this repo gets the `bscode-web.workers.dev`
+# default until they add their own domain.
 "$schema" = "./node_modules/wrangler/config-schema.json"
 
 name = "bscode-web"

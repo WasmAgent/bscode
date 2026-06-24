@@ -297,16 +297,24 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
    * session as JSONL (for evomerge datafactory ingestion).
    *
    * Query params:
-   *   sessionId — override the X-Session-Id header for the filter
+   *   sessionId       — override the X-Session-Id header for the filter
+   *   include_unknown — when "false" (default), records with
+   *                     objective_status === "unknown" (no build triggered)
+   *                     are excluded to prevent no-build samples from
+   *                     entering training data.
    */
   app.get("/rollouts/export", async (c) => {
     const sessionId = sessionIdOf(c, config);
     const { buildRolloutRecord, toJsonl } = await import("../trajectoryExport.js");
 
+    // Default: filter out unknown-status records so no-build samples stay out
+    // of the training data pipeline. Pass include_unknown=true to opt in.
+    const includeUnknown = c.req.query("include_unknown") === "true";
+
     const jobs = jobQueue.list({ sessionId });
     const terminal = jobs.filter((j) => j.status === "done" || j.status === "failed");
 
-    const records = await Promise.all(
+    const allRecords = await Promise.all(
       terminal.map(async (j, i) => {
         const derived = deriveJobSessionId(sessionId, j.id);
         const buildSnap = await getBuildResult(derived, config.buildResultsKv);
@@ -320,6 +328,10 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
         });
       })
     );
+
+    const records = includeUnknown
+      ? allRecords
+      : allRecords.filter((r) => r.objective_status !== "unknown");
 
     return new Response(toJsonl(records), {
       headers: {

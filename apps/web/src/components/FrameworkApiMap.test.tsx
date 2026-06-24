@@ -123,7 +123,7 @@ describe("FrameworkApiMap — entries content", () => {
     }
   });
 
-  it("docs link for each entry points to a github.com/telleroutlook URL with attribution data-attrs", () => {
+  it("docs link for each entry points to a github.com/WasmAgent URL with attribution data-attrs", () => {
     render(<FrameworkApiMap open={true} onClose={() => {}} />);
     const docLinks = screen
       .getAllByText(/^docs$/)
@@ -217,11 +217,11 @@ describe("FrameworkApiMap — mark + export", () => {
     expect(exportBtn.disabled).toBe(false);
   });
 
-  it("export triggers a download named 'agentkit-starter.zip'", async () => {
+  it("export triggers a download named 'wasmagent-starter.zip'", async () => {
     render(<FrameworkApiMap open={true} onClose={() => {}} />);
     fireEvent.click(screen.getAllByText(/^☆ mark$/)[0]);
     fireEvent.click(screen.getByRole("button", { name: /Export minimal project/ }));
-    await waitFor(() => expect(triggeredDownloadName).toBe("agentkit-starter.zip"), {
+    await waitFor(() => expect(triggeredDownloadName).toBe("wasmagent-starter.zip"), {
       timeout: 5000,
     });
     expect(createdObjectUrls.length).toBe(1);

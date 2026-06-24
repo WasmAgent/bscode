@@ -5,13 +5,17 @@
 **IMPORTANT: This project uses `bun test` (via turbo). Do NOT use `npx vitest`, `npm test`, or bare `bun test` from root.**
 
 ```bash
-# Run all tests (recommended)
+# Run all tests (recommended — uses package.json scripts which include --isolate)
 bun --filter @bscode/worker test
 bun --filter @bscode/web test
 
 # Or via turbo
 bun run test    # runs turbo which triggers bun test in each package
 ```
+
+**Worker test isolation**: `apps/worker/bunfig.toml` sets `isolate = true`, but Bun 1.3.14 only reads it when CWD matches. Running `bun test apps/worker/src/` from the repo root will produce ~44 false failures due to mock bleed between test files. Always use `bun --filter @bscode/worker test` or `cd apps/worker && bun test --isolate`.
+
+**CRITICAL: Never run any `bun test` as a background task** (`run_in_background`) — a hung test will silently burn CPU.
 
 ## Lint
 

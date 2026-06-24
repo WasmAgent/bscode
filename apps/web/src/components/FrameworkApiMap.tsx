@@ -145,26 +145,26 @@ export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
   {
     feature: "Local Studio (cost / latency / errors)",
     describe:
-      "Aggregate runs from the EventLog into a runs-overview dashboard — zero deploy, served by `agentkit devtools`.",
-    api: "RunsAggregator + agentkit devtools",
+      "Aggregate runs from the EventLog into a runs-overview dashboard — zero deploy, served by `wasmagent devtools`.",
+    api: "RunsAggregator + wasmagent devtools",
     pkg: "@wasmagent/devtools · @wasmagent/cli",
     docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/ROADMAP.md#shipped-2026-06",
     snippet: `# After your runs have written events to ./events.ndjson
-npx agentkit devtools --events-file ./events.ndjson --port 4317
+npx wasmagent devtools --events-file ./events.ndjson --port 4317
 # → http://localhost:4317`,
   },
   {
     feature: "Multi-model evaluation (Pareto)",
     describe:
       "Compare two or more models on memory/long-context/tool-sequence/cost suites; report flags Pareto-front winners on (acc, cost, p95 wall).",
-    api: "runEvaluation + agentkit evals",
+    api: "runEvaluation + wasmagent evals",
     pkg: "@wasmagent/evals-runner",
     docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/evals-runner.md",
     snippet: `# List the 6 reference suites:
-agentkit evals list
+wasmagent evals list
 
 # Compare two local Ollama models with 3 seeds:
-agentkit evals run \\
+wasmagent evals run \\
   --suite=multi-turn-memory,cost-per-correct \\
   --models="qwen2.5:0.5b,llama3.2:1b" \\
   --base-url=http://localhost:11434/v1 \\
@@ -205,7 +205,7 @@ export default { fetch: createFetchHandler(server, { path: "/mcp" }) };`,
   {
     feature: "Vercel AI SDK — sandboxed tool",
     describe:
-      "Drop an agentkit kernel into Vercel AI SDK 4–6 as a `tool()`. The model emits a tool_call, agentkit runs the script in QuickJS, the result flows back to the SDK loop. No SDK fork, no patches.",
+      "Drop a WasmAgent kernel into Vercel AI SDK 4–6 as a `tool()`. The model emits a tool_call, WasmAgent runs the script in QuickJS, the result flows back to the SDK loop. No SDK fork, no patches.",
     api: "sandboxedJsTool + codeModeTool",
     pkg: "@wasmagent/aisdk",
     docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/integrate-vercel-ai-sdk.md",
@@ -227,16 +227,16 @@ await generateText({
   {
     feature: "Mastra sandbox provider",
     describe:
-      "Plug an agentkit kernel into Mastra's sandbox-provider contract. Replace E2B / Daytona / Modal with a 3-tier composable kernel — same Workspace API.",
-    api: "agentkitMastraSandbox",
+      "Plug a WasmAgent kernel into Mastra's sandbox-provider contract. Replace E2B / Daytona / Modal with a 3-tier composable kernel — same Workspace API.",
+    api: "createMastraSandbox",
     pkg: "@wasmagent/mastra-sandbox",
     docs: "https://github.com/WasmAgent/wasmagent-js/blob/main/docs/guides/integrate-mastra.md",
-    snippet: `import { agentkitMastraSandbox } from "@wasmagent/mastra-sandbox";
+    snippet: `import { createMastraSandbox } from "@wasmagent/mastra-sandbox";
 import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 import { Workspace } from "@mastra/core";
 
 const workspace = new Workspace({
-  sandbox: agentkitMastraSandbox({
+  sandbox: createMastraSandbox({
     kernel: new QuickJSKernel(),
     capabilities: { allowedHosts: [], cpuMs: 5_000 },
   }),
@@ -335,7 +335,7 @@ export function FrameworkApiMap({ open, onClose }: FrameworkApiMapProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "agentkit-starter.zip";
+    a.download = "wasmagent-starter.zip";
     a.click();
     URL.revokeObjectURL(url);
   }, [marked]);
@@ -567,7 +567,7 @@ function renderMinimalProject(picked: readonly MappingEntry[]): Record<string, s
   for (const entry of picked) {
     for (const pkg of entry.pkg.split("·").map((p) => p.trim())) packages.add(pkg);
   }
-  // Standard transitive deps that agentkit packages need.
+  // Standard transitive deps that @wasmagent packages need.
   packages.add("zod");
   if ([...packages].some((p) => p.includes("kernel-quickjs"))) {
     packages.add("quickjs-emscripten");
@@ -604,7 +604,7 @@ function renderMinimalProject(picked: readonly MappingEntry[]): Record<string, s
   return {
     "package.json": JSON.stringify(
       {
-        name: "agentkit-starter",
+        name: "wasmagent-starter",
         private: true,
         type: "module",
         scripts: {

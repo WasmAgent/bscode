@@ -3,7 +3,7 @@
  * bscode integration test against a fully local LLM.
  *
  * Validates two things at once:
- *   1. The agentkit-js LocalModel + agentkit-js core agent stack runs
+ *   1. The @wasmagent/model-local LocalModel + @wasmagent/core agent stack runs
  *      end-to-end on Node (which is what bscode targets when run outside
  *      Cloudflare Workers — the CLI, dev-mode worker, future server build).
  *   2. The same LocalModel slot the bscode worker registry exposes for
@@ -22,7 +22,7 @@
  *
  * Prereqs:
  *   - node-llama-cpp installed somewhere reachable from this script.
- *     For development, it lives at ../agentkit-js/node_modules/.
+ *     For development, it lives at ../wasmagent-js/node_modules/.
  *   - A GGUF on disk (default: a known-good Qwen2.5-0.5B q4_0 in the
  *     local Ollama cache).
  */
@@ -47,11 +47,11 @@ const { values } = parseArgs({
 console.log("[bscode-local] Loading @wasmagent/model-local ...");
 // Resolve via path: bscode worker doesn't depend on model-local (Workers
 // can't run native bindings) so it's not symlinked into bscode's tree.
-// We reach into the agentkit-js sibling repo directly.
+// We reach into the wasmagent-js sibling repo directly.
 const { fileURLToPath } = await import("node:url");
 const { dirname, resolve } = await import("node:path");
 const here = dirname(fileURLToPath(import.meta.url));
-const localPath = resolve(here, "../../agentkit-js/packages/model-local/dist/index.js");
+const localPath = resolve(here, "../../wasmagent-js/packages/model-local/dist/index.js");
 const { LocalModel } = await import(localPath);
 
 console.log("[bscode-local] Constructing LocalModel from GGUF: " + values.gguf);

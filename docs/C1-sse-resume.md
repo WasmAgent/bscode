@@ -6,8 +6,8 @@ network blip) was unrecoverable: the agent kept running on the worker but the
 client lost the tail of the event stream and the run had to be re-issued from
 scratch — paying the model bill twice and re-applying every side-effect.
 
-C1 closes this gap by reusing the agentkit-js core
-[`EventLog`](../../../agentkit-js/packages/core/src/streaming/EventLog.ts)
+C1 closes this gap by reusing the wasmagent-js core
+[`EventLog`](../../../wasmagent-js/packages/core/src/streaming/EventLog.ts)
 primitive. Each event is persisted under
 `evlog:<runTraceId>:<paddedSeq>` in the same KV namespace as agent
 checkpoints; reconnect is a pure replay, no agent invocation.
@@ -18,8 +18,8 @@ checkpoints; reconnect is a pure replay, no agent invocation.
 
 | Direction | Header / field | Value | Purpose |
 |---|---|---|---|
-| Response | `X-Agentkit-Trace-Id` | `run-<unix-ms>-<rand>` | Stable per-run handle the client echoes back on resume |
-| Response | `Access-Control-Expose-Headers` | `X-Agentkit-Trace-Id` | Required so cross-origin JS can read the trace id |
+| Response | `X-Wasmagent-Trace-Id` | `run-<unix-ms>-<rand>` | Stable per-run handle the client echoes back on resume |
+| Response | `Access-Control-Expose-Headers` | `X-Wasmagent-Trace-Id` | Required so cross-origin JS can read the trace id |
 | SSE frame | `id: <12-digit zero-padded seq>` | monotonic per trace | The `Last-Event-ID` cursor browsers replay automatically |
 
 ### Resume (reconnect)
@@ -84,7 +84,7 @@ totals stay the same as a single uninterrupted run.
 
 * `apps/worker/src/app.test.ts` (the **C1 — SSE Last-Event-ID resume** describe
   block, 6 tests):
-  - response carries `X-Agentkit-Trace-Id` and `id:` lines when `checkpointsKv`
+  - response carries `X-Wasmagent-Trace-Id` and `id:` lines when `checkpointsKv`
     is bound;
   - `EventLog` is purged after a successful run completes;
   - reconnect with `resumeTraceId` + `Last-Event-ID` delivers only the tail and

@@ -185,7 +185,7 @@ regress.
 
 ## Capture format
 
-Drop screenshots inside the repo (`/Users/I041705/github/agentkit-js/`
+Drop screenshots inside the repo (`/Users/I041705/github/wasmagent-js/`
 or `/Users/I041705/github/bscode/`) — `/tmp` is outside the workspace
 and rejected by chrome-devtools. Name them `bscode-<probe>.png` and
 **delete them after reporting** (they're evidence for the report, not

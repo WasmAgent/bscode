@@ -179,7 +179,7 @@ if (!res.ok) {
 }
 
 // Capture the trace id so we can resume against it.
-traceId = res.headers.get("X-Agentkit-Trace-Id");
+traceId = res.headers.get("X-Wasmagent-Trace-Id");
 
 let outcome = await streamEvents(res);
 

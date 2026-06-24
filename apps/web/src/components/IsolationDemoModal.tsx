@@ -8,8 +8,8 @@
  * portal-default, OpenAI Agents SDK has a native sandbox, Anthropic
  * standardised the pattern). What is **not** table stakes is *deterministic,
  * runtime-enforced authorisation with real WASM isolation* — `CapabilityManifest`
- * + the agentkit kernel matrix. Microsoft's Agent Governance Toolkit
- * (2026-04, MIT) ships policy decisions but no isolation; the agentkit
+ * + the WasmAgent kernel matrix. Microsoft's Agent Governance Toolkit
+ * (2026-04, MIT) ships policy decisions but no isolation; the WasmAgent
  * kernels enforce *can* and isolate the blast radius of *should* decisions
  * the toolkit makes. See `docs/security/capability-manifest-owasp.md` in the
  * wasmagent repo for the field-by-field OWASP Agentic Top 10 mapping.
@@ -190,7 +190,7 @@ export function IsolationDemoModal({ onClose }: IsolationDemoModalProps) {
             </div>
             <div style={{ fontSize: 11, color: "#8b949e", marginTop: 4 }}>
               Four OWASP Agentic Top 10 attacks, each with the real intercepted error from the
-              agentkit kernel. Map: see{" "}
+              WasmAgent kernel. Map: see{" "}
               <a
                 href="https://github.com/WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md"
                 target="_blank"

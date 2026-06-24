@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * BSCode Full Test Suite
- * Covers all agentkit-js capabilities exposed through bscode worker.
+ * Covers all @wasmagent/* capabilities exposed through bscode worker.
  *
  * Usage:
  *   node scripts/test-full.mjs

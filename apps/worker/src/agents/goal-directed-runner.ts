@@ -4,7 +4,7 @@
  *
  * The product side does three things only:
  *   1. Adapts bscode's `KvStore` (where the worker stores `file:<path>`
- *      entries) into the generic `WorkspaceReader` agentkit's verifiers
+ *      entries) into the generic `WorkspaceReader` WasmAgent's verifiers
  *      expect.
  *   2. Snapshots the scout — tool list, top-level workspace files,
  *      memory hints — from the in-process state.

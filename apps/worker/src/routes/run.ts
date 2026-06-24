@@ -174,7 +174,7 @@ export interface RunBody {
 
   // ── C1 — SSE Last-Event-ID resume ─────────────────────────────────────────
   /**
-   * Trace id from a previous /run response (header `X-Agentkit-Trace-Id`).
+   * Trace id from a previous /run response (header `X-Wasmagent-Trace-Id`).
    * When set together with the `Last-Event-ID` request header, the worker
    * skips starting a new agent and instead replays the persisted EventLog
    * for that trace, delivering only entries with id > Last-Event-ID. This
@@ -276,7 +276,7 @@ export function mountRunRoutes(app: Hono, config: AppConfig, deps: RunRoutesDeps
 
     // ── C1 — SSE resume fast-path ─────────────────────────────────────────
     // When the client supplies a `resumeTraceId` (last response's
-    // X-Agentkit-Trace-Id) AND a `Last-Event-ID` header AND we have a
+    // X-Wasmagent-Trace-Id) AND a `Last-Event-ID` header AND we have a
     // persistence backend, we *only* replay the missing tail. We never
     // start a second agent for the same trace — that would burn tokens
     // and produce duplicate side-effects (file writes, PR pushes, …).
@@ -489,7 +489,7 @@ export function mountRunRoutes(app: Hono, config: AppConfig, deps: RunRoutesDeps
           projectInstructions: filesKv ? await loadProjectInstructions(filesKv, adaptKvStoreToBackend) : "",
           // B4 — always wire a checkpointer so write-class tools whose
           // `needsApproval` evaluates true actually pause for HITL. Without
-          // this, agentkit-core silently skips the gate (see the
+          // this, wasmagent core silently skips the gate (see the
           // `if (this.#checkpointer)` guard in core/ToolCallingAgent.ts).
           // checkpointerFor(config) is cached per-config and falls back to
           // InMemoryCheckpointer when no KV is bound — strict-policy gating
@@ -776,8 +776,8 @@ export function mountRunRoutes(app: Hono, config: AppConfig, deps: RunRoutesDeps
         // C1 — surface the trace id so the client can echo it back as
         // `resumeTraceId` on reconnect. Must be in expose-headers so a
         // CORS request can read it from JS.
-        "X-Agentkit-Trace-Id": runTraceId,
-        "Access-Control-Expose-Headers": "X-Agentkit-Trace-Id",
+        "X-Wasmagent-Trace-Id": runTraceId,
+        "Access-Control-Expose-Headers": "X-Wasmagent-Trace-Id",
       },
     });
   });
@@ -1185,7 +1185,7 @@ function streamCachedEvents(cachedJson: string): Response {
  * If the trace has no persisted entries (purged / never existed) we
  * still send `[DONE]` — better than hanging the client forever. The
  * client distinguishes "all caught up" from "trace unknown" by the
- * absence of the X-Agentkit-Trace-Id echo (we don't set it on resume).
+ * absence of the X-Wasmagent-Trace-Id echo (we don't set it on resume).
  */
 function streamResumeReplay(
   kv: ReturnType<RunRoutesDeps["adaptKvStoreToBackend"]>,
@@ -1234,9 +1234,9 @@ function streamResumeReplay(
       "Access-Control-Allow-Origin": allowOrigin,
       "Access-Control-Allow-Private-Network": "true",
       // Echo the trace id so the client confirms we accepted the resume.
-      "X-Agentkit-Trace-Id": runTraceId,
+      "X-Wasmagent-Trace-Id": runTraceId,
       "X-Bscode-Resume": "1",
-      "Access-Control-Expose-Headers": "X-Agentkit-Trace-Id, X-Bscode-Resume",
+      "Access-Control-Expose-Headers": "X-Wasmagent-Trace-Id, X-Bscode-Resume",
     },
   });
 }

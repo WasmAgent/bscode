@@ -14,7 +14,7 @@
  *    bscode-specific glue (file path → embedding entry id, write-time hook)
  *    lives in this file.
  *  - **DAG-safe**: the `semantic_search` tool is `readOnly: true` and
- *    `idempotent: true`, so the agentkit Scheduler can run it speculatively.
+ *    `idempotent: true`, so the WasmAgent Scheduler can run it speculatively.
  */
 
 import type { Embedder, Retriever, ToolDefinition } from "@wasmagent/core";

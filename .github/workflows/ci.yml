@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Branding check
+        run: node scripts/check-branding.mjs
+
       - name: Typecheck (worker)
         working-directory: apps/worker
         run: bunx tsc --noEmit
@@ -70,7 +73,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NEXT_PUBLIC_WORKER_URL: ${{ vars.BSCODE_WORKER_URL || 'https://bscode-worker.byteslim.com' }}
+          NEXT_PUBLIC_WORKER_URL: ${{ vars.BSCODE_WORKER_URL || 'https://bscode-worker.example.com' }}
 
   # Nightly: verify bscode installs cleanly from published npm packages
   # and that no workspace:* leaked into the published tarballs.

@@ -22,11 +22,13 @@ Output conforms to `rollout-wire/v1` — see the canonical schema at:
 
 ## Build result → objective_score mapping
 
-| build_result.status | objective_score |
-|---|---|
-| `"success"` | 1 |
-| `"failed"` | 0 |
-| `null` (no result) | 0 |
+| build_result.status | objective_score | objective_status |
+|---|---|---|
+| `"success"` | 1 | `"pass"` |
+| `"failed"` / other | 0 | `"fail"` |
+| `null` (no build) | 0 | `"unknown"` |
+
+`unknown` records must not enter DPO pairs; they are only permitted in the weak-label pool or logs.
 
 ## Full contract
 

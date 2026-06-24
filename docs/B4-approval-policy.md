@@ -72,7 +72,7 @@ legacy "everything runs" behaviour.
 
 ## How approval is requested
 
-When `needsApproval(input)` returns `true`, agentkit-js' existing HITL
+When `needsApproval(input)` returns `true`, wasmagent-js' existing HITL
 machinery kicks in:
 
 - The tool call is suspended; an `await_human_input` event is emitted.
@@ -118,6 +118,6 @@ landed.
 ## See also
 
 - `apps/worker/src/policies/approvalPolicy.ts` — implementation
-- agentkit-js `ToolDefinition.needsApproval` — the type signature this
+- wasmagent-js `ToolDefinition.needsApproval` — the type signature this
   policy targets
 - HITL flow: `KvCheckpointer` + `await_human_input` (already in place)

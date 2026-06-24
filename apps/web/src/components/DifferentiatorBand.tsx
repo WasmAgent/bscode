@@ -10,27 +10,18 @@
  * the conversion-determining 30 seconds is whether a visitor sees
  * something *only wasmagent can give them*.
  *
- * The four moments, in order of decreasing surprise:
+ * Four moments mapped to WasmAgent's three product lines:
  *
- *   1. **MCP Portal token-counter** — federate 3 servers behind ONE
- *      `docs_search + execute_code` MCP face. Direct multi-MCP cost vs
- *      Portal cost is shown as a live ratio sourced from the
- *      portal-tokens.mjs offline accounting model.
+ *   1. **Isolation in flight** — `CapabilityManifest` blocks four OWASP
+ *      Agentic Top 10 attacks. Security/governance product line.
  *
- *   2. **Kill-and-resume** — kill the worker mid-stream; watch the SSE
- *      Last-Event-ID resume gap-free. There is no other framework where
- *      this is a one-button demo.
+ *   2. **Build-verified rollout** — same task, N branches; build verifier
+ *      picks the winner with a binary objective_score. Quality/verifier line.
  *
- *   3. **DevTools fork-from-step** — open the embedded devtools, jump
- *      to any step in the EventLog, fork from there. LangGraph Studio's
- *      headline feature, in a 25-test package you can `npm i`.
+ *   3. **Export training data** — rollout JSONL → evomerge DPO/PPO in one
+ *      click, with G3 contamination guard. Data loop product line.
  *
- *   4. **Isolation in flight** (added 2026-06-17) — `CapabilityManifest`
- *      blocks four OWASP Agentic Top 10 attacks (exfiltration, tool
- *      misuse, runaway loops, path traversal) with the *real* intercepted
- *      error each kernel returns. Code-mode itself is now table stakes;
- *      this one is the moat — runtime-enforced authorisation with WASM
- *      isolation, not just a policy decision.
+ *   4. **Time-travel debugger** — fork from any EventLog step. Tooling axis.
  *
  * The band is visually small on purpose — it deliberately does not
  * compete with the product surface below. It is a *signal*, not a
@@ -46,7 +37,7 @@
 import { useEffect, useState } from "react";
 
 type Demo = {
-  id: "portal" | "resume" | "fork" | "isolation";
+  id: "isolation" | "rollout" | "export" | "fork";
   /** ≤4 words. Reads in <1 second; this is the funnel's 30-second budget. */
   headline: string;
   /** ≤14 words. The *promise* — what the visitor will see after one click. */
@@ -57,28 +48,28 @@ type Demo = {
 
 const DEMOS: Demo[] = [
   {
-    id: "portal",
-    headline: "MCP Portal · 3 servers, 1 face",
-    pitch: "Federate N MCP servers behind one execute_code surface — bootstrap stays O(1).",
-    badge: "≤14% of direct-MCP @ N=30 tools",
+    id: "isolation",
+    headline: "Sandbox blocks an OWASP attack live",
+    pitch: "CapabilityManifest refuses exfiltration, tool misuse, runaway loops, path traversal.",
+    badge: "OWASP Agentic Top 10 — 7 of 10 enforced",
   },
   {
-    id: "resume",
-    headline: "Kill worker · resume mid-stream",
-    pitch: "SSE Last-Event-ID replay restores the run gap-free across worker restarts.",
-    badge: "no other framework ships this",
+    id: "rollout",
+    headline: "Build-verified coding rollout",
+    pitch: "Same task, N branches; build verifier picks the winner. Reproducible, no vibes.",
+    badge: "pass/fail objective_score — schema enforced",
+  },
+  {
+    id: "export",
+    headline: "Export training data",
+    pitch: "One click: rollout JSONL → evomerge DPO/PPO → ready for fine-tuning.",
+    badge: "rollout-wire/v1 + G3 contamination guard",
   },
   {
     id: "fork",
     headline: "Time-travel debugger · fork from step",
     pitch: "Open the EventLog timeline; jump to any step; branch the run from there.",
     badge: "LangGraph Studio's killer feature, OSS",
-  },
-  {
-    id: "isolation",
-    headline: "Sandbox blocks an OWASP attack live",
-    pitch: "CapabilityManifest refuses exfiltration, tool misuse, runaway loops, path traversal.",
-    badge: "OWASP Agentic Top 10 — 7 of 10 enforced",
   },
 ];
 

@@ -12,7 +12,7 @@
  * config so users opt-in per request.
  *
  * Safety: the tool is `needsApproval: true`, which routes it through the
- * agentkit HITL gate (A3). A reviewer must approve before any push happens.
+ * WasmAgent HITL gate (A3). A reviewer must approve before any push happens.
  */
 
 import type { ToolDefinition } from "@wasmagent/core";

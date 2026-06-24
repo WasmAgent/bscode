@@ -587,6 +587,7 @@ describe("POST /classify — diagram fast-path", () => {
       allowedOrigin: "*",
       filesKv: new MemKvStore(),
       sessionsKv: new MemKvStore(),
+      allowLocalSessionFallback: true,
     });
   }
 
@@ -1277,7 +1278,7 @@ describe("planFirst resume (B4)", () => {
 // ── C1: SSE Last-Event-ID resume ─────────────────────────────────────────────
 //
 // Scenarios:
-//   1. With checkpointsKv bound, /run responses carry X-Agentkit-Trace-Id
+//   1. With checkpointsKv bound, /run responses carry X-Wasmagent-Trace-Id
 //      and SSE frames include `id: <padded>` lines.
 //   2. The persisted EventLog under the trace id contains every emitted
 //      event during a successful run.
@@ -1333,17 +1334,17 @@ describe("C1 — SSE Last-Event-ID resume", () => {
     return out;
   }
 
-  it("with checkpointsKv bound, response exposes X-Agentkit-Trace-Id and SSE frames carry id: lines", async () => {
+  it("with checkpointsKv bound, response exposes X-Wasmagent-Trace-Id and SSE frames carry id: lines", async () => {
     const checkpointsKv = new MemKvStore();
     const app = makeApp({ checkpointsKv });
     const res = await post(app, { task: "trace-id-test" });
     expect(res.status).toBe(200);
 
-    const traceId = res.headers.get("X-Agentkit-Trace-Id");
+    const traceId = res.headers.get("X-Wasmagent-Trace-Id");
     expect(traceId).toMatch(/^run-\d+-[a-z0-9]+$/);
 
     const expose = res.headers.get("Access-Control-Expose-Headers") ?? "";
-    expect(expose).toContain("X-Agentkit-Trace-Id");
+    expect(expose).toContain("X-Wasmagent-Trace-Id");
 
     const frames = await parseFramesWithIds(res);
     const dataFrames = frames.filter((f) => f.data !== "DONE");
@@ -1420,7 +1421,7 @@ describe("C1 — SSE Last-Event-ID resume", () => {
     try {
       const res1 = await post(app, { task: "resume-flow" });
       const frames1 = await parseFramesWithIds(res1);
-      const traceId = res1.headers.get("X-Agentkit-Trace-Id");
+      const traceId = res1.headers.get("X-Wasmagent-Trace-Id");
       expect(traceId).toBeTruthy();
       const dataFrames1 = frames1.filter((f) => f.data !== "DONE");
       expect(dataFrames1.length).toBe(mockEvents.length);
@@ -1482,7 +1483,7 @@ describe("C1 — SSE Last-Event-ID resume", () => {
     try {
       const res1 = await post(app, { task: "tail" });
       const frames1 = await parseFramesWithIds(res1);
-      const traceId = res1.headers.get("X-Agentkit-Trace-Id");
+      const traceId = res1.headers.get("X-Wasmagent-Trace-Id");
       expect(traceId).toBeTruthy();
       if (!traceId) return;
       const lastSeen = frames1.filter((f) => f.data !== "DONE").at(-1)?.id;
@@ -1508,7 +1509,7 @@ describe("C1 — SSE Last-Event-ID resume", () => {
     const app = makeApp({ checkpointsKv: undefined });
     const res = await post(app, { task: "no-kv-degradation" });
     expect(res.status).toBe(200);
-    expect(res.headers.get("X-Agentkit-Trace-Id")).toMatch(/^run-/); // header is always set; resume just isn't usable
+    expect(res.headers.get("X-Wasmagent-Trace-Id")).toMatch(/^run-/); // header is always set; resume just isn't usable
     const frames = await parseFramesWithIds(res);
     const dataFrames = frames.filter((f) => f.data !== "DONE");
     expect(dataFrames.length).toBeGreaterThan(0);

@@ -1,10 +1,10 @@
 # Tools Audit (B-D3, 2026-06-12)
 
 > Last refreshed: **2026-06-12**.
-> Companion to bscode's [README.md](../README.md), agentkit-js's
-> [ROADMAP.md](https://github.com/telleroutlook/agentkit-js/blob/main/ROADMAP.md)
-> S4, and the *generic-first* discipline section in agentkit-js's
-> [CONTRIBUTING.md](https://github.com/telleroutlook/agentkit-js/blob/main/CONTRIBUTING.md).
+> Companion to bscode's [README.md](../README.md), wasmagent-js's
+> [ROADMAP.md](https://github.com/WasmAgent/wasmagent-js/blob/main/ROADMAP.md)
+> S4, and the *generic-first* discipline section in wasmagent-js's
+> [CONTRIBUTING.md](https://github.com/WasmAgent/wasmagent-js/blob/main/CONTRIBUTING.md).
 
 This document applies the three-question test from CONTRIBUTING to
 every tool currently shipped under `apps/worker/src/tools/`. The
@@ -13,11 +13,11 @@ question set:
 1. *Is the logic specific to this product, or would another agent
    project want it?*
 2. *Does it depend only on already-published `@wasmagent/*` APIs?*
-3. *Is there a comparable feature already in `agentkit-js` you would
+3. *Is there a comparable feature already in `wasmagent-js` you would
    otherwise duplicate?*
 
 If the answer to (1) is "another project would want it" the logic
-**must** land in `agentkit-js` first; bscode then consumes the
+**must** land in `wasmagent-js` first; bscode then consumes the
 published API. The audit below is the public reasoning trail —
 keep it honest, refresh it when tools change.
 
@@ -58,7 +58,7 @@ adapter that wires it to the bscode `FileTreeManager`.
 
 ### `import_github_repo` + `create_github_pr` → `@wasmagent/tools-github` (NEW)
 
-Both files are pure REST + `agentkit-js/core` `ToolDefinition`. They
+Both files are pure REST + `wasmagent-js/core` `ToolDefinition`. They
 do not depend on any bscode primitive other than its `KvStore`,
 which is itself a thin wrapper around `core`'s `KvBackend`. Any agent
 project that wants to read a GitHub repo into its workspace or open
@@ -98,7 +98,7 @@ spans the agent's framework-mode output. Split:
 
 ### `init_agents_md`, `read_build_result` writer, `web_search`, git tools
 
-These are either thin wrappers around already-generic agentkit APIs
+These are either thin wrappers around already-generic wasmagent APIs
 (`web_search` over `tools-web`, git tools over `Bun.spawn`) or they
 encode product-shaped UX (the AGENTS.md scaffold's prompt vocabulary
 is bscode-specific; the build-result cache is the
@@ -115,18 +115,18 @@ because the call-site there is small and the user-facing benefit of
 having one more tool factory in `core` is borderline.
 
 **Decision rule:** if any other consumer (e.g., a Vercel AI SDK demo
-or another agentkit consumer) wants the same revert UX, lift it.
+or another wasmagent consumer) wants the same revert UX, lift it.
 Otherwise leave it where it is.
 
 ## Process going forward
 
-The discipline rule in agentkit-js's CONTRIBUTING is the floor, not
+The discipline rule in wasmagent-js's CONTRIBUTING is the floor, not
 the ceiling. New bscode PRs that add a tool MUST link to this audit
 in their description and either:
 
 - Cite an entry whose verdict is KEEP that justifies why the new
   tool is product-shaped, OR
-- Open an issue in agentkit-js for the generic counterpart and
+- Open an issue in wasmagent-js for the generic counterpart and
   reference its number, even if the bscode PR ships first as a
   sketch.
 
