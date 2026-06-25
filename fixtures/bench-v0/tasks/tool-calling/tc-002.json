@@ -1,0 +1,23 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "tc-002",
+  "category": "tool-calling",
+  "difficulty": "medium",
+  "prompt": "Write the string 'hello world' to the file 'output/result.txt', then read it back and confirm the content matches.",
+  "context": {
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "deterministic",
+    "expected": {
+      "tool_sequence": ["write_file", "read_file"],
+      "write_args": { "path": "output/result.txt", "content": "hello world" },
+      "read_args": { "path": "output/result.txt" },
+      "final_output_contains": "hello world"
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["write_file", "read_file", "multi-step", "verify-roundtrip"]
+}

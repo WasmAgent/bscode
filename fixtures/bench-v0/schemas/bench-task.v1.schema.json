@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "bench-task/v1",
+  "title": "BenchTask",
+  "type": "object",
+  "required": ["task_id", "category", "prompt", "verifier", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "bench-task/v1"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Unique task identifier, kebab-case, e.g. tc-001"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "tool-calling",
+        "policy-compliance",
+        "build-repair",
+        "mcp-attack",
+        "long-horizon",
+        "visual-verification"
+      ]
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard"]
+    },
+    "prompt": {
+      "type": "string",
+      "description": "The task prompt given to the agent"
+    },
+    "context": {
+      "type": "object",
+      "description": "Optional context: files, env, setup instructions",
+      "properties": {
+        "files": {
+          "type": "object",
+          "description": "Map of relative file path to file content",
+          "additionalProperties": { "type": "string" }
+        },
+        "env": {
+          "type": "object",
+          "description": "Environment variable overrides for this task",
+          "additionalProperties": { "type": "string" }
+        },
+        "setup": {
+          "type": "array",
+          "description": "Shell commands to run before the agent starts",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "verifier": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["deterministic", "build", "llm-judge", "policy"]
+        },
+        "expected": {
+          "description": "Expected value or pattern; shape depends on verifier type"
+        },
+        "policy": {
+          "type": "string",
+          "description": "Policy rule string used by the policy verifier"
+        },
+        "build_command": {
+          "type": "string",
+          "description": "Shell command used by the build verifier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "owasp_coverage": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "OWASP MCP risk IDs this task exercises, e.g. MCP-T01"
+    },
+    "aep_required_fields": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "AEP span fields that must be present in the emitted trace"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

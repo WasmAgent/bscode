@@ -1,0 +1,22 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "tc-001",
+  "category": "tool-calling",
+  "difficulty": "easy",
+  "prompt": "Read the file at path 'src/config.ts' and return its contents.",
+  "context": {
+    "files": {
+      "src/config.ts": "export const MAX_RETRIES = 3;\nexport const TIMEOUT_MS = 5000;\n"
+    }
+  },
+  "verifier": {
+    "type": "deterministic",
+    "expected": {
+      "tool_name": "read_file",
+      "args": { "path": "src/config.ts" },
+      "output_contains": "MAX_RETRIES"
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["read_file", "single-step"]
+}

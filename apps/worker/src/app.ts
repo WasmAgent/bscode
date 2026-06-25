@@ -16,6 +16,7 @@ import { mountMcpDemoRoutes } from "./routes/mcpDemo.js";
 import { mountModelRoutes } from "./routes/models.js";
 import { mountPromptRoutes } from "./routes/prompt.js";
 import { mountRunRoutes } from "./routes/run.js";
+import { registerEvidenceRoutes } from "./routes/evidence.js";
 import { createSemanticIndexer, importGithubRepo, type SemanticIndexer } from "./tools/index.js";
 
 export type { AppConfig } from "./platform.js";
@@ -477,6 +478,9 @@ export function createApp(config: AppConfig) {
     checkpointerFor,
     adaptKvStoreToBackend,
   });
+
+  // ── GET /evidence/:runId — AEP evidence bundle export ─────────────────────
+  registerEvidenceRoutes(app, config.sessionsKv);
 
   return app;
 }
