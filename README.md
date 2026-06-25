@@ -39,9 +39,9 @@ contamination checks and provenance validation before any training use.
 
 | Repo | Role |
 |---|---|
-| [wasmagent-js](https://github.com/WasmAgent/wasmagent-js) | Runtime compliance source of truth: kernel / policy / verifier / ComplianceEvalRecord emitter |
-| **bscode** (this repo) | Real workload + evidence collection surface: reference deployment, trajectory export |
-| [trace-pipeline](https://github.com/WasmAgent/trace-pipeline) | Measurement trust + trace-to-training backend: audit, SFT/DPO/router data factory |
+| [wasmagent-js](https://github.com/WasmAgent/wasmagent-js) | Runtime compliance source of truth: kernel / policy / verifier / ComplianceEvalRecord emitter / AEP evidence protocol |
+| **bscode** (this repo) | Real workload + evidence collection surface: reference deployment, trajectory export, AEP evidence bundle |
+| [trace-pipeline](https://github.com/WasmAgent/trace-pipeline) | Measurement trust + trace-to-training backend: validate-aep, trust-score, audit-report, SFT/DPO/router data factory |
 
 ```text
 Runtime Compliance Source of Truth
