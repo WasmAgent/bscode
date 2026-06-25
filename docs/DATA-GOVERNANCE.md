@@ -126,10 +126,10 @@ a `X-Record-Count` header with the number of records.
 
 ---
 
-## Downstream use (evomerge-framework)
+## Downstream use (trace-pipeline)
 
 Records exported from bscode are processed by
-[evomerge-framework](https://github.com/telleroutlook/evomerge-framework)
+[trace-pipeline](https://github.com/WasmAgent/trace-pipeline)
 before any training use. The pipeline applies:
 
 - **Schema validation**: records that do not conform to `rollout-wire/v1`

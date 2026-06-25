@@ -5,14 +5,14 @@
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![wasmagent-js](https://img.shields.io/badge/built%20on-wasmagent--js-646cff.svg)](https://github.com/WasmAgent/wasmagent-js)
-[![evomerge](https://img.shields.io/badge/trains-evomerge--framework-orange.svg)](https://github.com/telleroutlook/evomerge-framework)
+[![evomerge](https://img.shields.io/badge/trains-evomerge--framework-orange.svg)](https://github.com/WasmAgent/trace-pipeline)
 
 bscode is **not** competing with Cursor, Claude Code, or Codex. It is:
 - The **reference deployment** for [wasmagent-js](https://github.com/WasmAgent/wasmagent-js)
 - A **real workload source**: WASM sandbox, durable checkpoints, multi-agent fan-out, visual verifier
 - An **evidence collection surface**: build results, visual verification, rollout traces → training data
 
-> This repository is the second layer of the [WasmAgent Trustworthy Agent Training Loop](https://github.com/telleroutlook/evomerge-framework/blob/main/docs/ecosystem-map.md).
+> This repository is the second layer of the [WasmAgent Trustworthy Agent Training Loop](https://github.com/WasmAgent/trace-pipeline/blob/main/docs/ecosystem-map.md).
 
 ```bash
 npm add @wasmagent/core   # the framework on npm
@@ -28,9 +28,9 @@ bscode operates in three explicit modes for trajectory and evidence export:
 |---|---|---|
 | **Demo Mode** | Public showcase, no long-term data | None |
 | **Evidence Mode** | Saves build results, visual verification, job metadata for audit | Objective signals only |
-| **Training Data Mode** | User-explicitly enabled; exports sanitized rollout + compliance JSONL to evomerge-framework | Full `rollout-wire/v1` + `ComplianceEvalRecord` |
+| **Training Data Mode** | User-explicitly enabled; exports sanitized rollout + compliance JSONL to trace-pipeline | Full `rollout-wire/v1` + `ComplianceEvalRecord` |
 
-Training Data Mode must be explicitly opted into. Data passes through evomerge-framework's
+Training Data Mode must be explicitly opted into. Data passes through trace-pipeline's
 contamination checks and provenance validation before any training use.
 
 ---
@@ -41,7 +41,7 @@ contamination checks and provenance validation before any training use.
 |---|---|
 | [wasmagent-js](https://github.com/WasmAgent/wasmagent-js) | Runtime compliance source of truth: kernel / policy / verifier / ComplianceEvalRecord emitter |
 | **bscode** (this repo) | Real workload + evidence collection surface: reference deployment, trajectory export |
-| [evomerge-framework](https://github.com/telleroutlook/evomerge-framework) | Measurement trust + trace-to-training backend: audit, SFT/DPO/router data factory |
+| [trace-pipeline](https://github.com/WasmAgent/trace-pipeline) | Measurement trust + trace-to-training backend: audit, SFT/DPO/router data factory |
 
 ```text
 Runtime Compliance Source of Truth
@@ -216,7 +216,7 @@ positioning.
 | Architecture & tools | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) |
 | Security governance | [docs/GOVERNANCE.md](./docs/GOVERNANCE.md) |
 | Data governance (consent, retention, deletion) | [docs/DATA-GOVERNANCE.md](./docs/DATA-GOVERNANCE.md) |
-| Training data loop | [evomerge-framework](https://github.com/telleroutlook/evomerge-framework) |
+| Training data loop | [trace-pipeline](https://github.com/WasmAgent/trace-pipeline) |
 | Claims registry | [docs/claims/claims.yaml](./docs/claims/claims.yaml) |
 | Parallel job queue | [docs/B1-job-queue.md](./docs/B1-job-queue.md) |
 | Closed validation loop | [docs/B2-validation-loop.md](./docs/B2-validation-loop.md) |
