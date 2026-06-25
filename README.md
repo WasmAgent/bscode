@@ -163,6 +163,32 @@ Read-only tools (`read_file`, `list_files`, `search_code`) are exposed through o
 `execute_code` surface. Write tools are deliberately excluded — they need approval/state
 that does not translate cleanly across an MCP transport boundary.
 
+## MCP Firewall attack demo
+
+The worker exposes a self-contained demo showing what happens to an agent with and without
+`@wasmagent/mcp-firewall` in front of its tools.
+
+```
+GET  /mcp-demo              — list all 5 attack scenarios
+POST /mcp-demo/:scenarioId  — run a scenario; returns JSON comparison
+```
+
+Scenarios: `prompt-injection`, `exfiltration`, `rug-pull`, `taint-passthrough`, `sampling-abuse`.
+
+Each response includes a `withoutFirewall` vs `withFirewall` diff: tool blocked/flagged,
+risk findings, rug-pull hash diff, and taint-boundary wrapping.
+
+## bscode-bench
+
+`fixtures/bench/tasks/` contains 22 benchmark task manifests (`bench-task/v1` schema)
+covering 5 categories: build repair, API correctness, security/policy, Cloudflare-specific,
+and multi-step long-horizon. Each manifest specifies `user_query`, `verifiers`, and
+`admission` settings for the evidence gate.
+
+```bash
+ls fixtures/bench/tasks/   # 22 tasks
+```
+
 ---
 
 ## Out of scope
