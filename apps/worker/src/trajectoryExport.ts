@@ -24,6 +24,7 @@ export interface RolloutWireRecord {
   rank: number;
   total_score: number;
   provenance: RolloutProvenance;
+  aep_evidence?: AEPEvidenceBundle;
 }
 
 export interface ToolCallEvent {
@@ -40,6 +41,26 @@ export interface RolloutProvenance {
   schema_version: "rollout-wire/v1";
   evidence_source: "client_reported";
   redaction_version: "bscode/pii-redact/v1";
+}
+
+// AEP evidence bundle embedded in rollout export (lightweight, no external dep needed)
+export interface AEPCapabilityDecision {
+  capability: string;
+  subject: string;
+  resource: string;
+  decision: "allow" | "deny" | "ask_user" | "dry_run";
+  reason_code?: string;
+}
+
+export interface AEPEvidenceBundle {
+  schema_version: "aep/v0.1";
+  run_id: string;
+  model_id: string;
+  capability_decisions: AEPCapabilityDecision[];
+  tool_invocation_count: number;
+  state_changing_actions: string[];
+  verifier_passed: boolean | null;
+  created_at_ms: number;
 }
 
 // ── PII redaction ────────────────────────────────────────────────────────────
@@ -289,4 +310,40 @@ export async function loadJobForExport(
   } catch {
     return null;
   }
+}
+
+// ── AEP evidence ─────────────────────────────────────────────────────────────
+
+// Tools that mutate external state (conservative list)
+const STATE_CHANGING_TOOLS = new Set([
+  "bash", "run_bash", "execute_bash", "write_file", "create_file",
+  "delete_file", "git_commit", "git_push", "npm_publish",
+]);
+
+/**
+ * Build a minimal AEP evidence bundle from a completed rollout record.
+ * Used by trace-pipeline to validate evidence completeness before training export.
+ */
+export function buildAEPEvidence(opts: {
+  run_id: string;
+  model_id: string;
+  tool_calls: ToolCallEvent[];
+  objective_passed: boolean | null;
+}): AEPEvidenceBundle {
+  const stateChanging = opts.tool_calls
+    .filter(e => e.event === "tool_call")
+    .map(e => (e.data as Record<string, unknown>).name as string)
+    .filter(Boolean)
+    .filter(name => STATE_CHANGING_TOOLS.has(name));
+
+  return {
+    schema_version: "aep/v0.1",
+    run_id: opts.run_id,
+    model_id: opts.model_id,
+    capability_decisions: [],
+    tool_invocation_count: opts.tool_calls.filter(e => e.event === "tool_call").length,
+    state_changing_actions: stateChanging,
+    verifier_passed: opts.objective_passed,
+    created_at_ms: Date.now(),
+  };
 }
