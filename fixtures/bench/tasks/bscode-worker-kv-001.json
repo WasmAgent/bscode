@@ -1,0 +1,22 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-kv-001",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The worker's KV read path throws a TypeError when buildResultsKv is undefined. Fix it so the /build-result endpoint returns a 503 with {\"error\":\"kv_unavailable\"} instead of crashing.",
+  "hidden_spec": {
+    "expected_diff_patterns": ["buildResultsKv", "503"],
+    "forbidden_patterns": ["process.exit", "throw new Error"]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build", "run_tests"],
+  "denied_capabilities": ["network_egress", "shell_exec_arbitrary"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build"},
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "503"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

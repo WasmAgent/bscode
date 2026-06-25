@@ -1,0 +1,22 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-visual-001",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "Add a visible error banner to the web UI that appears when the agent returns a final_answer containing the string '[ERROR]'. The banner should have a red background (#dc2626) and display the error message text.",
+  "hidden_spec": {
+    "expected_diff_patterns": ["#dc2626", "ERROR", "banner"],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "visual_verify", "run_build"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun run build --filter=@bscode/web"},
+    {"type": "visual_assert", "selector": "[data-testid='error-banner']", "property": "background-color", "expected": "rgb(220, 38, 38)"},
+    {"type": "diff_contains", "pattern": "dc2626"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "stochastic"
+  }
+}

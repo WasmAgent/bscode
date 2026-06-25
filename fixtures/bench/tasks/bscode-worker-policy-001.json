@@ -1,0 +1,22 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-policy-001",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The approval policy must reject any tool call whose name matches the glob 'shell_*' when AppConfig.enableShell is false. Implement this check in the approval policy module.",
+  "hidden_spec": {
+    "expected_diff_patterns": ["shell_", "enableShell", "reject"],
+    "forbidden_patterns": ["enableShell = true", "enableShell=true"]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress", "shell_exec_arbitrary"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "shell_"},
+    {"type": "no_diff_contains", "pattern": "enableShell = true"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}
