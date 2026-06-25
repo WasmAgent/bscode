@@ -54,6 +54,32 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
+      # A1 — Cloudflare Worker bundle size budget (6 MB uncompressed).
+      # Guards against pyodide / browser tools / model SDKs being statically bundled.
+      - name: Worker bundle size budget (A1)
+        working-directory: apps/worker
+        run: |
+          bun run build
+          node ../../scripts/check-bundle-size.mjs
+
+      # A2 — Validate fixture rollouts conform to rollout-wire/v1 schema.
+      # Ensures the shared fixture byte-matches the contract and that all
+      # required fields are present with correct types.
+      - name: Rollout fixture schema validation (A2)
+        run: node scripts/check-rollout-schema.mjs
+
+      # A3 — Production config lint: warn if BSCODE_ALLOWED_ORIGIN is still
+      # the local dev default. Does not block CI (deploy is gated on secrets),
+      # but surfaces misconfiguration early.
+      - name: Production config lint (A3)
+        run: |
+          ORIGIN=$(grep -r "BSCODE_ALLOWED_ORIGIN" apps/worker/wrangler.toml | grep -v "^#" | grep "localhost" || true)
+          if [ -n "$ORIGIN" ]; then
+            echo "::warning::BSCODE_ALLOWED_ORIGIN is still set to localhost in wrangler.toml — update before deploying to production."
+          else
+            echo "✓ BSCODE_ALLOWED_ORIGIN does not contain localhost"
+          fi
+
       # ── Cloudflare deploy (only on push to main; gated on secrets) ────────────
       - name: Deploy worker to Cloudflare
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
