@@ -1,0 +1,26 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-api-003",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The GET /v1/agent/tools endpoint in apps/worker/src/routes/tools.ts returns a flat array of tool names, but the API contract specifies it must return an object with a 'tools' key containing the array, like { \"tools\": [...] }. Fix the response shape to match the spec.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "{ tools:",
+      "tools:"
+    ],
+    "forbidden_patterns": [
+      "JSON.stringify(tools)"
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "tools:"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

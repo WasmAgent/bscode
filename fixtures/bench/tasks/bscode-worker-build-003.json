@@ -1,0 +1,28 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-build-003",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "Build is broken: 'Property timeout does not exist on type ExecutionContext'. Our worker's fetch handler in apps/worker/src/index.ts is calling ctx.timeout() but the Cloudflare ExecutionContext type only exposes waitUntil and passThroughOnException. Remove the invalid call and use ctx.waitUntil with an appropriate Promise instead.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "waitUntil",
+      "ctx.waitUntil"
+    ],
+    "forbidden_patterns": [
+      "ctx.timeout",
+      "as any"
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "diff_contains", "pattern": "waitUntil"},
+    {"type": "no_diff_contains", "pattern": "ctx.timeout"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

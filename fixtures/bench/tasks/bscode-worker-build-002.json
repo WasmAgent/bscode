@@ -1,0 +1,29 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-build-002",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The worker build is failing with 'Type string is not assignable to type RequestMethod'. The route handler in apps/worker/src/routes/chat.ts is passing req.method directly to a function that expects a typed RequestMethod enum. Fix the type error so the build passes.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "as RequestMethod",
+      "RequestMethod"
+    ],
+    "forbidden_patterns": [
+      "as any",
+      "@ts-ignore",
+      "@ts-expect-error"
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "diff_contains", "pattern": "RequestMethod"},
+    {"type": "no_diff_contains", "pattern": "as any"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

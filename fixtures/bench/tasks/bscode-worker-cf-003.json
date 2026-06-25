@@ -1,0 +1,25 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-cf-003",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The worker reads env.MODEL_API_KEY at startup in apps/worker/src/config.ts, but this secret is not declared in wrangler.toml under [vars] or as a secret. When deployed, the binding is undefined and the worker crashes on the first request. Add MODEL_API_KEY to the wrangler.toml as a secret reference using the [secrets] section convention and add a startup check that throws a descriptive error if the value is missing at runtime.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "MODEL_API_KEY",
+      "throw new Error"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "diff_contains", "pattern": "MODEL_API_KEY"},
+    {"type": "diff_contains", "pattern": "throw new Error"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

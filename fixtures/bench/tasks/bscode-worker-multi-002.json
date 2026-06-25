@@ -1,0 +1,27 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-multi-002",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "Users are reporting that code edits made through the agent are silently lost when the Durable Object AgentSession hibernates between requests. Read the AgentSession Durable Object in apps/worker/src/durable/AgentSession.ts, trace how the in-memory state is managed, then update it to persist the session state to Durable Object storage (this.storage) on every write and restore it in the constructor. Add or update the test in apps/worker/src/durable/AgentSession.test.ts to cover the persistence round-trip, and run the full test suite to confirm everything passes.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "this.storage",
+      "storage.put",
+      "storage.get"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build", "run_tests", "list_files", "search_code"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "storage.put"},
+    {"type": "diff_contains", "pattern": "storage.get"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "stochastic"
+  }
+}

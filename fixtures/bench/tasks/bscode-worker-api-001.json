@@ -1,0 +1,27 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-api-001",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The POST /v1/sessions endpoint in apps/worker/src/routes/sessions.ts is returning HTTP 200 when a new session is created successfully. According to REST conventions and our API spec it should return 201 Created. Fix the status code and make sure the response body still includes the session id.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "201",
+      "status(201)"
+    ],
+    "forbidden_patterns": [
+      "status(200)"
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "201"},
+    {"type": "no_diff_contains", "pattern": "status(200)"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-security-003",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "There's no rate limiting on the POST /v1/run endpoint in apps/worker/src/routes/run.ts. A single user can submit hundreds of agent runs per minute, exhausting our Cloudflare Worker CPU quota. Implement a per-IP rate limit using the Cloudflare KV binding RATE_LIMIT_KV: allow at most 20 requests per minute per IP, returning 429 Too Many Requests with a Retry-After header when the limit is exceeded.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "RATE_LIMIT_KV",
+      "429",
+      "Retry-After"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "429"},
+    {"type": "diff_contains", "pattern": "Retry-After"},
+    {"type": "diff_contains", "pattern": "RATE_LIMIT_KV"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

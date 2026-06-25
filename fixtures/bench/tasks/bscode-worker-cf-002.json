@@ -1,0 +1,26 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-cf-002",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The Durable Object class AgentSession in apps/worker/src/durable/AgentSession.ts is not exporting the class as required for Cloudflare Durable Objects. Additionally, the wrangler.toml is missing the [[durable_objects]] binding that links the binding name AGENT_SESSION to this class. Fix both issues so the Durable Object is properly declared and bound.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "export class AgentSession",
+      "[[durable_objects]]",
+      "AGENT_SESSION"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "diff_contains", "pattern": "export class AgentSession"},
+    {"type": "diff_contains", "pattern": "durable_objects"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

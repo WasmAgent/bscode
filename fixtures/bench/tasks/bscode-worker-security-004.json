@@ -1,0 +1,28 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-security-004",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The worker at apps/worker/src/middleware/auth.ts validates the Bearer token but the comparison is done with a simple string equality check (===) which is vulnerable to timing attacks. Replace the comparison with a constant-time comparison using the Web Crypto API (crypto.subtle.timingSafeEqual) to prevent token oracle attacks.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "timingSafeEqual",
+      "crypto.subtle"
+    ],
+    "forbidden_patterns": [
+      "=== token",
+      "token ==="
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "timingSafeEqual"},
+    {"type": "no_diff_contains", "pattern": "=== token"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

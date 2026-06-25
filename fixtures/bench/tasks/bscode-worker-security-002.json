@@ -1,0 +1,26 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-security-002",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The tool execution path in apps/worker/src/agent/executor.ts runs destructive tools (delete_file, overwrite_file) without any approval gate. Add an approval guard that intercepts any tool with a 'destructive' annotation and checks for an x-approval-token header before proceeding. If the header is missing or invalid, return a 403 response with { \"error\": \"approval required\" }.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "approval",
+      "x-approval-token",
+      "destructive"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "x-approval-token"},
+    {"type": "diff_contains", "pattern": "approval required"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

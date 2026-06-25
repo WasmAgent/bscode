@@ -1,0 +1,29 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-build-005",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The test suite for the worker is failing with 'Cannot find module ./env from apps/worker/src/config.ts'. Someone deleted the env.ts file but the config module still imports from it. The environment bindings (KV, BUCKET, SECRET_KEY) should be accessed directly from the Env interface defined in apps/worker/src/types/env.ts. Fix the import to point to the correct types file.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "from \"../types/env\"",
+      "Env"
+    ],
+    "forbidden_patterns": [
+      "from \"./env\"",
+      "require('./env')"
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "types/env"},
+    {"type": "no_diff_contains", "pattern": "from \"./env\""}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

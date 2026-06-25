@@ -1,0 +1,27 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-build-004",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "TypeScript compilation fails with 'Module @wasmagent/core has no exported member AgentOptions'. The import in apps/worker/src/agent/runner.ts uses the old name AgentOptions which was renamed to AgentRunOptions in the latest @wasmagent/core package. Fix all import references to use the correct exported name.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "AgentRunOptions"
+    ],
+    "forbidden_patterns": [
+      "AgentOptions",
+      "as any"
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "diff_contains", "pattern": "AgentRunOptions"},
+    {"type": "no_diff_contains", "pattern": "AgentOptions"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

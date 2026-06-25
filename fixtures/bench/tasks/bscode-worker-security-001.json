@@ -1,0 +1,26 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-security-001",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The agent execution route at POST /v1/run in apps/worker/src/routes/run.ts has no capability check. Any caller can request network_egress or filesystem_write capabilities without restriction. Add a CapabilityManifest check that rejects requests asking for capabilities not listed in the worker's allowed set, returning 403 Forbidden with a message explaining which capability was denied.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "CapabilityManifest",
+      "403",
+      "capability"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "CapabilityManifest"},
+    {"type": "diff_contains", "pattern": "403"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

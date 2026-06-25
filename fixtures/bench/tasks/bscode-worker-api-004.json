@@ -1,0 +1,28 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-api-004",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "When the agent run endpoint at POST /v1/run receives an invalid JSON body, the worker throws an unhandled exception and returns a 500. It should parse the body safely and return a 400 Bad Request with an error message like { \"error\": \"Invalid request body\" } when JSON parsing fails. Fix the route handler in apps/worker/src/routes/run.ts.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "400",
+      "Invalid request body",
+      "catch"
+    ],
+    "forbidden_patterns": [
+      "status(500)"
+    ]
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "400"},
+    {"type": "diff_contains", "pattern": "Invalid request body"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

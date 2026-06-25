@@ -1,0 +1,25 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-api-002",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "Our worker's error responses in apps/worker/src/middleware/error.ts are missing the Content-Type: application/json header. When clients receive a 400 or 500 response, the body is JSON but the header is not set, so some HTTP clients fail to parse it. Add the correct Content-Type header to all error responses.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "Content-Type",
+      "application/json"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_tests"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "Content-Type"},
+    {"type": "diff_contains", "pattern": "application/json"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}

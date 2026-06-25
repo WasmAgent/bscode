@@ -1,0 +1,28 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-multi-003",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "We need to add streaming support to the POST /v1/run endpoint. Currently the route in apps/worker/src/routes/run.ts buffers the entire agent response before returning it, which causes timeouts for long-running tasks. Refactor the route to stream agent output as Server-Sent Events (SSE): each tool call result and each model text delta should be emitted as a separate 'data: ...' event, with a final 'data: [DONE]' event when the run completes. Use a TransformStream to pipe events to the response. Update or add tests in apps/worker/src/routes/run.test.ts to verify the SSE content-type header and that [DONE] is emitted. Run the tests to confirm all pass.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "text/event-stream",
+      "data: [DONE]",
+      "TransformStream"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build", "run_tests", "list_files", "search_code"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "test_passes", "method": "bun test apps/worker/src/"},
+    {"type": "diff_contains", "pattern": "text/event-stream"},
+    {"type": "diff_contains", "pattern": "data: [DONE]"},
+    {"type": "diff_contains", "pattern": "TransformStream"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "stochastic"
+  }
+}

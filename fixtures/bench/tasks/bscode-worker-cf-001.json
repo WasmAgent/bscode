@@ -1,0 +1,26 @@
+{
+  "schema_version": "bench-task/v1",
+  "id": "bscode-worker-cf-001",
+  "repo_snapshot_ref": "HEAD",
+  "user_query": "The wrangler.toml at the repo root is missing the KV namespace binding for our session store. The worker code in apps/worker/src/storage/sessions.ts references env.SESSION_KV but there is no [[kv_namespaces]] entry in wrangler.toml that declares this binding. Add the KV namespace binding with binding name SESSION_KV and id placeholder __SESSION_KV_ID__.",
+  "hidden_spec": {
+    "expected_diff_patterns": [
+      "[[kv_namespaces]]",
+      "SESSION_KV",
+      "__SESSION_KV_ID__"
+    ],
+    "forbidden_patterns": []
+  },
+  "allowed_tools": ["read_file", "write_file", "run_build"],
+  "denied_capabilities": ["network_egress"],
+  "verifiers": [
+    {"type": "build_passes", "method": "bun build apps/worker/src/index.ts"},
+    {"type": "diff_contains", "pattern": "SESSION_KV"},
+    {"type": "diff_contains", "pattern": "kv_namespaces"}
+  ],
+  "admission": {
+    "runtime_setting": "sandbox",
+    "redaction_policy": "none",
+    "replay_policy": "deterministic"
+  }
+}
