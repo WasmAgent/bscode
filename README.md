@@ -1,17 +1,18 @@
 # bscode
 
-> Cloudflare Workers + Pages deploy template for WasmAgent — the fastest way
-> to see wasmagent-js running end-to-end on a real edge runtime.
+> Real workload and evidence collection surface for the WasmAgent Trustworthy Agent Training Loop.
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![wasmagent-js](https://img.shields.io/badge/built%20on-wasmagent--js-646cff.svg)](https://github.com/WasmAgent/wasmagent-js)
-[![evomerge](https://img.shields.io/badge/trains-evomerge-orange.svg)](https://github.com/WasmAgent/evomerge)
+[![evomerge](https://img.shields.io/badge/trains-evomerge--framework-orange.svg)](https://github.com/telleroutlook/evomerge-framework)
 
 bscode is **not** competing with Cursor, Claude Code, or Codex. It is:
-- The reference deployment for [wasmagent-js](https://github.com/WasmAgent/wasmagent-js)
-- A live showcase of: WASM sandbox, durable checkpoints, multi-agent fan-out, visual verifier
-- A data capture frontend for the RLAIF training loop
+- The **reference deployment** for [wasmagent-js](https://github.com/WasmAgent/wasmagent-js)
+- A **real workload source**: WASM sandbox, durable checkpoints, multi-agent fan-out, visual verifier
+- An **evidence collection surface**: build results, visual verification, rollout traces → training data
+
+> This repository is the second layer of the [WasmAgent Trustworthy Agent Training Loop](https://github.com/telleroutlook/evomerge-framework/blob/main/docs/ecosystem-map.md).
 
 ```bash
 npm add @wasmagent/core   # the framework on npm
@@ -19,16 +20,35 @@ npm add @wasmagent/core   # the framework on npm
 
 ---
 
+## Data Collection Modes
+
+bscode operates in three explicit modes for trajectory and evidence export:
+
+| Mode | Description | Data retained |
+|---|---|---|
+| **Demo Mode** | Public showcase, no long-term data | None |
+| **Evidence Mode** | Saves build results, visual verification, job metadata for audit | Objective signals only |
+| **Training Data Mode** | User-explicitly enabled; exports sanitized rollout + compliance JSONL to evomerge-framework | Full `rollout-wire/v1` + `ComplianceEvalRecord` |
+
+Training Data Mode must be explicitly opted into. Data passes through evomerge-framework's
+contamination checks and provenance validation before any training use.
+
+---
+
 ## WasmAgent Ecosystem
 
 | Repo | Role |
 |---|---|
-| [wasmagent-js](https://github.com/WasmAgent/wasmagent-js) | Embedded Agent Runtime / WASM Kernel / policy / verifier / adapters |
-| **bscode** (this repo) | Cloudflare flagship demo and deploy template for safe coding agents |
-| [evomerge](https://github.com/WasmAgent/evomerge) | Public datafactory and eval-trust backend for rollout data |
+| [wasmagent-js](https://github.com/WasmAgent/wasmagent-js) | Runtime compliance source of truth: kernel / policy / verifier / ComplianceEvalRecord emitter |
+| **bscode** (this repo) | Real workload + evidence collection surface: reference deployment, trajectory export |
+| [evomerge-framework](https://github.com/telleroutlook/evomerge-framework) | Measurement trust + trace-to-training backend: audit, SFT/DPO/router data factory |
 
 ```text
-Task → Safe Runtime → Verifiable Rollout → Trajectory Export → DPO/PPO Data → Better Models
+Runtime Compliance Source of Truth
+  → Real Workload and Evidence Collection
+  → Measurement Trust and Trace-to-Training Backend
+  → Better Policy / Router / Small Model
+  → Stronger Runtime
 ```
 
 ---
@@ -169,7 +189,7 @@ positioning.
 |---|---|
 | Architecture & tools | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) |
 | Security governance | [docs/GOVERNANCE.md](./docs/GOVERNANCE.md) |
-| Training data loop | [evomerge](https://github.com/WasmAgent/evomerge) |
+| Training data loop | [evomerge-framework](https://github.com/telleroutlook/evomerge-framework) |
 | Claims registry | [docs/claims/claims.yaml](./docs/claims/claims.yaml) |
 | Parallel job queue | [docs/B1-job-queue.md](./docs/B1-job-queue.md) |
 | Closed validation loop | [docs/B2-validation-loop.md](./docs/B2-validation-loop.md) |
