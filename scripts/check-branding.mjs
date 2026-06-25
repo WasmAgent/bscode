@@ -3,7 +3,9 @@
  * check-branding.mjs — prevent old brand strings from creeping back into
  * tracked source files.
  *
- * Forbidden brands: agentkit (all variants), byteslim, telleroutlook
+ * Forbidden brands: agentkit (all variants), byteslim
+ * Note: telleroutlook is the GitHub account of the project maintainer and is
+ * NOT forbidden — it appears legitimately in links to evomerge-framework.
  *
  * Usage:
  *   node scripts/check-branding.mjs         # CI check (exit 1 on violations)
@@ -25,12 +27,6 @@ const ALLOWED_EXACT = new Set([
   // Guard test that asserts the old brand does NOT appear in prompts — mentions
   // "@agentkit-js" as the string it is testing against.
   "apps/worker/src/integration.test.ts",
-  // README and docs link to evomerge-framework which is currently hosted under telleroutlook.
-  // These are ecosystem references, not old brand reintroductions.
-  // TODO: move evomerge-framework to WasmAgent org to remove these exceptions.
-  "README.md",
-  "docs/DATA-GOVERNANCE.md",
-  "docs/GOVERNANCE.md",
 ]);
 
 function isAllowed(file) {
@@ -42,12 +38,11 @@ function isAllowed(file) {
 
 // Patterns that must not appear in any non-allowlisted tracked file.
 const PATTERNS = [
-  { re: /@agentkit-js\//g,    label: "@agentkit-js/ import/path" },
+  { re: /@agentkit-js\//g,      label: "@agentkit-js/ import/path" },
   { re: /\bagentkit[-_]js\b/gi, label: "agentkit-js brand string" },
   { re: /\bagentkit[-_]core\b/gi, label: "agentkit-core brand string" },
-  { re: /\bagentkit\b/gi,     label: "agentkit brand string" },
-  { re: /\bbyteslim\b/gi,     label: "byteslim brand string" },
-  { re: /\btelleroutlook\b/gi, label: "telleroutlook brand string" },
+  { re: /\bagentkit\b/gi,       label: "agentkit brand string" },
+  { re: /\bbyteslim\b/gi,       label: "byteslim brand string" },
 ];
 
 const files = execSync("git ls-files", { encoding: "utf8", cwd: process.cwd() })
