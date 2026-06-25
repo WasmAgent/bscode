@@ -157,7 +157,7 @@ const VALID_OBJECTIVE_STATUSES = new Set(["pass", "fail", "unknown"]);
 export function validateRolloutRecord(record: RolloutWireRecord): void {
   if (record.schema_version !== "rollout-wire/v1") {
     throw new Error(
-      `[rollout-export] invalid record: schema_version must be "rollout-wire/v1", got "${record.schema_version}"`,
+      `[rollout-export] invalid record: schema_version must be "rollout-wire/v1", got "${record.schema_version}"`
     );
   }
 
@@ -175,37 +175,37 @@ export function validateRolloutRecord(record: RolloutWireRecord): void {
 
   if (record.objective_score !== 0 && record.objective_score !== 1) {
     throw new Error(
-      `[rollout-export] invalid record: objective_score must be 0 or 1, got ${record.objective_score}`,
+      `[rollout-export] invalid record: objective_score must be 0 or 1, got ${record.objective_score}`
     );
   }
 
   if (!VALID_OBJECTIVE_STATUSES.has(record.objective_status)) {
     throw new Error(
-      `[rollout-export] invalid record: objective_status must be "pass", "fail", or "unknown", got "${record.objective_status}"`,
+      `[rollout-export] invalid record: objective_status must be "pass", "fail", or "unknown", got "${record.objective_status}"`
     );
   }
 
   if (record.build_result === null && record.objective_status !== "unknown") {
     throw new Error(
-      `[rollout-export] invalid record: build_result is null but objective_status is "${record.objective_status}" (expected "unknown")`,
+      `[rollout-export] invalid record: build_result is null but objective_status is "${record.objective_status}" (expected "unknown")`
     );
   }
 
   if (record.build_result !== null && record.objective_status === "unknown") {
     throw new Error(
-      `[rollout-export] invalid record: objective_status is "unknown" but build_result is not null`,
+      `[rollout-export] invalid record: objective_status is "unknown" but build_result is not null`
     );
   }
 
   if (record.build_result?.status === "success") {
     if (record.objective_status !== "pass") {
       throw new Error(
-        `[rollout-export] invalid record: build_result.status is "success" but objective_status is "${record.objective_status}" (expected "pass")`,
+        `[rollout-export] invalid record: build_result.status is "success" but objective_status is "${record.objective_status}" (expected "pass")`
       );
     }
     if (record.objective_score !== 1) {
       throw new Error(
-        `[rollout-export] invalid record: build_result.status is "success" but objective_score is ${record.objective_score} (expected 1)`,
+        `[rollout-export] invalid record: build_result.status is "success" but objective_score is ${record.objective_score} (expected 1)`
       );
     }
   }
@@ -222,10 +222,9 @@ function redactRecord(r: RolloutWireRecord): RolloutWireRecord {
     return raw === redacted ? ev : { ...ev, data: JSON.parse(redacted) as Record<string, unknown> };
   });
 
-  const redactedBuildResult =
-    r.build_result?.stderr
-      ? { ...r.build_result, stderr: redactPii(r.build_result.stderr) }
-      : r.build_result;
+  const redactedBuildResult = r.build_result?.stderr
+    ? { ...r.build_result, stderr: redactPii(r.build_result.stderr) }
+    : r.build_result;
 
   return {
     ...r,
@@ -269,7 +268,7 @@ export interface EvidenceManifest {
  */
 export async function buildEvidenceManifest(
   records: RolloutWireRecord[],
-  sessionId: string,
+  sessionId: string
 ): Promise<EvidenceManifest> {
   const jsonl = toJsonl(records);
   const encoded = new TextEncoder().encode(jsonl);
@@ -299,7 +298,7 @@ export async function buildEvidenceManifest(
  */
 export async function loadJobForExport(
   jobId: string,
-  sessionsKv: KvStore | undefined,
+  sessionsKv: KvStore | undefined
 ): Promise<{ spec: JobSpec; sessionId: string } | null> {
   if (!sessionsKv) return null;
   try {
@@ -316,8 +315,15 @@ export async function loadJobForExport(
 
 // Tools that mutate external state (conservative list)
 const STATE_CHANGING_TOOLS = new Set([
-  "bash", "run_bash", "execute_bash", "write_file", "create_file",
-  "delete_file", "git_commit", "git_push", "npm_publish",
+  "bash",
+  "run_bash",
+  "execute_bash",
+  "write_file",
+  "create_file",
+  "delete_file",
+  "git_commit",
+  "git_push",
+  "npm_publish",
 ]);
 
 /**
@@ -331,17 +337,17 @@ export function buildAEPEvidence(opts: {
   objective_passed: boolean | null;
 }): AEPEvidenceBundle {
   const stateChanging = opts.tool_calls
-    .filter(e => e.event === "tool_call")
-    .map(e => (e.data as Record<string, unknown>).name as string)
+    .filter((e) => e.event === "tool_call")
+    .map((e) => (e.data as Record<string, unknown>).name as string)
     .filter(Boolean)
-    .filter(name => STATE_CHANGING_TOOLS.has(name));
+    .filter((name) => STATE_CHANGING_TOOLS.has(name));
 
   return {
     schema_version: "aep/v0.1",
     run_id: opts.run_id,
     model_id: opts.model_id,
     capability_decisions: [],
-    tool_invocation_count: opts.tool_calls.filter(e => e.event === "tool_call").length,
+    tool_invocation_count: opts.tool_calls.filter((e) => e.event === "tool_call").length,
     state_changing_actions: stateChanging,
     verifier_passed: opts.objective_passed,
     created_at_ms: Date.now(),

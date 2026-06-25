@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { buildEvidenceManifest, buildRolloutRecord, redactPii, toJsonl, validateRolloutRecord } from "./trajectoryExport.js";
+import {
+  buildEvidenceManifest,
+  buildRolloutRecord,
+  redactPii,
+  toJsonl,
+  validateRolloutRecord,
+} from "./trajectoryExport.js";
 
 describe("buildRolloutRecord", () => {
   it("sets objective_score=1 when build succeeded", () => {
@@ -147,7 +153,7 @@ describe("toJsonl", () => {
         sessionId: "session-12345678",
         branchIndex: i,
         buildResult: null,
-      }),
+      })
     );
     const lines = toJsonl(recs).trim().split("\n");
     expect(lines).toHaveLength(3);
@@ -204,9 +210,7 @@ describe("toJsonl", () => {
       sessionId: "session-12345678",
       branchIndex: 0,
       buildResult: null,
-      toolCallSequence: [
-        { event: "tool_call", data: { args: { email: "user@example.com" } } },
-      ],
+      toolCallSequence: [{ event: "tool_call", data: { args: { email: "user@example.com" } } }],
     });
     const jsonl = toJsonl([rec]);
     expect(jsonl).not.toContain("user@example.com");

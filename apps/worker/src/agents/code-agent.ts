@@ -1,10 +1,10 @@
+import cfVariant from "@jitl/quickjs-wasmfile-release-sync";
 import type { InputGuardrail, Model, OutputGuardrail, ToolDefinition } from "@wasmagent/core";
 import { CodeAgent, codeGuardrail } from "@wasmagent/core";
 import { PyodideKernel } from "@wasmagent/kernel-pyodide";
 import type { QuickJSKernelOptions } from "@wasmagent/kernel-quickjs";
 import { QuickJSKernel } from "@wasmagent/kernel-quickjs";
 import { RemoteSandboxKernel } from "@wasmagent/kernel-remote";
-import cfVariant from "@jitl/quickjs-wasmfile-release-sync";
 import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
 import { bscodeCodeAgentPrompt } from "./prompts.js";
 

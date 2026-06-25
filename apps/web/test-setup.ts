@@ -41,16 +41,20 @@ g.PointerEvent = dom.window.PointerEvent;
 g.DragEvent = dom.window.DragEvent;
 g.ClipboardEvent = dom.window.ClipboardEvent;
 g.MutationObserver = dom.window.MutationObserver;
-g.IntersectionObserver = dom.window.IntersectionObserver || class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-};
-g.ResizeObserver = dom.window.ResizeObserver || class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-};
+g.IntersectionObserver =
+  dom.window.IntersectionObserver ||
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+g.ResizeObserver =
+  dom.window.ResizeObserver ||
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
 g.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
 g.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
 g.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);

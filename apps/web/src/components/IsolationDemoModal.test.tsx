@@ -20,8 +20,9 @@
  *      The link contract is stable across releases — these are GitHub
  *      paths the documentation page also points at.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { IsolationDemoModal } from "./IsolationDemoModal.js";
 
 afterEach(() => {
@@ -91,9 +92,7 @@ describe("IsolationDemoModal (D7)", () => {
     // must point at the same canonical doc path.
     expect(
       hrefs.some((h) =>
-        h?.includes(
-          "WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md"
-        )
+        h?.includes("WasmAgent/wasmagent-js/blob/main/docs/security/capability-manifest-owasp.md")
       )
     ).toBe(true);
     expect(

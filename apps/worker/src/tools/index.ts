@@ -86,7 +86,13 @@ export function createSearchCodeTool(
     inputSchema: z.object({
       query: z.string().describe("Text to search for"),
       path: z.string().optional().describe("Limit search to this file path"),
-      maxFiles: z.number().min(1).max(500).default(200).optional().describe("Maximum number of files to scan (default 200)"),
+      maxFiles: z
+        .number()
+        .min(1)
+        .max(500)
+        .default(200)
+        .optional()
+        .describe("Maximum number of files to scan (default 200)"),
     }),
     outputSchema: z.string(),
     readOnly: true,
@@ -109,7 +115,9 @@ export function createSearchCodeTool(
         });
       }
       const suffix = truncated ? `\n[truncated: searched ${cap} of ${list.keys.length} files]` : "";
-      return results.length > 0 ? results.join("\n") + suffix : `No matches found for: ${query}${suffix}`;
+      return results.length > 0
+        ? results.join("\n") + suffix
+        : `No matches found for: ${query}${suffix}`;
     },
   };
 }

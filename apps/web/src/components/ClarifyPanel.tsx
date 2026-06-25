@@ -132,8 +132,7 @@ export function ClarifyPanel({
           )}
 
           {/* Free text — shown when "Other" selected or no options */}
-          {(q.options.length === 0 ||
-            (answers[qi] && !q.options.includes(answers[qi]))) && (
+          {(q.options.length === 0 || (answers[qi] && !q.options.includes(answers[qi]))) && (
             <input
               type="text"
               placeholder={isChinese ? "请输入..." : "Type your answer..."}

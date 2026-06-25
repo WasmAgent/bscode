@@ -5,8 +5,8 @@
  * JSON, and missing fields) and the model-backed judge factory.
  */
 
-import type { Model, ModelMessage, StreamEvent } from "@wasmagent/core";
 import { describe, expect, it } from "bun:test";
+import type { Model, ModelMessage, StreamEvent } from "@wasmagent/core";
 import { createModelVisionJudge, parseJudgeReply } from "./visionJudge.js";
 
 function fakeModel(reply: string): Model {

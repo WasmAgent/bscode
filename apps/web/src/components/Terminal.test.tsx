@@ -8,9 +8,9 @@
  * these tests assert the render branch.
  */
 
-import type { CardBlock } from "@wasmagent/ui-cards";
-import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
+import type { CardBlock } from "@wasmagent/ui-cards";
 
 // CardRenderer pulls D2 + react-markdown which are heavy and tend to
 // surface "older React" runtime conflicts in vitest. The render branches

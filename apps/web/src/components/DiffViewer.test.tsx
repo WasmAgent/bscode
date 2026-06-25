@@ -9,8 +9,8 @@
  * Stub fetch so we control /files/.../versions and /versions/:n.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 // ── Capture what DiffViewer hands to the Editor ─────────────────────────────
 let capturedEditorProps: Array<Record<string, unknown>> = [];

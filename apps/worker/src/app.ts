@@ -1,35 +1,22 @@
-import {
-  InMemoryCheckpointer,
-  KvCheckpointer,
-  MapKvBackend,
-} from "@wasmagent/core";
+import { InMemoryCheckpointer, KvCheckpointer, MapKvBackend } from "@wasmagent/core";
 import { FileTreeManager } from "@wasmagent/core/beta";
 import { Hono } from "hono";
 import pkg from "../package.json" with { type: "json" };
 import { JobQueue } from "./jobs/index.js";
-import {
-  deriveJobSessionId,
-  discardJobSession,
-  snapshotSession,
-} from "./jobs/jobBranches.js";
+import { deriveJobSessionId, discardJobSession, snapshotSession } from "./jobs/jobBranches.js";
 import { createMcpFetchHandler } from "./mcp.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { createRateLimiter } from "./middleware/rateLimit.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
-import {
-  createSemanticIndexer,
-  importGithubRepo,
-  type SemanticIndexer,
-} from "./tools/index.js";
-import { createShellRunner } from "./tools/shell.js";
-import { mountFilesRoutes } from "./routes/files.js";
-import { mountModelRoutes } from "./routes/models.js";
 import { mountBuildResultRoutes } from "./routes/buildResult.js";
+import { mountFilesRoutes } from "./routes/files.js";
 import { mountJobRoutes } from "./routes/jobs.js";
+import { mountMcpDemoRoutes } from "./routes/mcpDemo.js";
+import { mountModelRoutes } from "./routes/models.js";
 import { mountPromptRoutes } from "./routes/prompt.js";
 import { mountRunRoutes } from "./routes/run.js";
-import { mountMcpDemoRoutes } from "./routes/mcpDemo.js";
+import { createSemanticIndexer, importGithubRepo, type SemanticIndexer } from "./tools/index.js";
 
 export type { AppConfig } from "./platform.js";
 
@@ -100,7 +87,10 @@ function parseSessionId(raw: string | undefined): string | null {
   return SESSION_ID_RE.test(trimmed) ? trimmed : null;
 }
 
-function sessionIdOf(c: { req: { header: (n: string) => string | undefined } }, config?: AppConfig): string {
+function sessionIdOf(
+  c: { req: { header: (n: string) => string | undefined } },
+  config?: AppConfig
+): string {
   const raw = c.req.header("X-Session-Id");
   const id = parseSessionId(raw);
   if (id) return id;
@@ -109,7 +99,10 @@ function sessionIdOf(c: { req: { header: (n: string) => string | undefined } }, 
   throw new Error("X-Session-Id required");
 }
 
-function fileTreeFor(c: { req: { header: (n: string) => string | undefined } }, config: AppConfig): FileTreeManager {
+function fileTreeFor(
+  c: { req: { header: (n: string) => string | undefined } },
+  config: AppConfig
+): FileTreeManager {
   const id = sessionIdOf(c, config);
   let tree = sessionFileTrees.get(id);
   if (!tree) {
@@ -131,7 +124,10 @@ function resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvSto
   throw new Error("resolveFilesKv: sessionId is required");
 }
 
-const buildResultNonces = new Map<string, { sessionId: string; jobId: string; expiresAt: number }>();
+const buildResultNonces = new Map<
+  string,
+  { sessionId: string; jobId: string; expiresAt: number }
+>();
 
 // ── Core Hono application (platform-independent) ─────────────────────────────
 export function createApp(config: AppConfig) {

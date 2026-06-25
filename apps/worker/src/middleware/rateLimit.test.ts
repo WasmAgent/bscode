@@ -11,11 +11,11 @@ import { createRateLimiter } from "./rateLimit.js";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Minimal Hono-like context object used to drive the middleware. */
-function makeCtx(opts: {
-  method?: string;
-  path?: string;
-  sessionId?: string;
-}): { req: any; json: (body: unknown, status: number) => Response; _response?: Response } {
+function makeCtx(opts: { method?: string; path?: string; sessionId?: string }): {
+  req: any;
+  json: (body: unknown, status: number) => Response;
+  _response?: Response;
+} {
   const { method = "POST", path = "/run", sessionId } = opts;
   const headers: Record<string, string | undefined> = {};
   if (sessionId) headers["x-session-id"] = sessionId;

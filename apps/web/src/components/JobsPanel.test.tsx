@@ -7,8 +7,8 @@
  *   3. Abort row → DELETEs job by id
  */
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { JobsPanel } from "./JobsPanel.js";
 
 interface MockJob {

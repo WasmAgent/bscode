@@ -105,8 +105,7 @@ const mastra = new Mastra({
     framework: "Anthropic Claude Agent SDK",
     blurb:
       "Claude Agent SDK takes {name, description, input_schema, handler}. sandboxedJsClaudeTool produces that shape with kernel isolation already wired.",
-    npmInstall:
-      "npm add @wasmagent/claude-agent-sdk @wasmagent/kernel-quickjs @wasmagent/core",
+    npmInstall: "npm add @wasmagent/claude-agent-sdk @wasmagent/kernel-quickjs @wasmagent/core",
     code: `import Anthropic from "@anthropic-ai/sdk";
 import { sandboxedJsClaudeTool } from "@wasmagent/claude-agent-sdk";
 import { QuickJSKernel } from "@wasmagent/kernel-quickjs";

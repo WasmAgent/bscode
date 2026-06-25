@@ -15,11 +15,11 @@
  *     for DAG-scheduled parallel reads.
  */
 
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createGitTools, createShellRunner } from "./shell.js";
 
 describe("createShellRunner", () => {

@@ -55,9 +55,7 @@ export function createRateLimiter(opts: RateLimiterOpts = {}) {
     if (!rateKv) {
       if (!kvWarned) {
         kvWarned = true;
-        console.warn(
-          "[rateLimit] BSCODE_RATE_KV is not bound — rate limiting is disabled"
-        );
+        console.warn("[rateLimit] BSCODE_RATE_KV is not bound — rate limiting is disabled");
       }
       return next();
     }

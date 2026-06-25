@@ -105,7 +105,13 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
           <button
             type="button"
             onClick={onClose}
-            style={{ background: "none", border: "none", color: theme.textMuted, cursor: "pointer", fontSize: 16 }}
+            style={{
+              background: "none",
+              border: "none",
+              color: theme.textMuted,
+              cursor: "pointer",
+              fontSize: 16,
+            }}
             title="Close"
           >
             ✕
@@ -144,14 +150,28 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
 
         {/* ── Data Collection Mode ─────────────────────────────────────── */}
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #30363d" }}>
-          <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: theme.textMuted,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              marginBottom: 8,
+            }}
+          >
             Data Collection Mode
           </div>
 
           {(["demo", "evidence", "training"] as DataCollectionMode[]).map((mode) => (
             <label
               key={mode}
-              style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, cursor: "pointer" }}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                marginBottom: 8,
+                cursor: "pointer",
+              }}
             >
               <input
                 type="radio"
@@ -171,7 +191,8 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
                 <span style={{ color: theme.textDim }}>
                   {mode === "demo" && "— no persistence, showcase only"}
                   {mode === "evidence" && "— saves build results and job metadata for audit"}
-                  {mode === "training" && "— exports sanitised rollout JSONL for training (requires consent)"}
+                  {mode === "training" &&
+                    "— exports sanitised rollout JSONL for training (requires consent)"}
                 </span>
               </div>
             </label>
@@ -199,9 +220,8 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
                 style={{ marginTop: 2, cursor: "pointer" }}
               />
               <div style={{ fontSize: 11, color: "#c9d1d9", lineHeight: 1.5 }}>
-                I consent to session trajectories being exported as training data.
-                Data will be PII-redacted before export. I can delete my data at
-                any time using the button below.
+                I consent to session trajectories being exported as training data. Data will be
+                PII-redacted before export. I can delete my data at any time using the button below.
               </div>
             </label>
           )}

@@ -87,7 +87,7 @@ export default {
     if (!guardResult.ok && !config.allowLocalSessionFallback) {
       return new Response(
         JSON.stringify({ error: "Missing required bindings", missing: guardResult.missing }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+        { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
     return app.fetch(request, env, ctx);

@@ -125,8 +125,7 @@ export function NavBar({
                 cursor: "pointer",
                 background:
                   config.agentMode === mode && !config.framework ? "#1f6feb33" : "transparent",
-                color:
-                  config.agentMode === mode && !config.framework ? "#58a6ff" : theme.textMuted,
+                color: config.agentMode === mode && !config.framework ? "#58a6ff" : theme.textMuted,
                 fontWeight: 600,
               }}
             >

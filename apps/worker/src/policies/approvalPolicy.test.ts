@@ -11,8 +11,8 @@
  *   - presets behave as advertised
  */
 
-import type { ToolDefinition } from "@wasmagent/core";
 import { describe, expect, it } from "bun:test";
+import type { ToolDefinition } from "@wasmagent/core";
 import { z } from "zod";
 import { ApprovalPolicy, applyApprovalPolicy, PolicyPresets } from "./approvalPolicy.js";
 

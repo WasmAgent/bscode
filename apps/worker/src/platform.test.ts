@@ -6,10 +6,10 @@
  * SessionKvStore — session-namespaced wrapper around any KvStore
  */
 
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { FsKvStore, MemKvStore, SessionKvStore } from "./platform.js";
 
 // ── MemKvStore ────────────────────────────────────────────────────────────────

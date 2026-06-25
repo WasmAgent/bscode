@@ -10,57 +10,57 @@
  * tests don't make real model calls.
  */
 
-import type { AgentEvent, Model } from "@wasmagent/core";
 import { describe, expect, it, vi } from "bun:test";
+import type { AgentEvent, Model } from "@wasmagent/core";
 import { z } from "zod";
 
 // Mock ParallelForkJoinRunner: deterministic synthesised draft.
 vi.mock("@wasmagent/core", () => ({
-    ParallelForkJoinRunner: class {
-      constructor(public opts: unknown) {}
-      async run() {
-        return {
-          answer: "synthesised draft from 3 branches",
-          branches: ["b1", "b2", "b3"],
-          branchesCompleted: 3,
-        };
-      }
-    },
-    ToolCallingAgent: class {
-      constructor(public opts: { tools: unknown[]; systemPrompt?: string }) {}
-      async *run(task: string): AsyncGenerator<AgentEvent> {
-        // The planner is constructed with tools=[], systemPrompt="You are a senior planner..."
-        // We use that to decide what kind of canned answer to produce.
-        const isPlanner = (this.opts.systemPrompt ?? "").startsWith("You are a senior planner");
-        yield {
-          traceId: "t",
-          parentTraceId: null,
-          channel: "text",
-          event: "run_start",
-          data: { task },
-          timestampMs: 0,
-        } as AgentEvent;
-        yield {
-          traceId: "t",
-          parentTraceId: null,
-          channel: "text",
-          event: "step_start",
-          data: { step: 1 },
-          timestampMs: 0,
-        } as unknown as AgentEvent;
-        const answer = isPlanner
-          ? "<plan>\n1. read_file src/foo.ts\n2. patch_file src/foo.ts\n</plan>"
-          : "ok";
-        yield {
-          traceId: "t",
-          parentTraceId: null,
-          channel: "text",
-          event: "final_answer",
-          data: { answer },
-          timestampMs: 0,
-        } as AgentEvent;
-      }
-    },
+  ParallelForkJoinRunner: class {
+    constructor(public opts: unknown) {}
+    async run() {
+      return {
+        answer: "synthesised draft from 3 branches",
+        branches: ["b1", "b2", "b3"],
+        branchesCompleted: 3,
+      };
+    }
+  },
+  ToolCallingAgent: class {
+    constructor(public opts: { tools: unknown[]; systemPrompt?: string }) {}
+    async *run(task: string): AsyncGenerator<AgentEvent> {
+      // The planner is constructed with tools=[], systemPrompt="You are a senior planner..."
+      // We use that to decide what kind of canned answer to produce.
+      const isPlanner = (this.opts.systemPrompt ?? "").startsWith("You are a senior planner");
+      yield {
+        traceId: "t",
+        parentTraceId: null,
+        channel: "text",
+        event: "run_start",
+        data: { task },
+        timestampMs: 0,
+      } as AgentEvent;
+      yield {
+        traceId: "t",
+        parentTraceId: null,
+        channel: "text",
+        event: "step_start",
+        data: { step: 1 },
+        timestampMs: 0,
+      } as unknown as AgentEvent;
+      const answer = isPlanner
+        ? "<plan>\n1. read_file src/foo.ts\n2. patch_file src/foo.ts\n</plan>"
+        : "ok";
+      yield {
+        traceId: "t",
+        parentTraceId: null,
+        channel: "text",
+        event: "final_answer",
+        data: { answer },
+        timestampMs: 0,
+      } as AgentEvent;
+    }
+  },
 }));
 
 // Mock the local createToolAgent — same shape as the real one for our purposes.

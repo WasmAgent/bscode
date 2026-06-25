@@ -94,5 +94,5 @@ select {
    container <div>). Border light-up signals "this is interactive";
    the inner buttons themselves carry the actual click semantics. */
 .bscode-card-tile:hover {
-  border-color: #58a6ff !important;
+  border-color: #58a6ff;
 }

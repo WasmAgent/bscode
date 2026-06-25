@@ -6,8 +6,8 @@
  * model registry, file KV, input validation, and error handling.
  */
 
-import type { AgentEvent } from "@wasmagent/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import type { AgentEvent } from "@wasmagent/core";
 import { createApp } from "./app.js";
 import { MemKvStore } from "./platform.js";
 
@@ -869,7 +869,9 @@ describe("Build result reverse channel (B2)", () => {
     );
     const a = await (
       await app.fetch(
-        new Request("http://localhost/build-result", { headers: { "X-Session-Id": "session-alice" } })
+        new Request("http://localhost/build-result", {
+          headers: { "X-Session-Id": "session-alice" },
+        })
       )
     ).json();
     const b = await (

@@ -1,5 +1,4 @@
 import type { AgentEvent, Model, ModelMessage, ToolDefinition } from "@wasmagent/core";
-import type { Scorer } from "@wasmagent/core/beta";
 import {
   CheckpointableRun,
   createMemoryTool,
@@ -7,13 +6,14 @@ import {
   FallbackModel,
   forbiddenPhrases,
   formatSseFrame,
-  InMemoryCheckpointer,
-  KvCheckpointer,
+  type InMemoryCheckpointer,
+  type KvCheckpointer,
   MapKvBackend,
   maxInputLength,
   ProgrammaticOrchestrator,
   ToolRegistry,
 } from "@wasmagent/core";
+import type { Scorer } from "@wasmagent/core/beta";
 import {
   BudgetForcingRunner,
   exactMatch,
@@ -31,7 +31,11 @@ import {
 import { InMemorySpanExporter, OtelBridge, withOtel } from "@wasmagent/core/experimental";
 import type { Hono } from "hono";
 import { createCodeAgent } from "../agents/code-agent.js";
-import { type MultiAgentMode, multiAgentRun, runPlanFirstExecution } from "../agents/multi-agent.js";
+import {
+  type MultiAgentMode,
+  multiAgentRun,
+  runPlanFirstExecution,
+} from "../agents/multi-agent.js";
 import { createToolAgent } from "../agents/tool-agent.js";
 import { getBuildResult } from "../build-results.js";
 import { resolveModelFromRegistry } from "../models/registry.js";
@@ -56,7 +60,6 @@ import {
   createRevertFileTool,
   createRunCommandTool,
   createSearchCodeTool,
-  createSemanticIndexer,
   createSemanticSearchTool,
   createVisualInteractTool,
   createVisualVerifyTool,
@@ -224,7 +227,6 @@ export interface RunRoutesDeps {
 
 export function mountRunRoutes(app: Hono, config: AppConfig, deps: RunRoutesDeps): void {
   const {
-    sessionIdOf,
     resolveFilesKv,
     sessionFileTrees,
     indexerFor,
@@ -409,7 +411,13 @@ export function mountRunRoutes(app: Hono, config: AppConfig, deps: RunRoutesDeps
           // Relevance filtering: include content of files that match task keywords
           // (avoids sending the full workspace to the model for large projects)
           if (filesKv) {
-            const relevantFiles = await getRelevantFileContents(filesKv, task, 5, sessionId, sessionFileTrees);
+            const relevantFiles = await getRelevantFileContents(
+              filesKv,
+              task,
+              5,
+              sessionId,
+              sessionFileTrees
+            );
             if (relevantFiles.length > 0) {
               ctxParts.push(
                 "## Relevant File Contents\n" +
@@ -486,7 +494,9 @@ export function mountRunRoutes(app: Hono, config: AppConfig, deps: RunRoutesDeps
           // append to the system prompt. We use the wasmagent KV loader on
           // a thin adapter over the per-session files KV; the resolver caches
           // the catalogue, so the cost is one list per /run.
-          projectInstructions: filesKv ? await loadProjectInstructions(filesKv, adaptKvStoreToBackend) : "",
+          projectInstructions: filesKv
+            ? await loadProjectInstructions(filesKv, adaptKvStoreToBackend)
+            : "",
           // B4 — always wire a checkpointer so write-class tools whose
           // `needsApproval` evaluates true actually pause for HITL. Without
           // this, wasmagent core silently skips the gate (see the
@@ -1099,7 +1109,12 @@ async function* ptcAgentRun(
     const registry = new ToolRegistry();
     for (const t of tools) registry.register(t);
 
-    const orchestrator = new ProgrammaticOrchestrator(kernel, registry, {}, { resetKernelPerRun: true });
+    const orchestrator = new ProgrammaticOrchestrator(
+      kernel,
+      registry,
+      {},
+      { resetKernelPerRun: true }
+    );
 
     // Generate script via model
     const collectModelText = async (msgs: ModelMessage[]) => {

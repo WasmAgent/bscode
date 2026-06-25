@@ -17,7 +17,7 @@ export function createAuthMiddleware(config: AppConfig) {
   const productionWithNoToken = isProduction(config) && !config.clientToken;
   if (productionWithNoToken) {
     console.error(
-      "ERROR: BSCODE_CLIENT_TOKEN is not set in production — all requests will be rejected",
+      "ERROR: BSCODE_CLIENT_TOKEN is not set in production — all requests will be rejected"
     );
   }
 

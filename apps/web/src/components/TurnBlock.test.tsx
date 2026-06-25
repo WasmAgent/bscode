@@ -12,8 +12,9 @@
  * Fixture filenames are deliberately neutral (`enterprise-overview.md`,
  * etc.) — see [[no-sap-references-in-public-repos]].
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ConversationTurn } from "@/lib/conversationTypes";
 import { cardDownloadName, formatBytes, TurnBlock } from "./TurnBlock";
 

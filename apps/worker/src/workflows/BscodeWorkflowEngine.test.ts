@@ -10,8 +10,8 @@
  *   - $sleep + $waitForEvent semantics
  */
 
-import { KvWorkflowStateStore, MemoryKvBackend } from "@wasmagent/core/beta";
 import { describe, expect, it } from "bun:test";
+import { KvWorkflowStateStore, MemoryKvBackend } from "@wasmagent/core/beta";
 import { BscodeWorkflowEngine } from "./BscodeWorkflowEngine.js";
 
 describe("BscodeWorkflowEngine — cross-job DAG", () => {

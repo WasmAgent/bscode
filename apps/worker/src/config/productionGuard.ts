@@ -36,9 +36,13 @@ export function checkProductionConfig(config: AppConfig): ProductionCheckResult 
 export function warnOptionalConfig(config: AppConfig): void {
   if (config.allowLocalSessionFallback) return;
   if (!config.checkpointsKv) {
-    console.warn("[productionGuard] checkpointsKv not set — agent checkpoints will not persist across restarts");
+    console.warn(
+      "[productionGuard] checkpointsKv not set — agent checkpoints will not persist across restarts"
+    );
   }
   if (!config.cdpWsEndpoint) {
-    console.warn("[productionGuard] cdpWsEndpoint not set — visual verification tools will be disabled");
+    console.warn(
+      "[productionGuard] cdpWsEndpoint not set — visual verification tools will be disabled"
+    );
   }
 }

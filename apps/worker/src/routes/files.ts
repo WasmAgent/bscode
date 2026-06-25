@@ -1,7 +1,7 @@
 import type { FileTreeManager } from "@wasmagent/core/beta";
 import type { Hono } from "hono";
-import { assertWorkspacePath, MAX_FILE_BYTES } from "../tools/index.js";
 import type { AppConfig, KvStore } from "../platform.js";
+import { assertWorkspacePath, MAX_FILE_BYTES } from "../tools/index.js";
 
 const MAX_BULK_FILES = 100;
 const MAX_BULK_TOTAL_BYTES = 2 * 1024 * 1024;
@@ -9,7 +9,10 @@ const MAX_BULK_TOTAL_BYTES = 2 * 1024 * 1024;
 export interface FileRoutesDeps {
   sessionFileTrees: Map<string, FileTreeManager>;
   resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvStore | undefined;
-  sessionIdOf(c: { req: { header: (n: string) => string | undefined } }, config?: AppConfig): string;
+  sessionIdOf(
+    c: { req: { header: (n: string) => string | undefined } },
+    config?: AppConfig
+  ): string;
   fileTreeFor(
     c: { req: { header: (n: string) => string | undefined } },
     config: AppConfig
@@ -64,12 +67,11 @@ export function mountFilesRoutes(app: Hono, config: AppConfig, deps: FileRoutesD
     for (const f of files) {
       try {
         assertWorkspacePath(f.path);
-      } catch (err) {
+      } catch (_err) {
         return c.json({ error: `invalid path: ${f.path}` }, 400);
       }
       const bytes = enc.encode(f.content ?? "").byteLength;
-      if (bytes > MAX_FILE_BYTES)
-        return c.json({ error: `file too large: ${f.path}` }, 413);
+      if (bytes > MAX_FILE_BYTES) return c.json({ error: `file too large: ${f.path}` }, 413);
       totalBytes += bytes;
       if (totalBytes > MAX_BULK_TOTAL_BYTES)
         return c.json({ error: "bulk payload too large" }, 413);
@@ -173,7 +175,7 @@ export function mountFilesRoutes(app: Hono, config: AppConfig, deps: FileRoutesD
     if (!kv) return c.json({ error: "KV not bound" }, 503);
     try {
       assertWorkspacePath(path);
-    } catch (err) {
+    } catch (_err) {
       return c.json({ error: `invalid path: ${path}` }, 400);
     }
     if (typeof config.filesKv?.delete !== "function") {

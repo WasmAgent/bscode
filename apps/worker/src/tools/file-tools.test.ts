@@ -17,8 +17,8 @@
  *   - init_agents_md's draft is well-formed markdown referencing real files.
  */
 
-import { FileTreeManager } from "@wasmagent/core/beta";
 import { describe, expect, it } from "bun:test";
+import { FileTreeManager } from "@wasmagent/core/beta";
 import { MemKvStore } from "../platform.js";
 import {
   assertWorkspacePath,

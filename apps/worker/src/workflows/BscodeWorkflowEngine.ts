@@ -13,10 +13,7 @@
  * terminable, resumable, clear errors — apply to bscode workflows too.
  */
 
-import {
-  type ToolDefinition,
-  ToolRegistry,
-} from "@wasmagent/core";
+import { type ToolDefinition, ToolRegistry } from "@wasmagent/core";
 import {
   KvWorkflowStateStore,
   LocalWorkflowEngine,

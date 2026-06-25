@@ -64,10 +64,7 @@ describe("registerCustomModel + listCustomModels", () => {
 
   it("registering with no apiKey stores the entry with apiKey omitted", async () => {
     const kv = new MemKvStore();
-    await registerCustomModel(
-      { id: "open", label: "Open", baseUrl: "https://open.example" },
-      kv
-    );
+    await registerCustomModel({ id: "open", label: "Open", baseUrl: "https://open.example" }, kv);
     const list = await listCustomModels(kv);
     expect(list[0]?.apiKey).toBeUndefined();
   });
@@ -208,10 +205,13 @@ describe("getBuiltinModels", () => {
   });
 
   it("glmApiKey with glmBaseUrl (Coding Plan) still resolves GLM entries", async () => {
-    const list = await getBuiltinModels({
-      glmApiKey: "test-glm-key",
-      glmBaseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
-    }, new MemKvStore());
+    const list = await getBuiltinModels(
+      {
+        glmApiKey: "test-glm-key",
+        glmBaseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      },
+      new MemKvStore()
+    );
     const glm = list.filter((m) => m.provider === "glm");
     expect(glm.length).toBeGreaterThan(0);
     expect(glm.every((m) => m.available)).toBe(true);
@@ -234,9 +234,7 @@ describe("resolveModelFromRegistry", () => {
   beforeEach(() => _resetForTests());
 
   it("returns null when the requested model needs anthropic but no key is set", async () => {
-    expect(
-      await resolveModelFromRegistry("claude-sonnet-4-6", {}, new MemKvStore())
-    ).toBeNull();
+    expect(await resolveModelFromRegistry("claude-sonnet-4-6", {}, new MemKvStore())).toBeNull();
   });
 
   it("resolves a Claude model when anthropicApiKey is present", async () => {

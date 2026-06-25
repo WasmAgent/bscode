@@ -1,6 +1,6 @@
 "use client";
-import { clearSessionId, getOrCreateSessionId } from "@/lib/session";
 import { useCallback, useState } from "react";
+import { clearSessionId, getOrCreateSessionId } from "@/lib/session";
 
 export function useBscodeSession(): { sessionId: string; resetSession: () => void } {
   const [sessionId, setSessionId] = useState<string>(() => getOrCreateSessionId());

@@ -17,6 +17,10 @@ export function getOrCreateSessionId(): string {
 
 export function clearSessionId(): void {
   if (typeof window !== "undefined") {
-    try { window.localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+    try {
+      window.localStorage.removeItem(SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
   }
 }

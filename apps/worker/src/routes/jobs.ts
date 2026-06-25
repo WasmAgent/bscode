@@ -271,7 +271,9 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
     const job = await jobQueue.get(jobId);
     if (!job) return c.json({ error: "job not found" }, 404);
 
-    const { buildRolloutRecord, toJsonl, buildEvidenceManifest } = await import("../trajectoryExport.js");
+    const { buildRolloutRecord, toJsonl, buildEvidenceManifest } = await import(
+      "../trajectoryExport.js"
+    );
     const sessionId = job.spec.sessionId ?? sessionIdOf(c, config);
     const derived = deriveJobSessionId(sessionId, jobId);
     const buildResult = await getBuildResult(derived, config.buildResultsKv);
@@ -316,12 +318,14 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
           error: "Training Data Mode is not enabled",
           hint: "Set TRAINING_DATA_MODE=true in the worker environment to enable rollout export.",
         },
-        403,
+        403
       );
     }
 
     const sessionId = sessionIdOf(c, config);
-    const { buildRolloutRecord, toJsonl, buildEvidenceManifest } = await import("../trajectoryExport.js");
+    const { buildRolloutRecord, toJsonl, buildEvidenceManifest } = await import(
+      "../trajectoryExport.js"
+    );
 
     // Default: filter out unknown-status records so no-build samples stay out
     // of the training data pipeline. Pass include_unknown=true to opt in.

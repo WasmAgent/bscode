@@ -229,16 +229,23 @@ export async function runVisualVerification(
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("");
       }
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
     try {
       if (thumbnailDataUrl) {
         // data URL is base64; hash the raw base64 string as a stable proxy
-        const imgBuf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(thumbnailDataUrl));
+        const imgBuf = await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(thumbnailDataUrl)
+        );
         screenshotHash = Array.from(new Uint8Array(imgBuf))
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("");
       }
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
 
     const snapshot: VisualCheckSnapshot = {
       ranAtMs: Date.now(),

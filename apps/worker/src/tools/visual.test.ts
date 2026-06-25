@@ -8,8 +8,8 @@
  * any human prompt beyond the initial task.
  */
 
-import type { BrowserSession } from "@wasmagent/tools-browser";
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import type { BrowserSession } from "@wasmagent/tools-browser";
 import { _resetForTests, getBuildResult } from "../build-results.js";
 import { MemKvStore } from "../platform.js";
 import type { VisionJudge } from "../visionJudge.js";

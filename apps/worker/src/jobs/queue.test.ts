@@ -11,8 +11,8 @@
  *   - failed runner surfaces error string instead of throwing out
  */
 
-import type { AgentEvent } from "@wasmagent/core";
 import { afterEach, describe, expect, it } from "bun:test";
+import type { AgentEvent } from "@wasmagent/core";
 import { MemKvStore } from "../platform.js";
 import { JobQueue } from "./queue.js";
 
@@ -180,7 +180,10 @@ describe("JobQueue", () => {
     const results: Record<string, string> = {};
 
     function makeRunner(answer: string) {
-      return async function* (_spec: { task: string }, _sig: AbortSignal): AsyncIterable<AgentEvent> {
+      return async function* (
+        _spec: { task: string },
+        _sig: AbortSignal
+      ): AsyncIterable<AgentEvent> {
         await new Promise((r) => setTimeout(r, 10));
         results[answer] = answer;
         yield {
@@ -197,8 +200,14 @@ describe("JobQueue", () => {
     const idA = q.submit({ task: "a" }, makeRunner("answer-A"));
     const idB = q.submit({ task: "b" }, makeRunner("answer-B"));
 
-    await waitFor(() => q.get(idA), (r) => r?.status === "done");
-    await waitFor(() => q.get(idB), (r) => r?.status === "done");
+    await waitFor(
+      () => q.get(idA),
+      (r) => r?.status === "done"
+    );
+    await waitFor(
+      () => q.get(idB),
+      (r) => r?.status === "done"
+    );
 
     const recA = await q.get(idA);
     const recB = await q.get(idB);
@@ -208,19 +217,32 @@ describe("JobQueue", () => {
 
   it("aborting a queued job does not leave a stale runner reference", async () => {
     q = new JobQueue({ concurrency: 1 });
-    let blockerDone = false;
+    let _blockerDone = false;
 
     const blocker = q.submit({ task: "block" }, async function* (_s, sig) {
       await new Promise<void>((resolve) => {
-        const t = setTimeout(() => { blockerDone = true; resolve(); }, 50);
-        sig.addEventListener("abort", () => { clearTimeout(t); resolve(); });
+        const t = setTimeout(() => {
+          _blockerDone = true;
+          resolve();
+        }, 50);
+        sig.addEventListener("abort", () => {
+          clearTimeout(t);
+          resolve();
+        });
       });
     });
 
     let queuedRan = false;
     const queued = q.submit({ task: "queued" }, async function* () {
       queuedRan = true;
-      yield { traceId: "t", parentTraceId: null, channel: "text", event: "final_answer", data: { answer: "x" }, timestampMs: Date.now() } as AgentEvent;
+      yield {
+        traceId: "t",
+        parentTraceId: null,
+        channel: "text",
+        event: "final_answer",
+        data: { answer: "x" },
+        timestampMs: Date.now(),
+      } as AgentEvent;
     });
 
     await new Promise((r) => setTimeout(r, 5));

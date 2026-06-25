@@ -64,6 +64,8 @@ Runtime Compliance Source of Truth
 
 ## Quick start (local, ~2 minutes)
 
+Run an agent task, verify what happened, export trustworthy traces.
+
 ```bash
 git clone https://github.com/WasmAgent/bscode
 cd bscode
@@ -186,6 +188,8 @@ Scenarios: `prompt-injection`, `exfiltration`, `rug-pull`, `taint-passthrough`, 
 
 Each response includes a `withoutFirewall` vs `withFirewall` diff: tool blocked/flagged,
 risk findings, rug-pull hash diff, and taint-boundary wrapping.
+
+> **30-min end-to-end Trust Pack guide:** [wasmagent-js/docs/quickstarts/trust-pack-30min.md](https://github.com/WasmAgent/wasmagent-js/blob/main/docs/quickstarts/trust-pack-30min.md)
 
 ## bscode-bench
 

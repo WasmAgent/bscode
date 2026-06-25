@@ -1,9 +1,8 @@
 "use client";
 import type { CardBlock } from "@wasmagent/ui-cards";
-import { parseCardBlocks, upgradeCardSyntax } from "@wasmagent/ui-cards";
+import { parseCardBlocks } from "@wasmagent/ui-cards";
 import JSZip from "jszip";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { ClarifyPanel } from "@/components/ClarifyPanel";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -15,7 +14,7 @@ import type { ConversationTurn, GoalCriterion, GoalDoneSummary } from "@/lib/con
 // react-markdown types are not yet updated for React 19. Same compat
 // shim ui-cards-react ships in MarkdownCard.tsx.
 // biome-ignore lint/suspicious/noExplicitAny: type compat shim
-const Markdown = ReactMarkdown as any;
+const _Markdown = ReactMarkdown as any;
 
 // FrameworkApiMap is a 535-line modal that only renders when the user
 // clicks the navbar button. Lazy-loading it (Direction 4 of the
@@ -588,7 +587,6 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
     //    visible just to repeat what the chat already shows. Leaving
     //    preview.output undefined keeps `hasPreview` false and lets
     //    the layout collapse to a single full-width chat column.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: only run when finalAnswer changes; config.framework read is intentionally a snapshot at that moment.
   }, [finalAnswer, config.framework]);
 
   // ── First-run model probe ──────────────────────────────────────────────────
@@ -996,8 +994,10 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
           // exist as flows in the existing UI.
           const toastMessages: Record<typeof demoId, string> = {
             isolation: "Watch four OWASP Agentic Top 10 attacks hit the kernel and bounce.",
-            rollout: "Try: run a task with 2+ branches; the build verifier selects the winner automatically.",
-            export: "Try: after a run, open Settings → Export rollout data → download rollout-wire JSONL.",
+            rollout:
+              "Try: run a task with 2+ branches; the build verifier selects the winner automatically.",
+            export:
+              "Try: after a run, open Settings → Export rollout data → download rollout-wire JSONL.",
             fork: "Try: run any task, then click the EventLog timeline → Fork from this step",
           };
           addToast(toastMessages[demoId], "info");
@@ -1079,11 +1079,11 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
               <div
                 style={{ color: theme.textDim, fontSize: 13, textAlign: "center", marginTop: 60 }}
               >
-                <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
-                <div>Describe a task to get started.</div>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>🛡️</div>
+                <div>Run an agent task, verify what happened, export trustworthy traces.</div>
                 <div style={{ fontSize: 11, marginTop: 6, color: theme.textDim }}>
-                  e.g. "build a Vue 3 todo list" · "implement quicksort" · "create a React
-                  dashboard"
+                  e.g. "attack demo: prompt injection" · "multi-branch verified coding" · "export
+                  training data"
                 </div>
               </div>
             )}
@@ -1132,42 +1132,33 @@ Please fix the error. Use patch_file or write_file to correct the broken files.`
             }}
           >
             {/* Clarifying questions — Claude Code style: options + free text + auto-continue */}
-            {clarifyingQuestions &&
-              clarifyingQuestions.length > 0 &&
-              !isRunning && (
-                <ClarifyPanel
-                  questions={clarifyingQuestions}
-                  answers={clarifyAnswers}
-                  onAnswerChange={(qi, value) =>
-                    setClarifyAnswers((prev) => ({ ...prev, [qi]: value }))
-                  }
-                  onSubmit={() => {
-                    const answerSuffix = clarifyingQuestions
-                      .map(
-                        (q, i) =>
-                          `${q.text}: ${(clarifyAnswers[i] ?? "").replace(/^other:/, "")}`
-                      )
-                      .join("\n");
-                    const baseTask = lastSubmittedTask.current || inputText.trim();
-                    const enrichedTask = baseTask
-                      ? `${baseTask}\n\n${answerSuffix}`
-                      : answerSuffix;
-                    dismissClarify();
-                    setClarifyAnswers({});
-                    handleSubmit(enrichedTask, true);
-                  }}
-                  onSkip={() => {
-                    dismissClarify();
-                    setClarifyAnswers({});
-                    handleSubmit(lastSubmittedTask.current || inputText, true);
-                  }}
-                />
-              )}
+            {clarifyingQuestions && clarifyingQuestions.length > 0 && !isRunning && (
+              <ClarifyPanel
+                questions={clarifyingQuestions}
+                answers={clarifyAnswers}
+                onAnswerChange={(qi, value) =>
+                  setClarifyAnswers((prev) => ({ ...prev, [qi]: value }))
+                }
+                onSubmit={() => {
+                  const answerSuffix = clarifyingQuestions
+                    .map((q, i) => `${q.text}: ${(clarifyAnswers[i] ?? "").replace(/^other:/, "")}`)
+                    .join("\n");
+                  const baseTask = lastSubmittedTask.current || inputText.trim();
+                  const enrichedTask = baseTask ? `${baseTask}\n\n${answerSuffix}` : answerSuffix;
+                  dismissClarify();
+                  setClarifyAnswers({});
+                  handleSubmit(enrichedTask, true);
+                }}
+                onSkip={() => {
+                  dismissClarify();
+                  setClarifyAnswers({});
+                  handleSubmit(lastSubmittedTask.current || inputText, true);
+                }}
+              />
+            )}
 
             {/* Fix error banner */}
-            {lastTurnError && !isRunning && (
-              <ErrorBanner error={lastTurnError} onFix={handleFix} />
-            )}
+            {lastTurnError && !isRunning && <ErrorBanner error={lastTurnError} onFix={handleFix} />}
 
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
               <textarea
