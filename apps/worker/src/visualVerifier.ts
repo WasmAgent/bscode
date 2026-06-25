@@ -217,6 +217,29 @@ export async function runVisualVerification(
       }
     }
 
+    // 6) Deterministic fingerprints — SHA-256 hashes for regression detection.
+    //    Both are best-effort; failure to hash never blocks the snapshot.
+    let screenshotHash: string | undefined;
+    let domTextHash: string | undefined;
+    try {
+      const bodyText = bodyInner.replace(/<[^>]*>/g, "").trim();
+      if (bodyText.length > 0) {
+        const domBuf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bodyText));
+        domTextHash = Array.from(new Uint8Array(domBuf))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+      }
+    } catch { /* best-effort */ }
+    try {
+      if (thumbnailDataUrl) {
+        // data URL is base64; hash the raw base64 string as a stable proxy
+        const imgBuf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(thumbnailDataUrl));
+        screenshotHash = Array.from(new Uint8Array(imgBuf))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+      }
+    } catch { /* best-effort */ }
+
     const snapshot: VisualCheckSnapshot = {
       ranAtMs: Date.now(),
       source: "cdp",
@@ -226,6 +249,8 @@ export async function runVisualVerification(
       ...(probeResults.length ? { domProbes: probeResults.slice(0, 20) } : {}),
       ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
       ...(verdict ? { verdict } : {}),
+      ...(screenshotHash ? { screenshotHash } : {}),
+      ...(domTextHash ? { domTextHash } : {}),
     };
     return snapshot;
   } catch (e) {

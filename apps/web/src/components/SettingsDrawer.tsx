@@ -3,18 +3,12 @@ import { useEffect, useState } from "react";
 import { theme } from "@/lib/theme";
 import { refreshWorkerUrl } from "@/lib/workerUrl";
 
-/**
- * Minimal settings drawer.
- *
- * Surfaces the worker URL + model preference for a quick override
- * without round-tripping through env vars. Persists to localStorage so
- * a refresh keeps the choice. The settings here are advisory — a
- * production deployment should bind worker URL via `NEXT_PUBLIC_WORKER_URL`
- * at build time and ignore client overrides.
- */
-
 const LS_WORKER_URL = "bscode:workerUrl";
 const LS_MODEL_PREF = "bscode:modelPreference";
+const LS_DATA_MODE = "bscode:dataMode";
+const LS_DATA_RETENTION = "bscode:dataRetentionDays";
+
+export type DataCollectionMode = "demo" | "evidence" | "training";
 
 export interface SettingsDrawerProps {
   onClose: () => void;
@@ -24,26 +18,47 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
   const [workerUrl, setWorkerUrl] = useState("");
   const [modelPref, setModelPref] = useState("");
   const [savedFlash, setSavedFlash] = useState(false);
+  const [dataMode, setDataMode] = useState<DataCollectionMode>("demo");
+  const [retentionDays, setRetentionDays] = useState("90");
+  const [deleteFlash, setDeleteFlash] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   useEffect(() => {
     setWorkerUrl(localStorage.getItem(LS_WORKER_URL) ?? "http://localhost:8788");
     setModelPref(localStorage.getItem(LS_MODEL_PREF) ?? "claude-sonnet-4-6");
+    setDataMode((localStorage.getItem(LS_DATA_MODE) as DataCollectionMode | null) ?? "demo");
+    setRetentionDays(localStorage.getItem(LS_DATA_RETENTION) ?? "90");
   }, []);
 
   const onSave = () => {
     localStorage.setItem(LS_WORKER_URL, workerUrl.trim() || "http://localhost:8788");
     localStorage.setItem(LS_MODEL_PREF, modelPref.trim() || "claude-sonnet-4-6");
-    // Re-read so subsequent fetches in the same session see the new URL.
-    // Existing component closures still hold the old value until reload —
-    // hence the "Reload to apply" hint stays accurate for those.
+    localStorage.setItem(LS_DATA_MODE, dataMode);
+    localStorage.setItem(LS_DATA_RETENTION, retentionDays);
     refreshWorkerUrl();
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 1200);
   };
 
+  const onDeleteSessionData = async () => {
+    try {
+      const workerBase = localStorage.getItem(LS_WORKER_URL) ?? "http://localhost:8788";
+      await fetch(`${workerBase}/rollouts/export`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch {
+      // best-effort
+    }
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("bscode:session:")) localStorage.removeItem(key);
+    }
+    setDeleteFlash(true);
+    setTimeout(() => setDeleteFlash(false), 1800);
+  };
+
   return (
     <>
-      {/* Click-out overlay */}
       <button
         type="button"
         aria-label="Close settings"
@@ -90,13 +105,7 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
           <button
             type="button"
             onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: theme.textMuted,
-              cursor: "pointer",
-              fontSize: 16,
-            }}
+            style={{ background: "none", border: "none", color: theme.textMuted, cursor: "pointer", fontSize: 16 }}
             title="Close"
           >
             ✕
@@ -133,12 +142,116 @@ export function SettingsDrawer({ onClose }: SettingsDrawerProps) {
           <span style={hint}>Initial selection in the model dropdown.</span>
         </label>
 
+        {/* ── Data Collection Mode ─────────────────────────────────────── */}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #30363d" }}>
+          <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+            Data Collection Mode
+          </div>
+
+          {(["demo", "evidence", "training"] as DataCollectionMode[]).map((mode) => (
+            <label
+              key={mode}
+              style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, cursor: "pointer" }}
+            >
+              <input
+                type="radio"
+                name="dataMode"
+                value={mode}
+                checked={dataMode === mode}
+                onChange={() => {
+                  setDataMode(mode);
+                  if (mode !== "training") setConsentChecked(false);
+                }}
+                style={{ marginTop: 2, cursor: "pointer" }}
+              />
+              <div>
+                <span style={{ color: "#e6edf3", fontWeight: 600 }}>
+                  {mode === "demo" ? "Demo" : mode === "evidence" ? "Evidence" : "Training Data"}
+                </span>{" "}
+                <span style={{ color: theme.textDim }}>
+                  {mode === "demo" && "— no persistence, showcase only"}
+                  {mode === "evidence" && "— saves build results and job metadata for audit"}
+                  {mode === "training" && "— exports sanitised rollout JSONL for training (requires consent)"}
+                </span>
+              </div>
+            </label>
+          ))}
+
+          {dataMode === "training" && (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                marginTop: 8,
+                marginBottom: 8,
+                cursor: "pointer",
+                padding: "8px 10px",
+                background: "#0d1117",
+                borderRadius: 4,
+                border: "1px solid #30363d",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                style={{ marginTop: 2, cursor: "pointer" }}
+              />
+              <div style={{ fontSize: 11, color: "#c9d1d9", lineHeight: 1.5 }}>
+                I consent to session trajectories being exported as training data.
+                Data will be PII-redacted before export. I can delete my data at
+                any time using the button below.
+              </div>
+            </label>
+          )}
+
+          {dataMode !== "demo" && (
+            <label style={{ ...fieldLabel, marginTop: 8 }}>
+              Data retention (days)
+              <input
+                type="number"
+                min={1}
+                max={3650}
+                value={retentionDays}
+                onChange={(e) => setRetentionDays(e.target.value)}
+                style={{ ...fieldInput, width: 80 }}
+              />
+              <span style={hint}>Session data older than this is eligible for deletion.</span>
+            </label>
+          )}
+        </div>
+
         <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
-          <button type="button" onClick={onSave} style={primaryBtn}>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={dataMode === "training" && !consentChecked}
+            style={{
+              ...primaryBtn,
+              opacity: dataMode === "training" && !consentChecked ? 0.45 : 1,
+              cursor: dataMode === "training" && !consentChecked ? "not-allowed" : "pointer",
+            }}
+            title={dataMode === "training" && !consentChecked ? "Consent required" : undefined}
+          >
             Save
           </button>
           {savedFlash && <span style={{ color: "#3fb950" }}>Saved ✓</span>}
         </div>
+
+        {dataMode !== "demo" && (
+          <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={onDeleteSessionData}
+              style={dangerBtn}
+              title="Delete all session trajectories stored by the worker"
+            >
+              Delete my session data
+            </button>
+            {deleteFlash && <span style={{ color: "#f85149" }}>Deleted ✓</span>}
+          </div>
+        )}
 
         <div
           style={{
@@ -195,6 +308,16 @@ const primaryBtn: React.CSSProperties = {
   borderRadius: 4,
   padding: "6px 14px",
   fontSize: 12,
+  fontFamily: "inherit",
+  cursor: "pointer",
+};
+const dangerBtn: React.CSSProperties = {
+  background: "transparent",
+  color: "#f85149",
+  border: "1px solid #f85149",
+  borderRadius: 4,
+  padding: "5px 12px",
+  fontSize: 11,
   fontFamily: "inherit",
   cursor: "pointer",
 };

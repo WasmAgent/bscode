@@ -148,6 +148,22 @@ export interface VisualCheckSnapshot {
    * "real app" from "Vite error overlay" / "404" / blank tab.
    */
   pageTitle?: string;
+  /**
+   * Deterministic fingerprints for replay / regression detection.
+   * Both values are SHA-256 hex strings produced by Web Crypto so they
+   * can be compared across runs without storing raw screenshot bytes or
+   * full DOM text.
+   *
+   * `screenshotHash`  — digest of the raw screenshot PNG/JPEG bytes.
+   *   Absent when no screenshot was captured (no CDP / no canvas).
+   *   Useful for "did the UI regress?" checks without storing the image.
+   *
+   * `domTextHash`  — digest of `document.body.innerText` after navigation.
+   *   More stable than a pixel hash across minor rendering differences.
+   *   Absent when DOM text extraction failed.
+   */
+  screenshotHash?: string;
+  domTextHash?: string;
 }
 
 /** Cap on stderr length. Anything longer is tail-truncated by the reader. */
