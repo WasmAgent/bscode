@@ -43,6 +43,20 @@ describe("buildRolloutRecord", () => {
     expect(rec.objective_score).toBe(0);
     expect(rec.objective_status).toBe("unknown");
   });
+
+  it("includes provenance metadata fields", () => {
+    const rec = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "add a button" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: null,
+    });
+    expect(rec.provenance.source).toBe("bscode");
+    expect(rec.provenance.schema_version).toBe("rollout-wire/v1");
+    expect(rec.provenance.evidence_source).toBe("client_reported");
+    expect(rec.provenance.redaction_version).toBe("bscode/pii-redact/v1");
+  });
 });
 
 describe("validateRolloutRecord", () => {
@@ -151,6 +165,51 @@ describe("toJsonl", () => {
     const jsonl = toJsonl([rec]);
     expect(jsonl).not.toContain("user@example.com");
     expect(jsonl).toContain("[EMAIL]");
+  });
+
+  it("redacts email in task field", () => {
+    const rec = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "send results to admin@example.com" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: null,
+    });
+    const jsonl = toJsonl([rec]);
+    expect(jsonl).not.toContain("admin@example.com");
+    expect(jsonl).toContain("[EMAIL]");
+  });
+
+  it("redacts email in build_result.stderr", () => {
+    const rec = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "t" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: {
+        status: "failed",
+        ranAtMs: Date.now(),
+        stderr: "Error: failed to contact dev@example.com",
+      },
+    });
+    const jsonl = toJsonl([rec]);
+    expect(jsonl).not.toContain("dev@example.com");
+    expect(jsonl).toContain("[EMAIL]");
+  });
+
+  it("redacts email in tool_call_sequence data", () => {
+    const rec = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "t" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: null,
+      toolCallSequence: [
+        { event: "tool_call", data: { args: { email: "user@example.com" } } },
+      ],
+    });
+    const jsonl = toJsonl([rec]);
+    expect(jsonl).not.toContain("user@example.com");
   });
 });
 

@@ -5,7 +5,7 @@
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WasmAgent/bscode)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![wasmagent-js](https://img.shields.io/badge/built%20on-wasmagent--js-646cff.svg)](https://github.com/WasmAgent/wasmagent-js)
-[![evomerge](https://img.shields.io/badge/trains-evomerge--framework-orange.svg)](https://github.com/WasmAgent/trace-pipeline)
+[![trace-pipeline](https://img.shields.io/badge/trains-trace--pipeline-orange.svg)](https://github.com/WasmAgent/trace-pipeline)
 
 bscode is **not** competing with Cursor, Claude Code, or Codex. It is:
 - The **reference deployment** for [wasmagent-js](https://github.com/WasmAgent/wasmagent-js)

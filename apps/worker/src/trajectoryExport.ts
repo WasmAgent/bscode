@@ -37,6 +37,9 @@ export interface RolloutProvenance {
   session_id: string;
   job_id: string;
   exported_at_ms: number;
+  schema_version: "rollout-wire/v1";
+  evidence_source: "client_reported";
+  redaction_version: "bscode/pii-redact/v1";
 }
 
 // ── PII redaction ────────────────────────────────────────────────────────────
@@ -113,6 +116,9 @@ export function buildRolloutRecord(opts: {
       session_id: sessionId,
       job_id: jobId,
       exported_at_ms: Date.now(),
+      schema_version: "rollout-wire/v1",
+      evidence_source: "client_reported",
+      redaction_version: "bscode/pii-redact/v1",
     },
   };
   validateRolloutRecord(record);
@@ -185,16 +191,36 @@ export function validateRolloutRecord(record: RolloutWireRecord): void {
 }
 
 /**
+ * Apply PII redaction to all text-bearing fields of a record before export.
+ * Covers: task, final_answer, tool_call_sequence (JSON-serialized), build_result.stderr.
+ */
+function redactRecord(r: RolloutWireRecord): RolloutWireRecord {
+  const redactedToolCalls = r.tool_call_sequence.map((ev) => {
+    const raw = JSON.stringify(ev.data);
+    const redacted = redactPii(raw);
+    return raw === redacted ? ev : { ...ev, data: JSON.parse(redacted) as Record<string, unknown> };
+  });
+
+  const redactedBuildResult =
+    r.build_result?.stderr
+      ? { ...r.build_result, stderr: redactPii(r.build_result.stderr) }
+      : r.build_result;
+
+  return {
+    ...r,
+    task: redactPii(r.task),
+    final_answer: redactPii(r.final_answer),
+    tool_call_sequence: redactedToolCalls,
+    build_result: redactedBuildResult,
+  };
+}
+
+/**
  * Serialize rollout records to JSONL string.
- * Applies PII redaction to `final_answer` before serialization to prevent
- * email addresses, API keys, and JWT tokens from entering training data.
+ * Applies PII redaction to all text-bearing fields before serialization.
  */
 export function toJsonl(records: RolloutWireRecord[]): string {
-  return (
-    records
-      .map((r) => JSON.stringify({ ...r, final_answer: redactPii(r.final_answer) }))
-      .join("\n") + "\n"
-  );
+  return records.map((r) => JSON.stringify(redactRecord(r))).join("\n") + "\n";
 }
 
 /**
