@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildRolloutRecord, redactPii, toJsonl, validateRolloutRecord } from "./trajectoryExport.js";
+import { buildEvidenceManifest, buildRolloutRecord, redactPii, toJsonl, validateRolloutRecord } from "./trajectoryExport.js";
 
 describe("buildRolloutRecord", () => {
   it("sets objective_score=1 when build succeeded", () => {
@@ -232,5 +232,83 @@ describe("redactPii", () => {
   it("does not modify clean text", () => {
     const clean = "The agent completed the task successfully.";
     expect(redactPii(clean)).toBe(clean);
+  });
+});
+
+describe("buildEvidenceManifest", () => {
+  it("returns evidence-manifest/v1 schema version", async () => {
+    const rec = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "t" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: null,
+    });
+    const manifest = await buildEvidenceManifest([rec], "session-12345678");
+    expect(manifest.schema_version).toBe("evidence-manifest/v1");
+    expect(manifest.n_records).toBe(1);
+    expect(manifest.session_id).toBe("session-12345678");
+    expect(manifest.evidence_source).toBe("client_reported");
+    expect(manifest.redaction_version).toBe("bscode/pii-redact/v1");
+  });
+
+  it("content_hash is a 64-char hex string", async () => {
+    const rec = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "t" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: null,
+    });
+    const manifest = await buildEvidenceManifest([rec], "session-12345678");
+    expect(manifest.content_hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("content_hash changes when record content changes", async () => {
+    const rec1 = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "task one" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: null,
+    });
+    const rec2 = buildRolloutRecord({
+      jobId: "job-abc12345",
+      jobSpec: { task: "task two" } as never,
+      sessionId: "session-12345678",
+      branchIndex: 0,
+      buildResult: null,
+    });
+    const m1 = await buildEvidenceManifest([rec1], "session-12345678");
+    const m2 = await buildEvidenceManifest([rec2], "session-12345678");
+    expect(m1.content_hash).not.toBe(m2.content_hash);
+  });
+
+  it("objective_score_summary counts pass/fail/unknown correctly", async () => {
+    const pass = buildRolloutRecord({
+      jobId: "job-pass",
+      jobSpec: { task: "t" } as never,
+      sessionId: "s",
+      branchIndex: 0,
+      buildResult: { status: "success", ranAtMs: Date.now() },
+    });
+    const fail = buildRolloutRecord({
+      jobId: "job-fail",
+      jobSpec: { task: "t" } as never,
+      sessionId: "s",
+      branchIndex: 1,
+      buildResult: { status: "failed", ranAtMs: Date.now() },
+    });
+    const unknown = buildRolloutRecord({
+      jobId: "job-unk",
+      jobSpec: { task: "t" } as never,
+      sessionId: "s",
+      branchIndex: 2,
+      buildResult: null,
+    });
+    const manifest = await buildEvidenceManifest([pass, fail, unknown], "s");
+    expect(manifest.objective_score_summary.n_pass).toBe(1);
+    expect(manifest.objective_score_summary.n_fail).toBe(1);
+    expect(manifest.objective_score_summary.n_unknown).toBe(1);
   });
 });

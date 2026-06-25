@@ -271,7 +271,7 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
     const job = await jobQueue.get(jobId);
     if (!job) return c.json({ error: "job not found" }, 404);
 
-    const { buildRolloutRecord, toJsonl } = await import("../trajectoryExport.js");
+    const { buildRolloutRecord, toJsonl, buildEvidenceManifest } = await import("../trajectoryExport.js");
     const sessionId = job.spec.sessionId ?? sessionIdOf(c, config);
     const derived = deriveJobSessionId(sessionId, jobId);
     const buildResult = await getBuildResult(derived, config.buildResultsKv);
@@ -287,8 +287,13 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
 
     const format = c.req.query("format") ?? "jsonl";
     if (format === "json") return c.json(record);
+    const manifest = await buildEvidenceManifest([record], sessionId);
     return new Response(toJsonl([record]), {
-      headers: { "Content-Type": "application/x-ndjson" },
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "X-Evidence-Manifest": JSON.stringify(manifest),
+        "X-Evidence-Content-Hash": manifest.content_hash,
+      },
     });
   });
 
@@ -305,7 +310,7 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
    */
   app.get("/rollouts/export", async (c) => {
     const sessionId = sessionIdOf(c, config);
-    const { buildRolloutRecord, toJsonl } = await import("../trajectoryExport.js");
+    const { buildRolloutRecord, toJsonl, buildEvidenceManifest } = await import("../trajectoryExport.js");
 
     // Default: filter out unknown-status records so no-build samples stay out
     // of the training data pipeline. Pass include_unknown=true to opt in.
@@ -333,10 +338,14 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
       ? allRecords
       : allRecords.filter((r) => r.objective_status !== "unknown");
 
+    const manifest = await buildEvidenceManifest(records, sessionId);
+
     return new Response(toJsonl(records), {
       headers: {
         "Content-Type": "application/x-ndjson",
         "Content-Disposition": `attachment; filename="rollouts-${sessionId.slice(0, 8)}.jsonl"`,
+        "X-Evidence-Manifest": JSON.stringify(manifest),
+        "X-Evidence-Content-Hash": manifest.content_hash,
       },
     });
   });

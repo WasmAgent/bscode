@@ -223,6 +223,55 @@ export function toJsonl(records: RolloutWireRecord[]): string {
   return records.map((r) => JSON.stringify(redactRecord(r))).join("\n") + "\n";
 }
 
+// ── Evidence manifest ────────────────────────────────────────────────────────
+
+export interface EvidenceManifest {
+  schema_version: "evidence-manifest/v1";
+  session_id: string;
+  exported_at_ms: number;
+  n_records: number;
+  /** SHA-256 of the full redacted JSONL payload — stable identifier for the batch. */
+  content_hash: string;
+  objective_score_summary: {
+    n_pass: number;
+    n_fail: number;
+    n_unknown: number;
+  };
+  evidence_source: "client_reported";
+  redaction_version: "bscode/pii-redact/v1";
+}
+
+/**
+ * Build an EvidenceManifest for a set of rollout records.
+ * The `content_hash` is computed over the redacted JSONL so downstream consumers
+ * can verify the batch integrity without re-running redaction.
+ */
+export async function buildEvidenceManifest(
+  records: RolloutWireRecord[],
+  sessionId: string,
+): Promise<EvidenceManifest> {
+  const jsonl = toJsonl(records);
+  const encoded = new TextEncoder().encode(jsonl);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  const contentHash = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return {
+    schema_version: "evidence-manifest/v1",
+    session_id: sessionId,
+    exported_at_ms: Date.now(),
+    n_records: records.length,
+    content_hash: contentHash,
+    objective_score_summary: {
+      n_pass: records.filter((r) => r.objective_status === "pass").length,
+      n_fail: records.filter((r) => r.objective_status === "fail").length,
+      n_unknown: records.filter((r) => r.objective_status === "unknown").length,
+    },
+    evidence_source: "client_reported",
+    redaction_version: "bscode/pii-redact/v1",
+  };
+}
+
 /**
  * Load job metadata needed for trajectory export.
  * Returns null if job or session data is unavailable.
