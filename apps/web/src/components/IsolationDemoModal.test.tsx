@@ -20,9 +20,13 @@
  *      The link contract is stable across releases — these are GitHub
  *      paths the documentation page also points at.
  */
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import { IsolationDemoModal } from "./IsolationDemoModal.js";
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("IsolationDemoModal (D7)", () => {
   it("renders all four OWASP scenarios with their headlines", () => {

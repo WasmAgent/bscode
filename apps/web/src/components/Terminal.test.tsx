@@ -9,8 +9,8 @@
  */
 
 import type { CardBlock } from "@wasmagent/ui-cards";
-import { render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 
 // CardRenderer pulls D2 + react-markdown which are heavy and tend to
 // surface "older React" runtime conflicts in vitest. The render branches
@@ -26,6 +26,10 @@ vi.mock("@wasmagent/ui-cards-react", () => ({
 beforeAll(() => {
   // jsdom doesn't implement scrollIntoView; Terminal calls it on mount.
   (Element.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView = () => {};
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 const { Terminal } = await import("./Terminal");

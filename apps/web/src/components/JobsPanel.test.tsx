@@ -7,7 +7,7 @@
  *   3. Abort row → DELETEs job by id
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { JobsPanel } from "./JobsPanel.js";
 
@@ -75,6 +75,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+  cleanup();
 });
 
 describe("JobsPanel", () => {

@@ -17,7 +17,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FrameworkApiMap } from "./FrameworkApiMap";
 
 // Stub jszip so generateAsync resolves immediately (avoids 5s timeout in happy-dom).
@@ -84,6 +84,7 @@ afterEach(() => {
   URL.createObjectURL = originalCreateObjectURL;
   URL.revokeObjectURL = originalRevokeObjectURL;
   vi.restoreAllMocks();
+  cleanup();
 });
 
 describe("FrameworkApiMap — visibility", () => {

@@ -1,6 +1,10 @@
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "bun:test";
+import { cleanup, render } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "bun:test";
 import { FileTree } from "./FileTree";
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("FileTree", () => {
   it("renders an empty-state message when no files", () => {

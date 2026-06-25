@@ -13,7 +13,7 @@
  * confirm the hook was called after Save).
  */
 
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 
 const refreshWorkerUrlMock = vi.fn();
@@ -35,6 +35,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   localStorage.clear();
+  cleanup();
 });
 
 describe("SettingsDrawer — initial render", () => {

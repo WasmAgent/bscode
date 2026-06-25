@@ -11,7 +11,7 @@
  *   3. Dismissal sets `bscode:diffband:dismissed=1` in localStorage and
  *      hides the band on subsequent renders.
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { DifferentiatorBand } from "./DifferentiatorBand.js";
 
@@ -21,6 +21,7 @@ describe("DifferentiatorBand (D6)", () => {
   });
   afterEach(() => {
     localStorage.clear();
+    cleanup();
   });
 
   it("renders the four differentiated demos with badges on first paint", () => {

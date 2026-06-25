@@ -9,7 +9,7 @@
  * Stub fetch so we control /files/.../versions and /versions/:n.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 
 // ── Capture what DiffViewer hands to the Editor ─────────────────────────────
@@ -100,6 +100,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+  cleanup();
 });
 
 describe("DiffViewer — initial render", () => {
