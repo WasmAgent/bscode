@@ -34,6 +34,7 @@ const config = {
   e2bApiKey: process.env.E2B_API_KEY,
   clientToken: process.env.BSCODE_CLIENT_TOKEN,
   allowedOrigin: process.env.BSCODE_ALLOWED_ORIGIN ?? "*",
+  trainingDataMode: process.env.TRAINING_DATA_MODE === "true",
   filesKv: new FsKvStore(join(workdir, ".bscode-files")),
   // sessionsKv is intentionally undefined in local dev.
   // Using MemKvStore here would cache run results in-process — stale results

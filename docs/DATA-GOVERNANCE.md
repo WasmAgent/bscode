@@ -34,7 +34,7 @@ Training Data Mode requires explicit opt-in at two levels:
    in the worker environment. This enables the export endpoint but does not
    activate collection.
 2. **Session user** — each export is triggered by an explicit API call or
-   UI action (`POST /rollouts/export` or the "Export for training" button).
+   UI action (`GET /rollouts/export` or the "Export for training" button).
    Passive browsing and job execution never silently enqueue data.
 
 No consent signal is inferred from task completion, session length, or

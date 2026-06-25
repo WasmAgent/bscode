@@ -33,6 +33,8 @@ export interface Env {
   BSCODE_CLIENT_TOKEN?: string;
   BSCODE_ALLOWED_ORIGIN?: string;
   AGENTKIT_LOG_LEVEL?: string;
+  /** When "true", enables /rollouts/export for training data collection. Must be set explicitly by the operator. */
+  TRAINING_DATA_MODE?: string;
   BSCODE_FILES?: KVNamespace;
   BSCODE_SESSIONS?: KVNamespace;
   /** B1 — KV namespace for durable agent checkpoints. */
@@ -69,6 +71,7 @@ export default {
       glmBaseUrl: env.GLM_BASE_URL,
       clientToken: env.BSCODE_CLIENT_TOKEN,
       allowedOrigin: env.BSCODE_ALLOWED_ORIGIN,
+      trainingDataMode: env.TRAINING_DATA_MODE === "true",
       filesKv: env.BSCODE_FILES ? kvFromNamespace(env.BSCODE_FILES) : undefined,
       sessionsKv: env.BSCODE_SESSIONS ? kvFromNamespace(env.BSCODE_SESSIONS) : undefined,
       checkpointsKv: env.BSCODE_CHECKPOINTS ? kvFromNamespace(env.BSCODE_CHECKPOINTS) : undefined,

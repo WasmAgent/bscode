@@ -5,6 +5,7 @@ import {
 } from "@wasmagent/core";
 import { FileTreeManager } from "@wasmagent/core/beta";
 import { Hono } from "hono";
+import pkg from "../package.json" with { type: "json" };
 import { JobQueue } from "./jobs/index.js";
 import {
   deriveJobSessionId,
@@ -283,7 +284,7 @@ export function createApp(config: AppConfig) {
 
   // ── Health ────────────────────────────────────────────────────────────────
   app.get("/health", (c) =>
-    c.json({ status: "ok", version: "0.2.0", timestamp: new Date().toISOString() })
+    c.json({ status: "ok", version: pkg.version, timestamp: new Date().toISOString() })
   );
 
   // ── /mcp — code-mode MCP server (B-D2 follow-up, 2026-06) ─────────────────

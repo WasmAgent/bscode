@@ -12,7 +12,16 @@ bscode is **not** competing with Cursor, Claude Code, or Codex. It is:
 - A **real workload source**: WASM sandbox, durable checkpoints, multi-agent fan-out, visual verifier
 - An **evidence collection surface**: build results, visual verification, rollout traces → training data
 
-> This repository is the second layer of the [WasmAgent Trustworthy Agent Training Loop](https://github.com/WasmAgent/trace-pipeline/blob/main/docs/ecosystem-map.md).
+```
+wasmagent-js  ──►  bscode        ──►  trace-pipeline  ──►  better models
+(runtime /         (reference          (measurement /           │
+ policy / AEP)      deployment /        training data)           │
+                    evidence)                                     │
+      ◄──────────────────────────────────────────────────────────┘
+```
+
+> This repository is the **second layer** of the WasmAgent Trustworthy Agent Training Loop.
+> Full system diagram: [trace-pipeline/docs/ecosystem-map.md](https://github.com/WasmAgent/trace-pipeline/blob/main/docs/ecosystem-map.md)
 
 ```bash
 npm add @wasmagent/core   # the framework on npm

@@ -103,6 +103,12 @@ export interface AppConfig {
    */
   publicMcpEnabled?: boolean;
   /**
+   * When true, the /rollouts/export endpoint is enabled for training data export.
+   * Must be explicitly set by the operator — never inferred from usage.
+   * Set via TRAINING_DATA_MODE=true in the worker environment.
+   */
+  trainingDataMode?: boolean;
+  /**
    * When true, requests missing X-Session-Id fall back to "default" instead
    * of returning 400. Use only for local CLI/dev flows. Never set in production.
    */

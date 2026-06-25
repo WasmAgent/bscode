@@ -2428,3 +2428,40 @@ describe("E2E P2 — KV failure + multi-tenant isolation", () => {
     expect(body.error).toMatch(/KV not bound/);
   });
 });
+
+describe("Training Data Mode consent gate", () => {
+  it("GET /rollouts/export returns 403 when trainingDataMode is not set", async () => {
+    const app = makeApp(); // trainingDataMode defaults to undefined/false
+    const res = await app.fetch(
+      new Request("http://localhost/rollouts/export", {
+        headers: { "X-Session-Id": "session-gate-test" },
+      })
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string; hint: string };
+    expect(body.error).toMatch(/Training Data Mode/);
+    expect(body.hint).toMatch(/TRAINING_DATA_MODE/);
+  });
+
+  it("GET /rollouts/export returns 403 when trainingDataMode is explicitly false", async () => {
+    const app = makeApp({ trainingDataMode: false });
+    const res = await app.fetch(
+      new Request("http://localhost/rollouts/export", {
+        headers: { "X-Session-Id": "session-gate-false" },
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /rollouts/export returns 200 (empty JSONL) when trainingDataMode is true", async () => {
+    const app = makeApp({ trainingDataMode: true });
+    const res = await app.fetch(
+      new Request("http://localhost/rollouts/export", {
+        headers: { "X-Session-Id": "session-gate-enabled" },
+      })
+    );
+    // No jobs in this session — empty response with correct content type
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toMatch(/ndjson|jsonl/);
+  });
+});

@@ -309,6 +309,17 @@ export function mountJobRoutes(app: Hono, config: AppConfig, deps: JobRoutesDeps
    *                     entering training data.
    */
   app.get("/rollouts/export", async (c) => {
+    // Operator must explicitly enable Training Data Mode.
+    if (!config.trainingDataMode) {
+      return c.json(
+        {
+          error: "Training Data Mode is not enabled",
+          hint: "Set TRAINING_DATA_MODE=true in the worker environment to enable rollout export.",
+        },
+        403,
+      );
+    }
+
     const sessionId = sessionIdOf(c, config);
     const { buildRolloutRecord, toJsonl, buildEvidenceManifest } = await import("../trajectoryExport.js");
 
