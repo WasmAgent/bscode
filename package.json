@@ -44,7 +44,7 @@
     "@wasmagent/kernel-pyodide": "^1.0.0",
     "@wasmagent/kernel-quickjs": "^1.0.0",
     "@wasmagent/kernel-remote": "^1.0.0",
-    "@wasmagent/mcp-server": "^1.0.1",
+    "@wasmagent/mcp-server": "^1.1.0",
     "@wasmagent/model-anthropic": "^1.0.0",
     "@wasmagent/model-deepseek": "^1.0.0",
     "@wasmagent/model-doubao": "^1.0.0",

@@ -5,7 +5,7 @@
 bscode is the **data capture frontend** for the WasmAgent training data loop.
 
 ```text
-bscode session → /rollouts/export → wasmagent-js RolloutRanker → evomerge datafactory
+bscode session → /rollouts/export → wasmagent-js RolloutRanker → trace-pipeline evomerge datafactory
 ```
 
 ## Export endpoints
