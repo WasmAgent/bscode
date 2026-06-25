@@ -28,6 +28,7 @@ import { mountBuildResultRoutes } from "./routes/buildResult.js";
 import { mountJobRoutes } from "./routes/jobs.js";
 import { mountPromptRoutes } from "./routes/prompt.js";
 import { mountRunRoutes } from "./routes/run.js";
+import { mountMcpDemoRoutes } from "./routes/mcpDemo.js";
 
 export type { AppConfig } from "./platform.js";
 
@@ -306,6 +307,9 @@ export function createApp(config: AppConfig) {
     const handler = await ensureMcpHandler();
     return handler(c.req.raw);
   });
+
+  // ── /mcp-demo — MCP Firewall attack demo ─────────────────────────────────
+  mountMcpDemoRoutes(app);
 
   // ── Capabilities ──────────────────────────────────────────────────────────
   app.get("/capabilities", (c) =>
