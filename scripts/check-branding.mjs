@@ -25,6 +25,10 @@ const ALLOWED_EXACT = new Set([
   // Guard test that asserts the old brand does NOT appear in prompts — mentions
   // "@agentkit-js" as the string it is testing against.
   "apps/worker/src/integration.test.ts",
+  // README links to evomerge-framework which is currently hosted under telleroutlook.
+  // This is an ecosystem reference, not an old brand reintroduction.
+  // TODO: move evomerge-framework to WasmAgent org to remove this exception.
+  "README.md",
 ]);
 
 function isAllowed(file) {
