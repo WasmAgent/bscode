@@ -101,7 +101,7 @@ bun deploy:web
 - **Build-result nonce** — `/build-result` requires a per-job nonce in production mode. Obtain it with `GET /jobs/:id/build-nonce` before posting a result. This prevents result-injection across jobs (BSCODE-004).
 - **Job state persistence** — Job state is persisted to the `BSCODE_SESSIONS` KV namespace when configured, making the Worker restart-safe. Without the binding the worker falls back to in-memory state (lost on restart).
 
-Full security governance: [docs/GOVERNANCE.md](./docs/GOVERNANCE.md)
+Full security governance: [docs/GOVERNANCE.md](./docs/GOVERNANCE.md) · Data governance (consent, retention, deletion): [docs/DATA-GOVERNANCE.md](./docs/DATA-GOVERNANCE.md)
 
 ---
 
@@ -189,6 +189,7 @@ positioning.
 |---|---|
 | Architecture & tools | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) |
 | Security governance | [docs/GOVERNANCE.md](./docs/GOVERNANCE.md) |
+| Data governance (consent, retention, deletion) | [docs/DATA-GOVERNANCE.md](./docs/DATA-GOVERNANCE.md) |
 | Training data loop | [evomerge-framework](https://github.com/telleroutlook/evomerge-framework) |
 | Claims registry | [docs/claims/claims.yaml](./docs/claims/claims.yaml) |
 | Parallel job queue | [docs/B1-job-queue.md](./docs/B1-job-queue.md) |

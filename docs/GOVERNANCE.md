@@ -32,7 +32,7 @@ Output conforms to `rollout-wire/v1` — see the canonical schema at:
 
 ## Full contract
 
-See `WasmAgent/evomerge/docs/data-loop-contract.md` for the binding three-repo contract.
+See `telleroutlook/evomerge-framework/docs/data-loop-contract.md` for the binding three-repo contract.
 
 ## Fixture
 
