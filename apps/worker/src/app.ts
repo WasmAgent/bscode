@@ -12,6 +12,7 @@ import { SessionKvStore } from "./platform.js";
 import { mountBuildResultRoutes } from "./routes/buildResult.js";
 import { mountFilesRoutes } from "./routes/files.js";
 import { mountJobRoutes } from "./routes/jobs.js";
+import { mountJobsExportRoutes } from "./routes/jobsExport.js";
 import { mountMcpDemoRoutes } from "./routes/mcpDemo.js";
 import { mountModelRoutes } from "./routes/models.js";
 import { mountPromptRoutes } from "./routes/prompt.js";
@@ -396,6 +397,9 @@ export function createApp(config: AppConfig) {
     resolveFilesKv,
     app,
   });
+
+  // ── /jobs/export — batch JSONL dataset export ─────────────────────────────
+  mountJobsExportRoutes(app, config);
 
   // ── Error log (last 50 agent errors for debugging) ────────────────────────
   app.get("/errors", (c) => c.json({ errors: [...errorLog].reverse(), count: errorLog.length }));
