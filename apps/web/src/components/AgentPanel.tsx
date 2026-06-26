@@ -557,6 +557,7 @@ export function AgentPanel({
               <div style={{ ...labelStyle, fontSize: 10 }}>POLICY</div>
               {evidenceSummary.policyDecisions.slice(0, 5).map((d, i) => (
                 <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: index is stable across this list snapshot
                   key={i}
                   style={{
                     fontSize: 11,
@@ -597,6 +598,7 @@ export function AgentPanel({
             <div style={{ marginBottom: 6 }}>
               <div style={{ ...labelStyle, fontSize: 10 }}>VERIFIERS</div>
               {evidenceSummary.verifierResults.map((v, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: index is stable across this list snapshot
                 <div key={i} style={{ fontSize: 11, color: v.passed ? "#3fb950" : "#f85149" }}>
                   {v.passed ? "✓" : "✗"} {v.verifier_id}
                 </div>

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+#
+# pre-push — reject pushes that would fail CI.
+#
+# Runs the same lint/typecheck/build/test sequence that
+# .github/workflows/* runs, plus a NUL-byte source-file scan.
+# Exits non-zero on any failure to prevent the push.
+#
+# Emergency bypass:  git push --no-verify
+#
+# Enable per-clone:  bash .githooks/install.sh
+#
+# Skip individual checks:
+#   SKIP_LINT=1 SKIP_TYPECHECK=1 SKIP_BUILD=1 SKIP_TEST=1 SKIP_NO_EVAL=1
+
+set -e
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Skip on local scratch branches.
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+case "$CURRENT_BRANCH" in
+  scratch/*|draft/*|wip/*)
+    echo "[pre-push] skipped — branch '$CURRENT_BRANCH' matches scratch pattern."
+    exit 0
+    ;;
+esac
+
+cyan() { printf "\033[36m%s\033[0m\n" "$*"; }
+red()  { printf "\033[31m%s\033[0m\n" "$*"; }
+green(){ printf "\033[32m%s\033[0m\n" "$*"; }
+
+step() {
+  local name=$1; shift
+  cyan "→ $name"
+  if "$@"; then
+    green "  ✓ $name"
+  else
+    red "  ✗ $name failed."
+    red "  Run: $*"
+    red "  Bypass (NOT recommended): git push --no-verify"
+    exit 1
+  fi
+}
+
+START=$(date +%s 2>/dev/null || echo 0)
+
+if [ "${SKIP_LINT:-0}" != "1" ]; then
+  step "Lint (biome)" npx biome check apps/
+fi
+
+if [ "${SKIP_NUL:-0}" != "1" ]; then
+  step "Source files free of NUL/control bytes" node scripts/check-no-control-bytes.mjs
+fi
+
+if [ "${SKIP_NO_EVAL:-0}" != "1" ] && [ -f scripts/check-no-eval.mjs ]; then
+  step "No new Function / eval in production paths" node scripts/check-no-eval.mjs
+fi
+
+if [ "${SKIP_TYPECHECK:-0}" != "1" ]; then
+  step "Typecheck (turbo)" npm run typecheck --silent
+fi
+
+if [ "${SKIP_BUILD:-0}" != "1" ]; then
+  step "Build (turbo)" npm run build --silent
+fi
+
+if [ "${SKIP_TEST:-0}" != "1" ]; then
+  # bscode mandates --isolate per its CLAUDE.md (bun 1.3.14 isolation bug).
+  # `npm run test` already wraps `bun --filter @bscode/worker test` which
+  # itself uses `bun test --isolate`.
+  step "Test (worker, --isolate)" npm run test --silent
+fi
+
+END=$(date +%s 2>/dev/null || echo 0)
+ELAPSED=$((END - START))
+green "✓ All pre-push checks passed in ${ELAPSED}s."
+exit 0

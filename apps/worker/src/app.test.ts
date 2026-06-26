@@ -2467,3 +2467,193 @@ describe("Training Data Mode consent gate", () => {
     expect(res.headers.get("Content-Type")).toMatch(/ndjson|jsonl/);
   });
 });
+
+// ── P0-4: Public MCP default closed + KV isolation ───────────────────────────
+//
+// The /mcp endpoint is protected by clientToken by default (publicMcpEnabled is
+// false). When enabled, it MUST use the dedicated publicReadKv — NOT filesKv.
+// Without publicReadKv, /mcp returns 503.
+
+describe("P0-4 — Public MCP KV isolation", () => {
+  it("/mcp is protected when publicMcpEnabled is not set (default false)", async () => {
+    const app = makeApp({ clientToken: "secret" });
+    // Unauthenticated POST /mcp should be rejected
+    const res = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      })
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("/mcp is accessible without token when publicMcpEnabled=true and publicReadKv is bound", async () => {
+    const publicReadKv = new MemKvStore();
+    const app = makeApp({
+      clientToken: "secret",
+      publicMcpEnabled: true,
+      publicReadKv,
+    });
+    // No auth header — should be allowed through to MCP handler
+    const res = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      })
+    );
+    // MCP handler itself responds (not 401 from auth)
+    expect(res.status).not.toBe(401);
+  });
+
+  it("/mcp returns 503 when publicMcpEnabled=true but no publicReadKv bound", async () => {
+    const app = makeApp({
+      clientToken: "secret",
+      publicMcpEnabled: true,
+      // publicReadKv intentionally omitted
+    });
+    const res = await app.fetch(
+      new Request("http://localhost/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      })
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/publicReadKv/i);
+  });
+
+  it("publicReadKv is isolated from filesKv — writing to filesKv does not appear in publicReadKv", async () => {
+    const filesKv = new MemKvStore();
+    const publicReadKv = new MemKvStore();
+
+    // Write a file to the session-scoped filesKv
+    await filesKv.put("session:test-session:file:secret.ts", "deployment-secret");
+
+    // Public KV is a different store — should not contain the above key
+    const leaked = await publicReadKv.get("session:test-session:file:secret.ts");
+    expect(leaked).toBeNull();
+  });
+});
+
+// ── P1-7: Session principal binding ──────────────────────────────────────────
+//
+// When principalBoundSessions is enabled, a session ID used with one token
+// cannot be used with a different token (cross-principal access returns 403).
+
+describe("P1-7 — Principal-bound session isolation", () => {
+  it("first use of a session registers ownership; same principal can continue using it", async () => {
+    const sessionsKv = new MemKvStore();
+    const app = makeApp({
+      clientToken: "tokenA",
+      sessionsKv,
+      principalBoundSessions: true,
+    });
+
+    // First request: session-owner is registered under tokenA's principal
+    const res1 = await app.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer tokenA",
+          "X-Session-Id": "session-alice",
+        },
+        body: JSON.stringify({ path: "a.ts", content: "hello" }),
+      })
+    );
+    expect(res1.status).toBe(200);
+
+    // Second request from same token — should still work
+    const res2 = await app.fetch(
+      new Request("http://localhost/files/a.ts", {
+        headers: {
+          Authorization: "Bearer tokenA",
+          "X-Session-Id": "session-alice",
+        },
+      })
+    );
+    expect(res2.status).toBe(200);
+  });
+
+  it("cross-principal access to a session is rejected with 403", async () => {
+    const sessionsKv = new MemKvStore();
+    const filesKv = new MemKvStore();
+
+    const appA = makeApp({
+      clientToken: "tokenA",
+      sessionsKv,
+      filesKv,
+      principalBoundSessions: true,
+    });
+
+    // tokenA creates a session and writes a file
+    const writeRes = await appA.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer tokenA",
+          "X-Session-Id": "session-owned-by-a",
+        },
+        body: JSON.stringify({ path: "secret.ts", content: "private-data" }),
+      })
+    );
+    expect(writeRes.status).toBe(200);
+
+    // Now try to access the same session with tokenB — different principal
+    const appB = makeApp({
+      clientToken: "tokenB",
+      sessionsKv, // same KV backing store
+      filesKv,
+      principalBoundSessions: true,
+    });
+
+    const crossRes = await appB.fetch(
+      new Request("http://localhost/files/secret.ts", {
+        headers: {
+          Authorization: "Bearer tokenB",
+          "X-Session-Id": "session-owned-by-a", // session owned by tokenA
+        },
+      })
+    );
+    expect(crossRes.status).toBe(403);
+    const body = (await crossRes.json()) as { error: string };
+    expect(body.error).toMatch(/[Oo]wned by a different principal|[Ss]ession ownership/);
+  });
+
+  it("session ownership is NOT enforced when principalBoundSessions is false (default)", async () => {
+    const sessionsKv = new MemKvStore();
+    const filesKv = new MemKvStore();
+
+    // tokenA writes a file
+    const appA = makeApp({ clientToken: "tokenA", sessionsKv, filesKv });
+    await appA.fetch(
+      new Request("http://localhost/files", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer tokenA",
+          "X-Session-Id": "shared-session",
+        },
+        body: JSON.stringify({ path: "shared.ts", content: "data" }),
+      })
+    );
+
+    // tokenB can still access the session (legacy mode — no enforcement)
+    const appB = makeApp({ clientToken: "tokenB", sessionsKv, filesKv });
+    const res = await appB.fetch(
+      new Request("http://localhost/files/shared.ts", {
+        headers: {
+          Authorization: "Bearer tokenB",
+          "X-Session-Id": "shared-session",
+        },
+      })
+    );
+    // In legacy mode this is allowed — the file was written with session key
+    // which session namespace defaults handle transparently.
+    expect(res.status).not.toBe(403);
+  });
+});

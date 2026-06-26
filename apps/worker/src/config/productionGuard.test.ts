@@ -24,4 +24,38 @@ describe("checkProductionConfig", () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  // P0-5: production fail-open detection
+  describe("P0-5 — strictAuth + allowLocalSessionFallback is a fatal misconfiguration", () => {
+    it("throws when strictAuth=true and allowLocalSessionFallback=true are both set", () => {
+      expect(() =>
+        checkProductionConfig({ strictAuth: true, allowLocalSessionFallback: true })
+      ).toThrow(/FATAL.*strictAuth.*allowLocalSessionFallback/);
+    });
+
+    it("does NOT throw when strictAuth=true and allowLocalSessionFallback is false/absent", () => {
+      const mockKv = {
+        get: async () => null,
+        put: async () => {},
+        list: async () => ({ keys: [] }),
+      };
+      // strictAuth=true without allowLocalSessionFallback — normal production config
+      expect(() =>
+        checkProductionConfig({
+          strictAuth: true,
+          clientToken: "secret",
+          filesKv: mockKv,
+          buildResultsKv: mockKv,
+        })
+      ).not.toThrow();
+    });
+
+    it("does NOT throw when strictAuth is absent and allowLocalSessionFallback=true (normal dev)", () => {
+      expect(() => checkProductionConfig({ allowLocalSessionFallback: true })).not.toThrow();
+    });
+
+    it("does NOT throw when both strictAuth and allowLocalSessionFallback are absent", () => {
+      expect(() => checkProductionConfig({})).not.toThrow();
+    });
+  });
 });

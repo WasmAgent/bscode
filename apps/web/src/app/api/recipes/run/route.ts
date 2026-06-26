@@ -8,13 +8,16 @@
  * `react` surface. Pulling the kernel runtime in just for this demo
  * would be a large bundle hit for the rest of the bscode UI.
  *
- * Instead the handler runs the recipe's stub script in a small
- * sandboxed evaluator built directly here. The shape of what we ship
- * back — { patch, calls, error? } — exactly matches what the real
- * WasmAgent kernel + tool surface would produce, so the page's UI
- * does not have to switch between modes.
+ * Instead the handler runs each recipe via a statically-typed pre-compiled
+ * function. The shape of what we ship back — { patch, calls, error? } —
+ * exactly matches what the real WasmAgent kernel + tool surface would produce,
+ * so the page's UI does not have to switch between modes.
  *
  * Recipes are keyed off the same id slugs as `apps/web/src/app/recipes/page.tsx`.
+ *
+ * Security note: dynamic code execution primitives are intentionally absent.
+ * The recipe id is validated against a closed static map; the stub bodies
+ * are pre-compiled TypeScript functions, not evaluated strings.
  */
 
 import type { NextRequest } from "next/server";
@@ -30,75 +33,87 @@ interface FakeRepoTools {
 }
 
 /**
- * One recipe = one tiny stub script that the user-facing UI labels as
- * "what the model would have emitted". The script speaks the same
- * `tools.fn(args)` shape `createCodemodeExecutor` produces; it is
- * evaluated against an in-memory fake repo. The framework name is
- * baked into the patch so the UI can show concrete "this ran for
- * Vercel AI SDK 6" output.
+ * Each recipe is a pre-compiled async function that accepts the fake
+ * tool surface and returns the final patch string (or undefined to fall
+ * back to the pending diff already accumulated by writeFile calls).
  */
-const RECIPE_SCRIPTS: Record<string, { framework: string; stub: string }> = {
+type RecipeFn = (tools: FakeRepoTools) => Promise<string | undefined>;
+
+interface RecipeEntry {
+  framework: string;
+  run: RecipeFn;
+}
+
+// ---------------------------------------------------------------------------
+// Static recipe registry — no dynamic code evaluation
+// ---------------------------------------------------------------------------
+
+const RECIPE_REGISTRY: Record<string, RecipeEntry> = {
   aisdk: {
     framework: "Vercel AI SDK 6",
-    stub: `
+    async run(tools) {
       const before = await tools.readFile({ path: "src/main.ts" });
       await tools.writeFile({
         path: "src/main.ts",
-        content: "// Vercel AI SDK 6 + WasmAgent kernel — patched\\n" + before.content,
+        content: `// Vercel AI SDK 6 + WasmAgent kernel — patched\n${before.content}`,
       });
       const diff = await tools.gitDiff();
       return diff.patch;
-    `,
+    },
   },
   "cf-codemode": {
     framework: "Cloudflare codemode",
-    stub: `
+    async run(tools) {
       const before = await tools.readFile({ path: "agent.ts" });
       await tools.writeFile({
         path: "agent.ts",
-        content: "// Cloudflare codemode + createCodemodeExecutor — patched\\n" + before.content,
+        content: `// Cloudflare codemode + createCodemodeExecutor — patched\n${before.content}`,
       });
       const diff = await tools.gitDiff();
       return diff.patch;
-    `,
+    },
   },
   mastra: {
     framework: "Mastra",
-    stub: `
+    async run(tools) {
       const before = await tools.readFile({ path: "mastra.config.ts" });
       await tools.writeFile({
         path: "mastra.config.ts",
-        content: "// Mastra + createMastraSandbox — patched\\n" + before.content,
+        content: `// Mastra + createMastraSandbox — patched\n${before.content}`,
       });
       const diff = await tools.gitDiff();
       return diff.patch;
-    `,
+    },
   },
   "claude-agent-sdk": {
     framework: "Anthropic Claude Agent SDK",
-    stub: `
+    async run(tools) {
       const before = await tools.readFile({ path: "agent.ts" });
       await tools.writeFile({
         path: "agent.ts",
-        content: "// Claude Agent SDK + sandboxedJsClaudeTool — patched\\n" + before.content,
+        content: `// Claude Agent SDK + sandboxedJsClaudeTool — patched\n${before.content}`,
       });
       const diff = await tools.gitDiff();
       return diff.patch;
-    `,
+    },
   },
   "openai-agents": {
     framework: "OpenAI Agents JS",
-    stub: `
+    async run(tools) {
       const before = await tools.readFile({ path: "runner.ts" });
       await tools.writeFile({
         path: "runner.ts",
-        content: "// OpenAI Agents JS + sandboxedJsAgentTool — patched\\n" + before.content,
+        content: `// OpenAI Agents JS + sandboxedJsAgentTool — patched\n${before.content}`,
       });
       const diff = await tools.gitDiff();
       return diff.patch;
-    `,
+    },
   },
 };
+
+// ---------------------------------------------------------------------------
+// Fake in-memory repo tools (same semantics as before)
+// ---------------------------------------------------------------------------
 
 function buildFakeTools(): { tools: FakeRepoTools; getCallCount(): number } {
   const repo = new Map<string, string>();
@@ -132,17 +147,9 @@ function buildFakeTools(): { tools: FakeRepoTools; getCallCount(): number } {
   return { tools, getCallCount: () => calls };
 }
 
-/**
- * Tiny script evaluator: wraps the stub in `(async function(tools) { ... })`
- * and invokes it with the fake tool surface. NOT a security boundary —
- * the only inputs are server-controlled stub strings keyed by recipe id;
- * a request body field never reaches the evaluator.
- */
-async function runStub(stub: string, tools: FakeRepoTools): Promise<unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-  const fn = new Function("tools", `return (async function() { ${stub} })();`);
-  return fn(tools);
-}
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest): Promise<Response> {
   let body: RunRequest;
@@ -151,18 +158,22 @@ export async function POST(req: NextRequest): Promise<Response> {
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
-  const recipe = RECIPE_SCRIPTS[body.recipe];
+
+  const recipe = Object.hasOwn(RECIPE_REGISTRY, body.recipe)
+    ? RECIPE_REGISTRY[body.recipe]
+    : undefined;
   if (!recipe) {
     return Response.json(
       {
-        error: `unknown recipe id: ${body.recipe}. Known: ${Object.keys(RECIPE_SCRIPTS).join(", ")}`,
+        error: `unknown recipe id: ${body.recipe}. Known: ${Object.keys(RECIPE_REGISTRY).join(", ")}`,
       },
       { status: 400 }
     );
   }
+
   const { tools, getCallCount } = buildFakeTools();
   try {
-    const patchOrUndefined = (await runStub(recipe.stub, tools)) as string | undefined;
+    const patchOrUndefined = await recipe.run(tools);
     const final = await tools.gitDiff();
     return Response.json({
       framework: recipe.framework,

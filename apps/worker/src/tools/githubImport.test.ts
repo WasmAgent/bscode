@@ -8,11 +8,24 @@
  *   - skip oversize, binary, and out-of-cap files with reason counters
  *   - propagate the truncated flag from the GitHub tree response
  *   - bubble unrecoverable errors (404 on tree, etc.) as thrown exceptions
+ *
+ * B5 additions — deny-list:
+ *   - .env files are blocked and never written to KV
+ *   - .dev.vars is blocked
+ *   - .env.example is also blocked (conservative default)
+ *   - denied paths appear in skippedReasons["denied_sensitive_file"]
+ *   - allowPaths override permits an otherwise-denied file through
  */
 
 import { describe, expect, it, vi } from "bun:test";
 import { MemKvStore } from "../platform.js";
 import { importGithubRepo } from "./githubImport.js";
+import {
+  compileDenyMatcher,
+  defaultDenyMatcher,
+  isDenied,
+  pathBasename,
+} from "./importDenyList.js";
 
 /** Build a base64 blob payload a la /git/blobs. */
 function blobPayload(text: string) {
@@ -222,5 +235,219 @@ describe("importGithubRepo", () => {
     );
     expect(result.imported).toBe(1);
     expect(result.skippedReasons.blob_fetch_404).toBe(1);
+  });
+});
+
+// ── B5: deny-list unit tests ───────────────────────────────────────────────────
+
+describe("importDenyList — compileDenyMatcher", () => {
+  it("matches exact filenames (.env, .npmrc)", () => {
+    const match = compileDenyMatcher([".env", ".npmrc"]);
+    expect(match(".env")).toBe(true);
+    expect(match(".npmrc")).toBe(true);
+    expect(match("env")).toBe(false);
+  });
+
+  it("matches suffix wildcards (*.pem, *.key)", () => {
+    const match = compileDenyMatcher(["*.pem", "*.key"]);
+    expect(match("server.pem")).toBe(true);
+    expect(match("private.key")).toBe(true);
+    expect(match("something.pem.bak")).toBe(false);
+    expect(match("server.ts")).toBe(false);
+  });
+
+  it("matches prefix wildcards (.env.*)", () => {
+    const match = compileDenyMatcher([".env.*"]);
+    expect(match(".env.local")).toBe(true);
+    expect(match(".env.production")).toBe(true);
+    expect(match(".env")).toBe(false); // no dot after .env — no trailing char
+    expect(match("env.local")).toBe(false);
+  });
+
+  it("matches double wildcard (gcp-*credentials*.json)", () => {
+    const match = compileDenyMatcher(["gcp-*credentials*.json"]);
+    expect(match("gcp-service-credentials-prod.json")).toBe(true);
+    expect(match("gcp-credentials.json")).toBe(true);
+    expect(match("gcp-other.json")).toBe(false);
+    expect(match("aws-credentials.json")).toBe(false);
+  });
+
+  it("matches id_rsa prefix pattern (id_rsa.*)", () => {
+    const match = compileDenyMatcher(["id_rsa", "id_rsa.*"]);
+    expect(match("id_rsa")).toBe(true);
+    expect(match("id_rsa.pub")).toBe(true);
+    expect(match("id_rsa_old")).toBe(false);
+  });
+});
+
+describe("importDenyList — DEFAULT_DENY_PATTERNS coverage", () => {
+  const match = defaultDenyMatcher();
+
+  it("blocks .env", () => expect(match(".env")).toBe(true));
+  it("blocks .env.local", () => expect(match(".env.local")).toBe(true));
+  it("blocks .env.production", () => expect(match(".env.production")).toBe(true));
+  it("blocks .dev.vars", () => expect(match(".dev.vars")).toBe(true));
+  it("blocks *.pem", () => expect(match("server.pem")).toBe(true));
+  it("blocks *.key", () => expect(match("private.key")).toBe(true));
+  it("blocks *.pfx", () => expect(match("cert.pfx")).toBe(true));
+  it("blocks *.p12", () => expect(match("keystore.p12")).toBe(true));
+  it("blocks id_rsa", () => expect(match("id_rsa")).toBe(true));
+  it("blocks id_rsa.pub", () => expect(match("id_rsa.pub")).toBe(true));
+  it("blocks id_ecdsa", () => expect(match("id_ecdsa")).toBe(true));
+  it("blocks id_ed25519", () => expect(match("id_ed25519")).toBe(true));
+  it("blocks gcp-*credentials*.json", () =>
+    expect(match("gcp-myproject-credentials.json")).toBe(true));
+  it("blocks aws-*.csv", () => expect(match("aws-accessKeys.csv")).toBe(true));
+  it("blocks .npmrc", () => expect(match(".npmrc")).toBe(true));
+
+  it("does NOT block .env.example (treated as sensitive by default)", () =>
+    // Conservative: .env.example still matches .env.* — intentional
+    expect(match(".env.example")).toBe(true));
+
+  it("does NOT block README.md", () => expect(match("README.md")).toBe(false));
+  it("does NOT block src/index.ts", () => expect(match("index.ts")).toBe(false));
+  it("does NOT block package.json", () => expect(match("package.json")).toBe(false));
+});
+
+describe("importDenyList — isDenied with allowPaths", () => {
+  const match = defaultDenyMatcher();
+
+  it("denies config/.env", () => expect(isDenied("config/.env", match)).toBe(true));
+  it("denies .dev.vars at root", () => expect(isDenied(".dev.vars", match)).toBe(true));
+  it("allows explicitly permitted path", () => {
+    const allow = new Set(["fixtures/.env.example"]);
+    expect(isDenied("fixtures/.env.example", match, allow)).toBe(false);
+  });
+  it("still denies non-allowed paths even with allowPaths set", () => {
+    const allow = new Set(["fixtures/.env.example"]);
+    expect(isDenied(".env", match, allow)).toBe(true);
+  });
+});
+
+describe("importDenyList — pathBasename", () => {
+  it("extracts basename from nested path", () =>
+    expect(pathBasename("config/secrets/.env.local")).toBe(".env.local"));
+  it("handles root-level file", () => expect(pathBasename(".env")).toBe(".env"));
+  it("handles no slash", () => expect(pathBasename("README.md")).toBe("README.md"));
+});
+
+// ── B5: importGithubRepo deny-list integration tests ──────────────────────────
+
+describe("importGithubRepo — deny-list integration", () => {
+  it("does not write .env to KV and records denied_sensitive_file", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const kv = new MemKvStore();
+    const fetchMock = makeFetch({
+      tree: [
+        { path: "src/index.ts", type: "blob", size: 10 },
+        // .env is in TEXT_EXTENSIONS would have been imported previously;
+        // the deny-list must block it regardless of extension matching.
+        { path: ".env", type: "blob", size: 50 },
+      ],
+      blobs: {
+        "src/index.ts": { content: "console.log('hi');" },
+        ".env": { content: "SECRET_KEY=hunter2\nDB_PASS=s3cret" },
+      },
+    });
+    const result = await importGithubRepo(
+      { owner: "x", repo: "y" },
+      { filesKv: kv, fetch: fetchMock }
+    );
+    expect(result.imported).toBe(1);
+    expect(await kv.get("file:.env")).toBeNull();
+    expect(result.skippedReasons.denied_sensitive_file).toBe(1);
+  });
+
+  it("does not write .dev.vars to KV", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const kv = new MemKvStore();
+    // .dev.vars has no recognised text extension — it would already be
+    // filtered. Supply textExtensions:[] to disable ext-filtering so the
+    // only protection is the deny-list.
+    const fetchMock = makeFetch({
+      tree: [
+        { path: "wrangler.toml", type: "blob", size: 30 },
+        { path: ".dev.vars", type: "blob", size: 40 },
+      ],
+      blobs: {
+        "wrangler.toml": { content: "[vars]" },
+        ".dev.vars": { content: "GITHUB_TOKEN=ghp_secret" },
+      },
+    });
+    const result = await importGithubRepo(
+      { owner: "x", repo: "y", textExtensions: [] },
+      { filesKv: kv, fetch: fetchMock }
+    );
+    expect(await kv.get("file:.dev.vars")).toBeNull();
+    expect(result.skippedReasons.denied_sensitive_file).toBe(1);
+  });
+
+  it("does not write .env.example to KV (conservative default)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const kv = new MemKvStore();
+    const fetchMock = makeFetch({
+      tree: [
+        { path: "src/app.ts", type: "blob", size: 10 },
+        { path: ".env.example", type: "blob", size: 20 },
+      ],
+      blobs: {
+        "src/app.ts": { content: "ok" },
+        ".env.example": { content: "DB_URL=placeholder" },
+      },
+    });
+    const result = await importGithubRepo(
+      { owner: "x", repo: "y" },
+      { filesKv: kv, fetch: fetchMock }
+    );
+    expect(await kv.get("file:.env.example")).toBeNull();
+    expect(result.skippedReasons.denied_sensitive_file).toBe(1);
+    expect(result.imported).toBe(1);
+  });
+
+  it("allows denied file when path is in allowPaths", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const kv = new MemKvStore();
+    const fetchMock = makeFetch({
+      tree: [{ path: "fixtures/.env.example", type: "blob", size: 20 }],
+      blobs: { "fixtures/.env.example": { content: "# template" } },
+    });
+    const result = await importGithubRepo(
+      {
+        owner: "x",
+        repo: "y",
+        // Disable extension filter so the deny-list is the only gate.
+        textExtensions: [],
+        allowPaths: new Set(["fixtures/.env.example"]),
+      },
+      { filesKv: kv, fetch: fetchMock }
+    );
+    expect(result.imported).toBe(1);
+    expect(await kv.get("file:fixtures/.env.example")).toBe("# template");
+    expect(result.skippedReasons.denied_sensitive_file).toBeUndefined();
+  });
+
+  it("blocks private key files (*.pem, id_rsa) in nested paths", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const kv = new MemKvStore();
+    const fetchMock = makeFetch({
+      tree: [
+        { path: "certs/server.pem", type: "blob", size: 30 },
+        { path: "ssh/id_rsa", type: "blob", size: 60 },
+        { path: "src/main.ts", type: "blob", size: 10 },
+      ],
+      blobs: {
+        "certs/server.pem": { content: "-----BEGIN CERTIFICATE-----" },
+        "ssh/id_rsa": { content: "-----BEGIN RSA PRIVATE KEY-----" },
+        "src/main.ts": { content: "export {}" },
+      },
+    });
+    const result = await importGithubRepo(
+      { owner: "x", repo: "y" },
+      { filesKv: kv, fetch: fetchMock }
+    );
+    expect(await kv.get("file:certs/server.pem")).toBeNull();
+    expect(await kv.get("file:ssh/id_rsa")).toBeNull();
+    expect(result.imported).toBe(1);
+    expect(result.skippedReasons.denied_sensitive_file).toBe(2);
   });
 });

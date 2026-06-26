@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  buildAEPEvidence,
   buildEvidenceManifest,
   buildRolloutRecord,
   redactPii,
@@ -314,5 +315,177 @@ describe("buildEvidenceManifest", () => {
     expect(manifest.objective_score_summary.n_pass).toBe(1);
     expect(manifest.objective_score_summary.n_fail).toBe(1);
     expect(manifest.objective_score_summary.n_unknown).toBe(1);
+  });
+});
+
+describe("buildAEPEvidence", () => {
+  const toolCalls = [
+    { event: "tool_call" as const, data: { name: "read_file", args: {} }, timestamp_ms: 1000 },
+    { event: "tool_result" as const, data: { content: "ok" }, timestamp_ms: 1001 },
+    {
+      event: "tool_call" as const,
+      data: { name: "bash", args: { cmd: "npm test" } },
+      timestamp_ms: 1002,
+    },
+    { event: "tool_result" as const, data: { exit_code: 0 }, timestamp_ms: 1003 },
+  ];
+
+  it("returns a signed AEPRecord with schema_version aep/v0.2", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-aep-test-01",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: true,
+      created_at_ms: 1_700_000_000_000,
+    });
+    expect(record.schema_version).toBe("aep/v0.2");
+    expect(record.run_id).toBe("run-aep-test-01");
+    expect(record.model_id).toBe("test-model");
+  });
+
+  it("includes signature block with alg=ed25519 and non-placeholder sig", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-sig-test",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: true,
+      created_at_ms: 1_700_000_000_000,
+    });
+    expect(record.signature.alg).toBe("ed25519");
+    expect(record.signature.key_id).toBe("bscode-aep-key-v1");
+    expect(record.signature.sig).not.toBe("UNSIGNED_PLACEHOLDER");
+    expect(record.signature.sig.length).toBeGreaterThan(10);
+  });
+
+  it("auto-derives actions from tool_call events", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-actions-test",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: null,
+      created_at_ms: 1_700_000_000_000,
+    });
+    // 2 tool_call events (read_file + bash)
+    expect(record.actions).toHaveLength(2);
+    expect(record.actions[0].tool_name).toBe("read_file");
+    expect(record.actions[0].state_changing).toBe(false);
+    expect(record.actions[1].tool_name).toBe("bash");
+    expect(record.actions[1].state_changing).toBe(true);
+  });
+
+  it("auto-derives verifier_result from objective_passed=true", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-verifier-pass",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: true,
+      created_at_ms: 1_700_000_000_000,
+    });
+    expect(record.verifier_results).toHaveLength(1);
+    expect(record.verifier_results[0].passed).toBe(true);
+    expect(record.verifier_results[0].score).toBe(1);
+    expect(record.verifier_results[0].verifier_id).toBe("bscode-build-verifier");
+  });
+
+  it("auto-derives verifier_result from objective_passed=false", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-verifier-fail",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: false,
+      created_at_ms: 1_700_000_000_000,
+    });
+    expect(record.verifier_results[0].passed).toBe(false);
+    expect(record.verifier_results[0].score).toBe(0);
+  });
+
+  it("emits no verifier_results when objective_passed is null", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-verifier-null",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: null,
+      created_at_ms: 1_700_000_000_000,
+    });
+    expect(record.verifier_results).toHaveLength(0);
+  });
+
+  it("auto-derives capability_decisions for state-changing tools", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-cap-test",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: null,
+      created_at_ms: 1_700_000_000_000,
+    });
+    // Only "bash" is state-changing
+    expect(record.capability_decisions).toHaveLength(1);
+    expect(record.capability_decisions[0].capability).toBe("bash");
+    expect(record.capability_decisions[0].decision).toBe("allow");
+    expect(record.capability_decisions[0].reason_code).toBe("auto_derived");
+  });
+
+  it("records budget_ledger with auto-derived tool_budget", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-budget-test",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: null,
+      created_at_ms: 1_700_000_000_000,
+    });
+    expect(record.budget_ledger).toBeDefined();
+    expect(record.budget_ledger?.tool_budget?.spent).toBe(2); // 2 tool_call events
+  });
+
+  it("accepts explicit capability_decisions, verifier_results, input_refs, output_refs", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-explicit-test",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: null,
+      capability_decisions: [
+        { capability: "write_file", subject: "agent", resource: "main.ts", decision: "allow" },
+      ],
+      verifier_results: [
+        { verifier_id: "custom-verifier", passed: true, score: 0.9, claim_ids: ["c1"] },
+      ],
+      input_refs: [{ uri: "file://src/main.ts", digest: "abc123", taint_labels: [] }],
+      output_refs: [{ uri: "file://dist/main.js", digest: "def456" }],
+      created_at_ms: 1_700_000_000_000,
+    });
+    expect(record.capability_decisions).toHaveLength(1);
+    expect(record.capability_decisions[0].capability).toBe("write_file");
+    expect(record.verifier_results).toHaveLength(1);
+    expect(record.verifier_results[0].verifier_id).toBe("custom-verifier");
+    expect(record.input_refs).toHaveLength(1);
+    expect(record.input_refs[0].uri).toBe("file://src/main.ts");
+    expect(record.output_refs).toHaveLength(1);
+    expect(record.output_refs[0].uri).toBe("file://dist/main.js");
+  });
+
+  it("signature is deterministic for same inputs and same seed", async () => {
+    const opts = {
+      run_id: "run-deterministic",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: true as boolean | null,
+      created_at_ms: 1_700_000_000_000,
+    };
+    const r1 = await buildAEPEvidence(opts);
+    const r2 = await buildAEPEvidence(opts);
+    // Same seed + same input → same canonical bytes → same signature
+    expect(r1.signature.sig).toBe(r2.signature.sig);
+  });
+
+  it("signature differs when run_id changes", async () => {
+    const base = {
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: true as boolean | null,
+      created_at_ms: 1_700_000_000_000,
+    };
+    const r1 = await buildAEPEvidence({ ...base, run_id: "run-A" });
+    const r2 = await buildAEPEvidence({ ...base, run_id: "run-B" });
+    expect(r1.signature.sig).not.toBe(r2.signature.sig);
   });
 });

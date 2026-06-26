@@ -1,5 +1,5 @@
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 import type { AppConfig, KvStore } from "./types.js";
 
 export type { AppConfig, KvStore };
@@ -55,26 +55,141 @@ export class MemKvStore implements KvStore {
 export class FsKvStore implements KvStore {
   constructor(private readonly root: string) {}
 
+  /**
+   * Compute the logical path (no symlink resolution).  Throws immediately
+   * if the resolved path would escape the root via `..` segments or
+   * double-slash tricks — before any FS I/O happens.
+   *
+   * path.resolve() collapses all `..` segments in one pass — unlike a
+   * regex it is idempotent and immune to "..../" evasions.  A follow-up
+   * path.relative() check detects any remaining escape attempt.
+   *
+   * For read/delete we additionally call fs.realpath() (see
+   * #assertNoSymlinkEscape) so symlinks pointing outside the root are
+   * also caught.  For write/put we check the nearest existing ancestor
+   * directory (see #assertWriteAncestorInRoot).
+   *
+   * Rejected attempts emit a console.warn audit line before throwing.
+   */
   #toPath(key: string): string {
-    // Strip "file:" prefix, prevent path traversal. Keys may legitimately
-    // contain `:` (e.g. "session:abc:file:foo.ts" from the SessionKvStore
-    // wrapping a "file:..." key). We strip ONLY the leading `file:` token —
-    // the rest, including embedded `:`, is preserved verbatim so the on-disk
-    // filename round-trips through list().
-    const rel = key.replace(/^file:/, "").replace(/\.\.\//g, "");
-    return join(this.root, rel);
+    // Strip ONLY the leading `file:` token — embedded `:` is preserved so
+    // the on-disk filename round-trips through list() unchanged.
+    const rel = key.replace(/^file:/, "");
+
+    // Reject NUL / C0 control characters before path resolution so
+    // the OS never sees them (some kernels silently truncate at NUL).
+    for (let i = 0; i < rel.length; i++) {
+      const cc = rel.charCodeAt(i);
+      if (cc === 0x00 || cc === 0x0a || cc === 0x0d) {
+        console.warn(
+          `[FsKvStore] BLOCKED key with control char (0x${cc.toString(16)}): ${JSON.stringify(key)}`
+        );
+        throw new Error(
+          `FsKvStore: key contains forbidden control character (0x${cc.toString(16)})`
+        );
+      }
+    }
+
+    // path.resolve collapses all `..` segments and repeated slashes in
+    // one pass — unlike a regex it is idempotent and has no evasion vectors.
+    const resolved = resolve(this.root, rel);
+
+    // relative() returns a path starting with ".." when `resolved` is
+    // outside `root`.  Checking the first two chars is a fixed-point guard.
+    if (relative(this.root, resolved).startsWith("..")) {
+      console.warn(
+        `[FsKvStore] BLOCKED path traversal attempt: key=${JSON.stringify(key)} resolved=${resolved}`
+      );
+      throw new Error(
+        `FsKvStore: path traversal denied — key escapes root: ${JSON.stringify(key)}`
+      );
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Assert that `resolvedPath` (already checked for logical traversal) does
+   * not exit the root via a symlink.  Uses `fs.realpath()` on the target
+   * for read/delete.  Returns the realpath for caller use (or the logical
+   * path on ENOENT — missing files can't be symlinks).
+   */
+  async #assertNoSymlinkEscape(resolvedPath: string): Promise<string> {
+    let real: string;
+    try {
+      real = await realpath(resolvedPath);
+    } catch {
+      // File doesn't exist — no symlink to follow.
+      return resolvedPath;
+    }
+    // realpath also resolves the root itself, so compare against realpath(root).
+    let realRoot: string;
+    try {
+      realRoot = await realpath(this.root);
+    } catch {
+      realRoot = this.root;
+    }
+    if (relative(realRoot, real).startsWith("..")) {
+      console.warn(
+        `[FsKvStore] BLOCKED symlink escape: ${resolvedPath} -> ${real} (root: ${realRoot})`
+      );
+      throw new Error(`FsKvStore: symlink escape denied — resolved path exits root`);
+    }
+    return real;
+  }
+
+  /**
+   * For write operations the target file may not exist yet. We realpath the
+   * nearest existing ancestor directory and verify it stays under root.
+   */
+  async #assertWriteAncestorInRoot(resolvedPath: string): Promise<void> {
+    let current = dirname(resolvedPath);
+    // Walk up until we find an existing directory (mkdir -p will create the rest).
+    while (true) {
+      const parent = dirname(current);
+      try {
+        await stat(current);
+        break; // found an existing path
+      } catch {
+        if (parent === current) break; // filesystem root
+        current = parent;
+      }
+    }
+    let realAncestor: string;
+    try {
+      realAncestor = await realpath(current);
+    } catch {
+      return; // can't resolve, skip symlink check
+    }
+    let realRoot: string;
+    try {
+      realRoot = await realpath(this.root);
+    } catch {
+      realRoot = this.root;
+    }
+    if (relative(realRoot, realAncestor).startsWith("..")) {
+      console.warn(
+        `[FsKvStore] BLOCKED symlink escape on write: ancestor=${realAncestor} (root: ${realRoot})`
+      );
+      throw new Error(`FsKvStore: symlink escape denied on write — ancestor directory exits root`);
+    }
   }
 
   async get(key: string): Promise<string | null> {
     try {
-      return await readFile(this.#toPath(key), "utf8");
-    } catch {
+      const p = this.#toPath(key);
+      await this.#assertNoSymlinkEscape(p);
+      return await readFile(p, "utf8");
+    } catch (err) {
+      // Re-throw security errors; swallow ENOENT / ENOTDIR.
+      if (err instanceof Error && err.message.startsWith("FsKvStore:")) throw err;
       return null;
     }
   }
 
   async put(key: string, value: string): Promise<void> {
     const p = this.#toPath(key);
+    await this.#assertWriteAncestorInRoot(p);
     await mkdir(dirname(p), { recursive: true });
     await writeFile(p, value, "utf8");
   }
@@ -146,9 +261,12 @@ export class FsKvStore implements KvStore {
 
   async delete(key: string): Promise<void> {
     try {
-      await rm(this.#toPath(key));
-    } catch {
-      // ignore if already gone
+      const p = this.#toPath(key);
+      await this.#assertNoSymlinkEscape(p);
+      await rm(p);
+    } catch (err) {
+      // Re-throw security errors; swallow ENOENT / ENOTDIR.
+      if (err instanceof Error && err.message.startsWith("FsKvStore:")) throw err;
     }
   }
 }

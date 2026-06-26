@@ -89,6 +89,14 @@ storage so you can play before owning Cloudflare resources.
 The "Deploy to Cloudflare" button at the top creates the Worker, Pages
 project, and KV namespaces in one shot. If you'd rather drive it manually:
 
+**Step 1 — Set auth token and allowed origin BEFORE deploying** (required; the
+deploy script will fail if these are missing):
+
+```bash
+wrangler secret put BSCODE_CLIENT_TOKEN    # required — all stateful endpoints need this
+wrangler secret put BSCODE_ALLOWED_ORIGIN  # required — set to your Pages deploy URL
+```
+
 ```bash
 # create KV namespaces (one-time)
 wrangler kv namespace create BSCODE_FILES
@@ -111,6 +119,8 @@ bun deploy:web
 - **CORS** — Set `BSCODE_ALLOWED_ORIGIN` to your deployment domain (e.g. `https://bscode.example.com`) in production. The default (`localhost:5173`) is safe for local dev but must not be used in production.
 - **Build-result nonce** — `/build-result` requires a per-job nonce in production mode. Obtain it with `GET /jobs/:id/build-nonce` before posting a result. This prevents result-injection across jobs (BSCODE-004).
 - **Job state persistence** — Job state is persisted to the `BSCODE_SESSIONS` KV namespace when configured, making the Worker restart-safe. Without the binding the worker falls back to in-memory state (lost on restart).
+- **Public MCP** — `/mcp` is protected by `BSCODE_CLIENT_TOKEN` by default. To expose it publicly you must: (1) bind `BSCODE_PUBLIC_READ_KV` to a **separate, dedicated** read-only KV namespace, and (2) set `DANGEROUSLY_EXPOSE_DEPLOYMENT_KV=true` in `wrangler.toml [vars]`. Without `BSCODE_PUBLIC_READ_KV` bound, `/mcp` returns 503 when the flag is set. **Never** point the public MCP endpoint at the same KV namespace as `BSCODE_FILES`.
+- **Strict Auth** — `STRICT_AUTH=true` is set by default in `wrangler.toml`. This causes the worker to fail-fast at startup if authentication is misconfigured (e.g., if `allowLocalSessionFallback` were accidentally set in production). Remove this only for intentional dev/test deployments.
 
 Full security governance: [docs/GOVERNANCE.md](./docs/GOVERNANCE.md) · Data governance (consent, retention, deletion): [docs/DATA-GOVERNANCE.md](./docs/DATA-GOVERNANCE.md)
 

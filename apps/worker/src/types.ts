@@ -98,10 +98,43 @@ export interface AppConfig {
   rolloutConcurrency?: number;
   /**
    * When true, /mcp and /mcp/* are accessible without the clientToken. Use only
-   * for intentionally public MCP deployments. Default: false (MCP is protected
-   * by the same clientToken as all other endpoints).
+   * for intentionally public read-only MCP deployments.
+   *
+   * WARNING: Setting this to true exposes the /mcp endpoint publicly. The MCP
+   * handler MUST be given a dedicated read-only KV binding (`publicReadKv`) —
+   * it MUST NOT share the deployment-level `filesKv`. If `publicReadKv` is not
+   * set while `publicMcpEnabled` is true, the /mcp endpoint returns 503.
+   *
+   * Default: false (MCP is protected by the same clientToken as all other endpoints).
+   *
+   * To explicitly enable, set DANGEROUSLY_EXPOSE_DEPLOYMENT_KV=true in the worker
+   * environment (see wrangler.toml comments). Never do this without also binding
+   * BSCODE_PUBLIC_READ_KV to a separate, read-only KV namespace.
    */
   publicMcpEnabled?: boolean;
+  /**
+   * P0-4: Dedicated read-only KV for the public /mcp endpoint. Must be a
+   * separate KV namespace from `filesKv` so public MCP reads cannot access
+   * deployment-level session data.
+   *
+   * When `publicMcpEnabled` is true and this is unset, /mcp returns 503.
+   * When `publicMcpEnabled` is false (default), this field is unused.
+   */
+  publicReadKv?: KvStore;
+  /**
+   * P0-5: When true, auth enforcement is in strict mode. Combining this with
+   * `allowLocalSessionFallback=true` causes `checkProductionConfig` to throw
+   * at startup (rather than silently failing open). Set via STRICT_AUTH=true
+   * in the worker environment. Default: false.
+   */
+  strictAuth?: boolean;
+  /**
+   * P1-7: When true, the server issues session tokens that are cryptographically
+   * bound to the authenticated principal. X-Session-Id values created by one
+   * principal cannot be used by a different principal. Default: false (legacy
+   * mode — session IDs are not principal-bound).
+   */
+  principalBoundSessions?: boolean;
   /**
    * When true, the /rollouts/export endpoint is enabled for training data export.
    * Must be explicitly set by the operator — never inferred from usage.

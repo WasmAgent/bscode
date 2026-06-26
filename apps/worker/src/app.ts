@@ -10,6 +10,7 @@ import { createRateLimiter } from "./middleware/rateLimit.js";
 import type { AppConfig, KvStore } from "./platform.js";
 import { SessionKvStore } from "./platform.js";
 import { mountBuildResultRoutes } from "./routes/buildResult.js";
+import { registerEvidenceRoutes } from "./routes/evidence.js";
 import { mountFilesRoutes } from "./routes/files.js";
 import { mountJobRoutes } from "./routes/jobs.js";
 import { mountJobsExportRoutes } from "./routes/jobsExport.js";
@@ -17,7 +18,6 @@ import { mountMcpDemoRoutes } from "./routes/mcpDemo.js";
 import { mountModelRoutes } from "./routes/models.js";
 import { mountPromptRoutes } from "./routes/prompt.js";
 import { mountRunRoutes } from "./routes/run.js";
-import { registerEvidenceRoutes } from "./routes/evidence.js";
 import { createSemanticIndexer, importGithubRepo, type SemanticIndexer } from "./tools/index.js";
 
 export type { AppConfig } from "./platform.js";

@@ -49,6 +49,7 @@ export function mountBuildResultRoutes(
       if (!entry || entry.expiresAt < Date.now() || entry.sessionId !== sessionId) {
         return c.json({ error: "invalid or missing build-result nonce" }, 401);
       }
+      // biome-ignore lint/style/noNonNullAssertion: nonce existence already checked in the surrounding `if (nonce)`
       buildResultNonces.delete(nonce!);
     }
     if (typeof body.stderr === "string" && body.stderr.length > 64_000) {

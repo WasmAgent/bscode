@@ -13,6 +13,7 @@
  */
 
 import type { KvStore } from "../types.js";
+import { defaultDenyMatcher, isDenied } from "./importDenyList.js";
 
 /** Default extensions we treat as text. Binaries are skipped. */
 const TEXT_EXTENSIONS = new Set([
@@ -47,7 +48,6 @@ const TEXT_EXTENSIONS = new Set([
   ".hpp",
   ".sh",
   ".toml",
-  ".env",
   ".gitignore",
 ]);
 
@@ -95,6 +95,13 @@ export interface ImportGithubInput {
    * array to disable allow-listing (everything text-decoded is imported).
    */
   textExtensions?: string[];
+  /**
+   * Optional set of exact file paths that are explicitly permitted even
+   * when they match the built-in sensitive-file deny-list. Use sparingly —
+   * this is intended for test fixtures and controlled imports only.
+   * Example: new Set([".env.example"]) to allow a template dotenv file.
+   */
+  allowPaths?: ReadonlySet<string>;
 }
 
 export interface ImportGithubOutput {
@@ -161,34 +168,61 @@ export async function importGithubRepo(
   const allowedExt = input.textExtensions ? new Set(input.textExtensions) : TEXT_EXTENSIONS;
   const useExtFilter = input.textExtensions === undefined || input.textExtensions.length > 0;
 
-  const candidates = tree.tree.filter((e) => {
-    if (e.type !== "blob") return false;
-    if (input.paths && input.paths.length > 0) {
-      if (
-        !input.paths.some((p) => e.path === p || e.path.startsWith(`${p}/`) || e.path.startsWith(p))
-      ) {
-        return false;
-      }
-    }
-    if (useExtFilter) {
-      const dot = e.path.lastIndexOf(".");
-      const ext = dot === -1 ? "" : e.path.slice(dot);
-      // Match by full extension OR by trailing filename (eg ".gitignore").
-      const base = e.path.slice(e.path.lastIndexOf("/") + 1);
-      if (!allowedExt.has(ext) && !allowedExt.has(base)) return false;
-    }
-    return true;
-  });
+  // Build the deny matcher once per import call.
+  // The deny-list is checked BEFORE the extension filter so that sensitive
+  // files are reliably blocked even when textExtensions:[] is passed.
+  const denyMatcher = defaultDenyMatcher();
 
   const skippedReasons: Record<string, number> = {};
   const bump = (k: string) => {
     skippedReasons[k] = (skippedReasons[k] ?? 0) + 1;
   };
 
-  let imported = 0;
-  let skipped = tree.tree.length - candidates.length;
-  if (skipped > 0) skippedReasons.filtered_by_extension_or_path = skipped;
+  // Split the raw blob list into: denied | ext-or-path-filtered | candidates.
+  const candidates: TreeEntry[] = [];
+  let skipped = 0;
+  for (const e of tree.tree) {
+    if (e.type !== "blob") continue;
+
+    // 1. Deny-list takes highest priority — checked regardless of extension.
+    if (isDenied(e.path, denyMatcher, input.allowPaths)) {
+      bump("denied_sensitive_file");
+      skipped += 1;
+      console.warn(`[github-import] denied sensitive file: ${e.path}`);
+      continue;
+    }
+
+    // 2. Path-prefix filter.
+    if (input.paths && input.paths.length > 0) {
+      if (
+        !input.paths.some((p) => e.path === p || e.path.startsWith(`${p}/`) || e.path.startsWith(p))
+      ) {
+        bump("filtered_by_extension_or_path");
+        skipped += 1;
+        continue;
+      }
+    }
+
+    // 3. Extension / known-text filter.
+    if (useExtFilter) {
+      const dot = e.path.lastIndexOf(".");
+      const ext = dot === -1 ? "" : e.path.slice(dot);
+      // Match by full extension OR by trailing filename (eg ".gitignore").
+      const base = e.path.slice(e.path.lastIndexOf("/") + 1);
+      if (!allowedExt.has(ext) && !allowedExt.has(base)) {
+        bump("filtered_by_extension_or_path");
+        skipped += 1;
+        continue;
+      }
+    }
+
+    candidates.push(e);
+  }
+  // Non-blob entries (trees / submodule commits) silently excluded — they are
+  // not counted as skipped because they were never import candidates.
+
   const preview: string[] = [];
+  let imported = 0;
 
   for (const entry of candidates) {
     if (imported >= MAX_FILES_PER_IMPORT) {
@@ -196,6 +230,7 @@ export async function importGithubRepo(
       skipped += 1;
       continue;
     }
+
     if (entry.size !== undefined && entry.size > MAX_FILE_BYTES) {
       bump("file_too_large");
       skipped += 1;

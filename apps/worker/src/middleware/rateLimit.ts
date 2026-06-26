@@ -45,7 +45,12 @@ export function createRateLimiter(opts: RateLimiterOpts = {}) {
   const limit = rpm + burst;
   const { rateKv } = opts;
 
-  return async (c: any, next: any) => {
+  return async (
+    // biome-ignore lint/suspicious/noExplicitAny: hono Context type is complex; cast at boundary
+    c: any,
+    // biome-ignore lint/suspicious/noExplicitAny: hono Next type is complex; cast at boundary
+    next: any
+  ) => {
     // Only enforce on POST /run — all other routes pass through.
     const method: string = c.req.method;
     const path: string = new URL(c.req.url).pathname;

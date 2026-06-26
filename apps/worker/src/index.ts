@@ -35,6 +35,32 @@ export interface Env {
   AGENTKIT_LOG_LEVEL?: string;
   /** When "true", enables /rollouts/export for training data collection. Must be set explicitly by the operator. */
   TRAINING_DATA_MODE?: string;
+  /**
+   * P0-5: When "true", enables strict auth enforcement. Setting this to "true"
+   * together with a dev-mode fallback (allowLocalSessionFallback) will cause the
+   * worker to reject startup with a fatal error. Default: "false".
+   *
+   * MUST be set to "true" in all production deployments.
+   */
+  STRICT_AUTH?: string;
+  /**
+   * P0-4: When "true", exposes /mcp publicly without clientToken authentication.
+   *
+   * WARNING: This flag enables unauthenticated access to the /mcp endpoint.
+   * You MUST also bind BSCODE_PUBLIC_READ_KV to a separate, read-only KV
+   * namespace. The deployment-level BSCODE_FILES namespace will NOT be exposed.
+   * Without BSCODE_PUBLIC_READ_KV bound, /mcp returns 503.
+   *
+   * Env var name is intentionally verbose to prevent accidental enablement.
+   * Default: "false".
+   */
+  DANGEROUSLY_EXPOSE_DEPLOYMENT_KV?: string;
+  /**
+   * P1-7: When "true", session IDs are bound to the authenticated principal.
+   * A session created by one token cannot be accessed with a different token.
+   * Default: "false".
+   */
+  PRINCIPAL_BOUND_SESSIONS?: string;
   BSCODE_FILES?: KVNamespace;
   BSCODE_SESSIONS?: KVNamespace;
   /** B1 — KV namespace for durable agent checkpoints. */
@@ -43,6 +69,12 @@ export interface Env {
   BSCODE_BUILD_RESULTS?: KVNamespace;
   /** Rate limiting KV — stores per-session request counters for POST /run. */
   BSCODE_RATE_KV?: KVNamespace;
+  /**
+   * P0-4: Dedicated read-only KV for the public /mcp endpoint. Must be a
+   * SEPARATE namespace from BSCODE_FILES. Only used when
+   * DANGEROUSLY_EXPOSE_DEPLOYMENT_KV=true.
+   */
+  BSCODE_PUBLIC_READ_KV?: KVNamespace;
   /** B3 follow-up — OpenAI-API-shape embedding endpoint (api key, base url, model). */
   EMBEDDING_API_KEY?: string;
   EMBEDDING_BASE_URL?: string;
@@ -72,6 +104,12 @@ export default {
       clientToken: env.BSCODE_CLIENT_TOKEN,
       allowedOrigin: env.BSCODE_ALLOWED_ORIGIN,
       trainingDataMode: env.TRAINING_DATA_MODE === "true",
+      // P0-5: strict auth mode — must not coexist with allowLocalSessionFallback=true
+      strictAuth: env.STRICT_AUTH === "true",
+      // P0-4: public MCP flag — requires BSCODE_PUBLIC_READ_KV to be bound
+      publicMcpEnabled: env.DANGEROUSLY_EXPOSE_DEPLOYMENT_KV === "true",
+      // P1-7: principal-bound sessions
+      principalBoundSessions: env.PRINCIPAL_BOUND_SESSIONS === "true",
       filesKv: env.BSCODE_FILES ? kvFromNamespace(env.BSCODE_FILES) : undefined,
       sessionsKv: env.BSCODE_SESSIONS ? kvFromNamespace(env.BSCODE_SESSIONS) : undefined,
       checkpointsKv: env.BSCODE_CHECKPOINTS ? kvFromNamespace(env.BSCODE_CHECKPOINTS) : undefined,
@@ -79,6 +117,10 @@ export default {
         ? kvFromNamespace(env.BSCODE_BUILD_RESULTS)
         : undefined,
       rateKv: env.BSCODE_RATE_KV ? kvFromNamespace(env.BSCODE_RATE_KV) : undefined,
+      // P0-4: dedicated read-only KV for the public /mcp endpoint
+      publicReadKv: env.BSCODE_PUBLIC_READ_KV
+        ? kvFromNamespace(env.BSCODE_PUBLIC_READ_KV)
+        : undefined,
       ...(embedding ? { embedding } : {}),
     };
     const app = createApp(config);

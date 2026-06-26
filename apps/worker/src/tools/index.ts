@@ -21,6 +21,13 @@ export type {
   GitHubPrOutput,
 } from "./githubPr.js";
 export { createGitHubPrTool } from "./githubPr.js";
+export {
+  compileDenyMatcher,
+  DEFAULT_DENY_PATTERNS,
+  defaultDenyMatcher,
+  isDenied,
+  pathBasename,
+} from "./importDenyList.js";
 export type { SemanticIndexer } from "./semanticSearch.js";
 export {
   createSemanticIndexer,

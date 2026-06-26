@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FsKvStore, MemKvStore, SessionKvStore } from "./platform.js";
@@ -148,17 +148,61 @@ describe("FsKvStore", () => {
     expect(keys).toHaveLength(0);
   });
 
-  it("prevents path traversal via ../ in key", async () => {
-    // Should write inside tmpDir, not escape it
-    await kv.put("file:../../etc/evil", "pwned");
-    // The file lands inside tmpDir, not at /etc/evil
-    const content = await kv.get("file:../../etc/evil");
-    // Either it was sanitised (no content outside root) or stored safely inside root
-    // The key point: /etc/evil should not be written
+  it("rejects path traversal via ../ in key — throws instead of silently stripping", async () => {
+    // SEC-016: path.resolve + path.relative guard replaces the old
+    // single-pass regex that could be bypassed with "..../" tricks.
+    // The store must throw a FsKvStore: error and must NOT write anything.
+    await expect(kv.put("file:../../etc/evil", "pwned")).rejects.toThrow(
+      /FsKvStore: path traversal/
+    );
+    // Verify nothing was written outside the sandbox root.
     const { readFile } = await import("node:fs/promises");
     await expect(readFile("/etc/evil")).rejects.toThrow();
-    // And the store returns the value from inside root
-    expect(content).toBe("pwned");
+  });
+
+  it("rejects the '..../' double-dot double-slash evasion (SEC-016)", async () => {
+    // "....//etc/evil": after one-pass regex replacement of "../" the old code
+    // produced "../etc/evil", escaping the root. path.resolve collapses it correctly.
+    for (const key of [
+      "file:....//etc/evil",
+      "file:..../",
+      "file:....///etc/evil",
+      "file:..//..//etc/passwd",
+    ]) {
+      await expect(kv.put(key, "x"), `put(${key}) should throw`).rejects.toThrow(/FsKvStore:/);
+      await expect(kv.get(key), `get(${key}) should throw`).rejects.toThrow(/FsKvStore:/);
+    }
+  });
+
+  it("rejects keys with NUL bytes (SEC-016)", async () => {
+    const NUL = String.fromCharCode(0x00);
+    const key = `file:hello${NUL}evil.ts`;
+    await expect(kv.put(key, "x")).rejects.toThrow(/FsKvStore:.*control/);
+    await expect(kv.get(key)).rejects.toThrow(/FsKvStore:.*control/);
+  });
+
+  it("rejects keys with LF/CR control characters (SEC-016)", async () => {
+    for (const cc of [0x0a, 0x0d]) {
+      const key = `file:hello${String.fromCharCode(cc)}evil.ts`;
+      await expect(kv.put(key, "x")).rejects.toThrow(/FsKvStore:.*control/);
+    }
+  });
+
+  it("rejects a symlink that points outside the root (SEC-016)", async () => {
+    // Create a symlink inside tmpDir that points to an outside directory.
+    const outsideDir = await mkdtemp(join(tmpdir(), "bscode-outside-"));
+    try {
+      // Write a sensitive file outside the root
+      await writeFile(join(outsideDir, "secret.txt"), "top secret");
+      // Create a symlink inside root pointing outside
+      await symlink(outsideDir, join(tmpDir, "escape-link"));
+      // Attempt to read through the symlink — must be blocked
+      await expect(kv.get("file:escape-link/secret.txt")).rejects.toThrow(
+        /FsKvStore: symlink escape/
+      );
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true });
+    }
   });
 
   it("recursively lists nested files", async () => {

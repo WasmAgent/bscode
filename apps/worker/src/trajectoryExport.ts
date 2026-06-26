@@ -5,6 +5,17 @@
  * Wire format mirrors wasmagent-js packages/core/src/ranking/schemas/rollout-wire.schema.json
  */
 
+import {
+  type ActionEvidence,
+  AEPEmitter,
+  type AEPRecord,
+  type BudgetLedger,
+  type CapabilityDecision,
+  createLocalSignerFromSeed,
+  type InputRef,
+  type OutputRef,
+  type VerifierResult,
+} from "@wasmagent/aep";
 import type { BuildResultSnapshot } from "./build-results.js";
 import type { JobSpec } from "./jobs/index.js";
 import type { KvStore } from "./types.js";
@@ -24,7 +35,8 @@ export interface RolloutWireRecord {
   rank: number;
   total_score: number;
   provenance: RolloutProvenance;
-  aep_evidence?: AEPEvidenceBundle;
+  /** Full AEPRecord (aep/v0.2 with Ed25519 signature) — replaces the legacy AEPEvidenceBundle. */
+  aep_evidence?: AEPRecord;
 }
 
 export interface ToolCallEvent {
@@ -43,25 +55,19 @@ export interface RolloutProvenance {
   redaction_version: "bscode/pii-redact/v1";
 }
 
-// AEP evidence bundle embedded in rollout export (lightweight, no external dep needed)
-export interface AEPCapabilityDecision {
-  capability: string;
-  subject: string;
-  resource: string;
-  decision: "allow" | "deny" | "ask_user" | "dry_run";
-  reason_code?: string;
-}
+// ── AEP re-exports (for consumers that import from trajectoryExport) ──────────
 
-export interface AEPEvidenceBundle {
-  schema_version: "aep/v0.1";
-  run_id: string;
-  model_id: string;
-  capability_decisions: AEPCapabilityDecision[];
-  tool_invocation_count: number;
-  state_changing_actions: string[];
-  verifier_passed: boolean | null;
-  created_at_ms: number;
-}
+// Re-export AEPRecord type and related types so consumers don't need to add
+// @wasmagent/aep as a direct dependency for type usage.
+export type {
+  ActionEvidence,
+  AEPRecord,
+  BudgetLedger,
+  CapabilityDecision,
+  InputRef,
+  OutputRef,
+  VerifierResult,
+} from "@wasmagent/aep";
 
 // ── PII redaction ────────────────────────────────────────────────────────────
 
@@ -311,8 +317,6 @@ export async function loadJobForExport(
   }
 }
 
-// ── AEP evidence ─────────────────────────────────────────────────────────────
-
 // Tools that mutate external state (conservative list)
 const STATE_CHANGING_TOOLS = new Set([
   "bash",
@@ -326,30 +330,153 @@ const STATE_CHANGING_TOOLS = new Set([
   "npm_publish",
 ]);
 
+/** Default AEP seed used in development / CI. Override with BSCODE_AEP_SEED env var. */
+const DEV_AEP_SEED = "0".repeat(64);
+
 /**
- * Build a minimal AEP evidence bundle from a completed rollout record.
- * Used by trace-pipeline to validate evidence completeness before training export.
+ * Resolve the AEP signing seed from the environment.
+ *
+ * - Test / CI: set BSCODE_AEP_SEED to a 64-char hex string.
+ * - Production: TODO — replace with a KMS adapter implementing AEPSigner
+ *   (e.g. AwsKmsSigner wrapping AWS KMS Ed25519 key) and pass it to AEPEmitter.
+ *   The KMS adapter must satisfy the `AEPSigner` interface from @wasmagent/aep.
  */
-export function buildAEPEvidence(opts: {
+function resolveSeedHex(): string {
+  const seed = (typeof process !== "undefined" ? process.env.BSCODE_AEP_SEED : undefined) ?? "";
+  if (/^[0-9a-fA-F]{64}$/.test(seed)) return seed;
+  // Fall back to deterministic dev seed — never use in production.
+  return DEV_AEP_SEED;
+}
+
+/**
+ * Build a complete AEPRecord (aep/v0.2) from a completed rollout's tool-call trace.
+ *
+ * Populates:
+ *   - actions[]             — one ActionEvidence per tool_call event
+ *   - verifier_results[]    — from explicit verifier_results param or auto-derived from objective_passed
+ *   - capability_decisions[] — from explicit param or auto-derived from state-changing tool calls
+ *   - budget_ledger         — from explicit param or auto-derived from tool call count
+ *   - input_refs[]          — from explicit param
+ *   - output_refs[]         — from explicit param
+ *
+ * Signs the record with an Ed25519 key derived from BSCODE_AEP_SEED env var (test/CI).
+ * TODO (production): replace the LocalEd25519Signer with a KMS adapter.
+ */
+export async function buildAEPEvidence(opts: {
   run_id: string;
   model_id: string;
   tool_calls: ToolCallEvent[];
   objective_passed: boolean | null;
-}): AEPEvidenceBundle {
-  const stateChanging = opts.tool_calls
-    .filter((e) => e.event === "tool_call")
-    .map((e) => (e.data as Record<string, unknown>).name as string)
-    .filter(Boolean)
-    .filter((name) => STATE_CHANGING_TOOLS.has(name));
+  /** Optional: explicit actions to add (if not provided, auto-derived from tool_calls). */
+  actions?: ActionEvidence[];
+  /** Optional: explicit verifier results. */
+  verifier_results?: VerifierResult[];
+  /** Optional: explicit capability decisions (if not provided, auto-derived from tool_calls). */
+  capability_decisions?: CapabilityDecision[];
+  /** Optional: explicit budget ledger. */
+  budget_ledger?: BudgetLedger;
+  /** Optional: input artifact references. */
+  input_refs?: InputRef[];
+  /** Optional: output artifact references. */
+  output_refs?: OutputRef[];
+  /** Optional: model provider string (e.g. "anthropic", "openai"). */
+  model_provider?: string;
+  /** Optional: creation timestamp override (ms) — useful for deterministic tests. */
+  created_at_ms?: number;
+}): Promise<AEPRecord> {
+  const seedHex = resolveSeedHex();
+  const signer = createLocalSignerFromSeed(seedHex, "bscode-aep-key-v1");
 
-  return {
-    schema_version: "aep/v0.1",
+  const emitter = new AEPEmitter({
     run_id: opts.run_id,
     model_id: opts.model_id,
-    capability_decisions: [],
-    tool_invocation_count: opts.tool_calls.filter((e) => e.event === "tool_call").length,
-    state_changing_actions: stateChanging,
-    verifier_passed: opts.objective_passed,
-    created_at_ms: Date.now(),
-  };
+    model_provider: opts.model_provider,
+    signer,
+  });
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  if (opts.actions && opts.actions.length > 0) {
+    for (const action of opts.actions) {
+      emitter.addAction(action);
+    }
+  } else {
+    // Auto-derive actions from tool_call events.
+    const toolCallEvents = opts.tool_calls.filter((e) => e.event === "tool_call");
+    for (let i = 0; i < toolCallEvents.length; i++) {
+      const ev = toolCallEvents[i];
+      const toolName = (ev.data as Record<string, unknown>).name as string | undefined;
+      const isStateChanging = Boolean(toolName && STATE_CHANGING_TOOLS.has(toolName));
+      emitter.addAction({
+        action_id: `action-${i}`,
+        tool_name: toolName ?? "unknown",
+        state_changing: isStateChanging,
+        evidence_refs: [],
+        timestamp_ms: ev.timestamp_ms ?? Date.now() + i,
+      });
+    }
+  }
+
+  // ── Verifier results ─────────────────────────────────────────────────────
+  if (opts.verifier_results && opts.verifier_results.length > 0) {
+    for (const vr of opts.verifier_results) {
+      emitter.addVerifierResult(vr);
+    }
+  } else if (opts.objective_passed !== null) {
+    // Auto-derive from objective_passed flag.
+    emitter.addVerifierResult({
+      verifier_id: "bscode-build-verifier",
+      passed: opts.objective_passed,
+      score: opts.objective_passed ? 1 : 0,
+      claim_ids: [],
+    });
+  }
+
+  // ── Capability decisions ─────────────────────────────────────────────────
+  if (opts.capability_decisions && opts.capability_decisions.length > 0) {
+    for (const cd of opts.capability_decisions) {
+      emitter.addCapabilityDecision(cd);
+    }
+  } else {
+    // Auto-derive: mark each unique state-changing tool as "allow" (they ran).
+    const stateChangingNames = new Set(
+      opts.tool_calls
+        .filter((e) => e.event === "tool_call")
+        .map((e) => (e.data as Record<string, unknown>).name as string)
+        .filter(Boolean)
+        .filter((name) => STATE_CHANGING_TOOLS.has(name))
+    );
+    for (const name of stateChangingNames) {
+      emitter.addCapabilityDecision({
+        capability: name,
+        subject: "bscode-agent",
+        resource: "bscode-workspace",
+        decision: "allow",
+        reason_code: "auto_derived",
+      });
+    }
+  }
+
+  // ── Budget ledger ────────────────────────────────────────────────────────
+  if (opts.budget_ledger) {
+    emitter.setBudgetLedger(opts.budget_ledger);
+  } else {
+    const toolCount = opts.tool_calls.filter((e) => e.event === "tool_call").length;
+    emitter.setBudgetLedger({
+      tool_budget: { spent: toolCount },
+    });
+  }
+
+  // ── Input / output refs ──────────────────────────────────────────────────
+  if (opts.input_refs) {
+    for (const ref of opts.input_refs) {
+      emitter.addInputRef(ref);
+    }
+  }
+  if (opts.output_refs) {
+    for (const ref of opts.output_refs) {
+      emitter.addOutputRef(ref);
+    }
+  }
+
+  return emitter.emit(opts.created_at_ms);
 }

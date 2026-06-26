@@ -88,15 +88,40 @@ export function createMcpFetchHandler(
   config: AppConfig,
   opts: CreateMcpFetchHandlerOptions = {}
 ): (request: Request) => Promise<Response> {
+  // P0-4: Public MCP must use a dedicated read-only KV binding, never the
+  // deployment-level filesKv. If publicMcpEnabled is true and no publicReadKv
+  // is provided, we build an empty handler that returns 503 on every request.
+  //
+  // When publicMcpEnabled is false (default), we use filesKv directly because
+  // the /mcp endpoint is protected by clientToken — the same auth gate as all
+  // other endpoints. In that case the caller-owns-data contract is preserved.
+  const targetKv = config.publicMcpEnabled
+    ? config.publicReadKv // may be undefined → 503 handler below
+    : config.filesKv; // token-protected path — filesKv is OK
+
+  if (config.publicMcpEnabled && !targetKv) {
+    // Return a handler that always 503s — misconfiguration, not a runtime error.
+    return (_req: Request) =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error:
+              "Public MCP is enabled (publicMcpEnabled=true) but no publicReadKv binding is set. " +
+              "Bind BSCODE_PUBLIC_READ_KV to a dedicated read-only KV namespace.",
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } }
+        )
+      );
+  }
+
   // Read-only tool subset — built once per worker instance because
   // the registry is stateless beyond the KV references.
-  const filesKv = config.filesKv;
   const tools: ToolDefinition[] = [];
-  if (filesKv) {
+  if (targetKv) {
     tools.push(
-      createReadFileTool(filesKv),
-      createListFilesTool(filesKv),
-      createSearchCodeTool(filesKv)
+      createReadFileTool(targetKv),
+      createListFilesTool(targetKv),
+      createSearchCodeTool(targetKv)
     );
   }
 

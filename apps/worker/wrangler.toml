@@ -15,6 +15,10 @@ compatibility_flags = ["nodejs_compat"]
 AGENTKIT_LOG_LEVEL = "info"
 # Set this to the actual deployment origin in production — "*" is unsafe for a deployed worker with auth.
 BSCODE_ALLOWED_ORIGIN = "http://localhost:5173"
+# P0-5: Auth is strict by default. When STRICT_AUTH=true, setting
+# allowLocalSessionFallback=true at the same time causes a fatal startup error.
+# Remove or set to "false" only for intentional local dev/test deployments.
+STRICT_AUTH = "true"
 
 # ── API keys (set via `wrangler secret put <NAME>`, never in [vars]) ──────────
 #
@@ -77,6 +81,15 @@ BSCODE_ALLOWED_ORIGIN = "http://localhost:5173"
 # [[kv_namespaces]]
 # binding = "BSCODE_BUILD_RESULTS"
 # id = "YOUR_KV_ID_HERE"
+
+# P0-4 — Dedicated read-only KV for the public /mcp endpoint.
+# ONLY bind this when you also set DANGEROUSLY_EXPOSE_DEPLOYMENT_KV=true in [vars].
+# This MUST be a SEPARATE namespace from BSCODE_FILES — never share them.
+# Without this binding, /mcp returns 503 when public MCP is enabled.
+#   wrangler kv namespace create BSCODE_PUBLIC_READ_KV
+# [[kv_namespaces]]
+# binding = "BSCODE_PUBLIC_READ_KV"
+# id = "YOUR_PUBLIC_KV_ID_HERE"
 
 [dev]
 port = 8787

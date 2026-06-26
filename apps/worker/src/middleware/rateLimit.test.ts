@@ -12,6 +12,7 @@ import { createRateLimiter } from "./rateLimit.js";
 
 /** Minimal Hono-like context object used to drive the middleware. */
 function makeCtx(opts: { method?: string; path?: string; sessionId?: string }): {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock — intentional any
   req: any;
   json: (body: unknown, status: number) => Response;
   _response?: Response;
@@ -20,6 +21,7 @@ function makeCtx(opts: { method?: string; path?: string; sessionId?: string }): 
   const headers: Record<string, string | undefined> = {};
   if (sessionId) headers["x-session-id"] = sessionId;
 
+  // biome-ignore lint/suspicious/noExplicitAny: test mock — intentional any
   const ctx: any = {
     req: {
       method,
@@ -41,6 +43,7 @@ function makeCtx(opts: { method?: string; path?: string; sessionId?: string }): 
 
 /** Runs the middleware and returns either its return value or the next() sentinel. */
 async function runMiddleware(
+  // biome-ignore lint/suspicious/noExplicitAny: test mock — intentional any
   middleware: (c: any, next: any) => Promise<unknown>,
   ctx: ReturnType<typeof makeCtx>
 ): Promise<{ passed: boolean; response?: Response }> {

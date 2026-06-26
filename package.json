@@ -29,7 +29,8 @@
     "unlink:wasmagent-local": "node scripts/unlink-wasmagent-local.mjs",
     "verify:claims": "node scripts/verify-claims.mjs",
     "verify:claims:strict": "node scripts/verify-claims.mjs --strict",
-    "loop:smoke": "node scripts/loop-smoke.mjs"
+    "loop:smoke": "node scripts/loop-smoke.mjs",
+    "check:no-eval": "node scripts/check-no-eval.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",

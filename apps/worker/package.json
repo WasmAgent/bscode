@@ -15,6 +15,10 @@
     "test:coverage": "bun test --coverage --isolate"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.4",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "@modelcontextprotocol/sdk": ">=1.7.0",
+    "@wasmagent/aep": "../../../wasmagent-js/packages/aep",
     "@wasmagent/agent-prompts": "^1.0.0",
     "@wasmagent/core": "^1.0.1",
     "@wasmagent/kernel-pyodide": "^1.0.0",
@@ -28,9 +32,6 @@
     "@wasmagent/model-zhipu": "^1.0.0",
     "@wasmagent/tools-browser": "^1.0.0",
     "@wasmagent/tools-rag": "^1.0.0",
-    "@hono/node-server": "^2.0.4",
-    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
-    "@modelcontextprotocol/sdk": ">=1.7.0",
     "diff": "^9.0.0",
     "hono": "^4.6.0",
     "pyodide": "0.29.4",

@@ -1,11 +1,15 @@
 /**
  * /api/recipes/run unit tests — Direction 6 reverse-funnel.
  *
- * The route's only inputs are the recipe id (server-controlled stub
- * map) and a JSON body. Tests pin: (a) every documented recipe id
- * resolves to a runnable stub that returns a non-empty patch, (b)
- * unknown ids fail with 400 and a discoverable error message, (c)
- * malformed JSON fails with 400 rather than a 500.
+ * The route's only inputs are the recipe id (server-controlled static
+ * map) and a JSON body. Tests pin:
+ *   (a) every documented recipe id resolves to a runnable function that
+ *       returns a non-empty patch,
+ *   (b) unknown ids fail with 400 and a discoverable error message,
+ *   (c) malformed JSON fails with 400 rather than a 500,
+ *   (d) attack-vector inputs (injected code in recipe id, prototype
+ *       pollution attempts, oversized / missing fields) are rejected
+ *       cleanly with 400 — no code execution occurs.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -52,5 +56,76 @@ describe("/api/recipes/run", () => {
     expect(res.status).toBe(400);
     const json = (await res.json()) as { error: string };
     expect(json.error).toMatch(/invalid JSON/i);
+  });
+
+  // -------------------------------------------------------------------------
+  // Attack-vector tests — these inputs must be rejected with 400, never
+  // executed. With the static-map approach, there is no eval path to reach.
+  // -------------------------------------------------------------------------
+
+  it("rejects a recipe id that looks like injected JS code", async () => {
+    const res = await POST(
+      makeRequest({ recipe: "'); require('child_process').execSync('id'); //" }) as never
+    );
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a recipe id containing a template literal injection attempt", async () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: testing that this raw string (not a real template) is rejected as injection
+    const res = await POST(makeRequest({ recipe: "${process.env.SECRET}" }) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a recipe id that is __proto__", async () => {
+    const res = await POST(makeRequest({ recipe: "__proto__" }) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a recipe id that is constructor", async () => {
+    const res = await POST(makeRequest({ recipe: "constructor" }) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a recipe id that is toString", async () => {
+    const res = await POST(makeRequest({ recipe: "toString" }) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a recipe id that is an empty string", async () => {
+    const res = await POST(makeRequest({ recipe: "" }) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a body with no recipe field (undefined recipe)", async () => {
+    const res = await POST(makeRequest({}) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a recipe id with path-traversal characters", async () => {
+    const res = await POST(makeRequest({ recipe: "../../etc/passwd" }) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
+  });
+
+  it("rejects a recipe id with newline injection", async () => {
+    const res = await POST(makeRequest({ recipe: "aisdk\neval('1+1')" }) as never);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toMatch(/unknown recipe id/);
   });
 });
