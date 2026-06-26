@@ -1,0 +1,21 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "tc-006",
+  "category": "tool-calling",
+  "difficulty": "easy",
+  "prompt": "Create a new directory called 'reports/2026-06' to hold monthly reports.",
+  "context": {
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "deterministic",
+    "expected": {
+      "tool_name": "create_directory",
+      "args": { "path": "reports/2026-06" }
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["create_directory", "single-step", "filesystem"]
+}

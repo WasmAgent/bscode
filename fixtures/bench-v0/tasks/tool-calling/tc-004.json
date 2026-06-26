@@ -1,0 +1,26 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "tc-004",
+  "category": "tool-calling",
+  "difficulty": "medium",
+  "prompt": "Read the file 'src/version.ts', then write a copy of its contents to 'dist/version.ts'.",
+  "context": {
+    "files": {
+      "src/version.ts": "export const VERSION = '1.2.3';\nexport const BUILD_DATE = '2026-06-26';\n"
+    },
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "deterministic",
+    "expected": {
+      "tool_sequence": ["read_file", "write_file"],
+      "read_args": { "path": "src/version.ts" },
+      "write_args": { "path": "dist/version.ts" },
+      "write_content_contains": "VERSION"
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["read_file", "write_file", "chained", "copy-file"]
+}

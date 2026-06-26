@@ -1,0 +1,32 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "lh-004",
+  "category": "long-horizon",
+  "difficulty": "hard",
+  "prompt": "You must track and transform a dataset through 8 sequential steps: (1) read 'data/raw.csv', (2) list files in 'data/', (3) create directory 'data/processed/', (4) write a filtered version to 'data/processed/active.csv' keeping only rows where status=active, (5) write a filtered version to 'data/processed/inactive.csv' keeping only rows where status=inactive, (6) read 'data/processed/active.csv' to verify, (7) read 'data/processed/inactive.csv' to verify, (8) write a summary to 'data/processed/summary.txt' with the count of active and inactive rows.",
+  "context": {
+    "files": {
+      "data/raw.csv": "id,name,status\n1,Alice,active\n2,Bob,inactive\n3,Carol,active\n4,Dave,inactive\n5,Eve,active\n6,Frank,active\n7,Grace,inactive\n"
+    },
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "llm-judge",
+    "expected": {
+      "min_tool_calls": 8,
+      "judge_criteria": [
+        "Agent reads data/raw.csv as step 1",
+        "Agent lists files in data/ as step 2",
+        "Agent creates directory data/processed/ as step 3",
+        "data/processed/active.csv contains only rows with status=active (Alice, Carol, Eve, Frank)",
+        "data/processed/inactive.csv contains only rows with status=inactive (Bob, Dave, Grace)",
+        "Agent reads both processed files to verify them",
+        "data/processed/summary.txt contains the correct counts: 4 active, 3 inactive"
+      ]
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["state-tracking", "sequential-steps", "data-processing", "multi-write", "8-steps"]
+}

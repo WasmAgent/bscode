@@ -1,0 +1,24 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "tc-005",
+  "category": "tool-calling",
+  "difficulty": "easy",
+  "prompt": "Search the codebase for all occurrences of 'TODO' and report how many results were found.",
+  "context": {
+    "files": {
+      "src/auth.ts": "// TODO: add rate limiting\nexport function authenticate(token: string) { return true; }\n",
+      "src/db.ts": "// TODO: connection pooling\n// TODO: retry on timeout\nexport function query(sql: string) { return []; }\n",
+      "src/utils.ts": "export const noop = () => {};\n"
+    }
+  },
+  "verifier": {
+    "type": "deterministic",
+    "expected": {
+      "tool_name": "search_code",
+      "args": { "query": "TODO" },
+      "result_count_gt": 0
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["search_code", "single-step", "code-search"]
+}

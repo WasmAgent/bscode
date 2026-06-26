@@ -1,0 +1,30 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "lh-001",
+  "category": "long-horizon",
+  "difficulty": "hard",
+  "prompt": "Refactor the module 'src/user-service.ts': (1) read the file, (2) extract the UserService class into a new file 'src/services/UserService.ts', (3) create an index barrel 'src/services/index.ts' that re-exports it, (4) update 'src/user-service.ts' to import from the new location, and (5) verify the final contents of all three files are consistent.",
+  "context": {
+    "files": {
+      "src/user-service.ts": "export class UserService {\n  private users: Map<string, string> = new Map();\n\n  getUser(id: string): string | undefined {\n    return this.users.get(id);\n  }\n\n  setUser(id: string, name: string): void {\n    this.users.set(id, name);\n  }\n\n  deleteUser(id: string): void {\n    this.users.delete(id);\n  }\n}\n"
+    },
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "llm-judge",
+    "expected": {
+      "min_tool_calls": 5,
+      "judge_criteria": [
+        "UserService class is moved to src/services/UserService.ts",
+        "src/services/index.ts re-exports UserService",
+        "src/user-service.ts imports from './services' or './services/UserService'",
+        "All three files are internally consistent",
+        "No functionality is lost in the refactor"
+      ]
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["refactoring", "multi-file", "barrel-export", "extract-class", "ordered-steps"]
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "tc-007",
+  "category": "tool-calling",
+  "difficulty": "medium",
+  "prompt": "Read 'src/constants.ts', change the value of MAX_CONNECTIONS from 10 to 50, and write the updated content back to the same file.",
+  "context": {
+    "files": {
+      "src/constants.ts": "export const MAX_CONNECTIONS = 10;\nexport const IDLE_TIMEOUT_MS = 30000;\nexport const MAX_RETRIES = 3;\n"
+    },
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "deterministic",
+    "expected": {
+      "tool_sequence": ["read_file", "write_file"],
+      "read_args": { "path": "src/constants.ts" },
+      "write_args": { "path": "src/constants.ts" },
+      "write_content_contains": "MAX_CONNECTIONS = 50",
+      "write_content_not_contains": "MAX_CONNECTIONS = 10"
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["read_file", "write_file", "modify-in-place", "multi-step"]
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "lh-002",
+  "category": "long-horizon",
+  "difficulty": "hard",
+  "prompt": "The test suite in 'tests/calculator.test.ts' is failing. Read the test file, read the implementation in 'src/calculator.ts', identify the bug, fix the implementation, then confirm the fix is correct by re-reading the updated file.",
+  "context": {
+    "files": {
+      "src/calculator.ts": "export function add(a: number, b: number): number {\n  return a - b; // BUG: should be addition\n}\n\nexport function multiply(a: number, b: number): number {\n  return a * b;\n}\n\nexport function divide(a: number, b: number): number {\n  if (b === 0) throw new Error('Division by zero');\n  return a / b;\n}\n",
+      "tests/calculator.test.ts": "import { add, multiply, divide } from '../src/calculator';\n\ntest('add 2 + 3 = 5', () => {\n  expect(add(2, 3)).toBe(5);\n});\n\ntest('multiply 4 * 5 = 20', () => {\n  expect(multiply(4, 5)).toBe(20);\n});\n\ntest('divide 10 / 2 = 5', () => {\n  expect(divide(10, 2)).toBe(5);\n});\n"
+    },
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "llm-judge",
+    "expected": {
+      "min_tool_calls": 4,
+      "judge_criteria": [
+        "Agent reads both the test file and the implementation file",
+        "Agent correctly identifies the bug: 'a - b' should be 'a + b' in the add function",
+        "Agent writes the fixed implementation with 'return a + b'",
+        "Agent verifies the fix by reading or confirming the updated file",
+        "Agent explains what the bug was"
+      ]
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["debug", "bug-fix", "test-driven", "read-modify-verify"]
+}

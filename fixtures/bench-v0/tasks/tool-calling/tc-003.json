@@ -1,0 +1,24 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "tc-003",
+  "category": "tool-calling",
+  "difficulty": "easy",
+  "prompt": "List all files in the current directory '.' and return the result.",
+  "context": {
+    "files": {
+      "README.md": "# Project\nThis is the project root.\n",
+      "src/index.ts": "export {};\n",
+      "src/utils.ts": "export const noop = () => {};\n"
+    }
+  },
+  "verifier": {
+    "type": "deterministic",
+    "expected": {
+      "tool_name": "list_files",
+      "args": { "directory": "." },
+      "output_contains": "README.md"
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["list_files", "single-step", "directory-listing"]
+}

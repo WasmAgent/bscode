@@ -1,0 +1,34 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "lh-005",
+  "category": "long-horizon",
+  "difficulty": "hard",
+  "prompt": "Execute a causal dependency chain: (A) read 'config/feature-flags.json' to determine which modules are enabled, (B) based on the enabled modules listed in that config, read only the enabled module files from 'src/modules/', (C) based on the exports you find in those files, generate a combined barrel file 'src/modules/index.ts' that re-exports all discovered exports.",
+  "context": {
+    "files": {
+      "config/feature-flags.json": "{\"enabled_modules\":[\"payments\",\"notifications\"],\"disabled_modules\":[\"legacy-auth\",\"beta-dashboard\"]}\n",
+      "src/modules/payments.ts": "export class PaymentProcessor {\n  charge(amount: number): boolean { return amount > 0; }\n}\nexport type PaymentResult = { success: boolean; txId: string };\n",
+      "src/modules/notifications.ts": "export class NotificationService {\n  send(msg: string): void { console.log(msg); }\n}\nexport type NotificationChannel = 'email' | 'sms' | 'push';\n",
+      "src/modules/legacy-auth.ts": "// DISABLED — do not export\nexport class LegacyAuthProvider {\n  authenticate(user: string): boolean { return false; }\n}\n",
+      "src/modules/beta-dashboard.ts": "// DISABLED — do not export\nexport class BetaDashboard {\n  render(): string { return '<dashboard/>'; }\n}\n"
+    },
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "llm-judge",
+    "expected": {
+      "min_tool_calls": 4,
+      "judge_criteria": [
+        "Agent reads config/feature-flags.json first (step A)",
+        "Agent reads only src/modules/payments.ts and src/modules/notifications.ts, not the disabled modules (step B)",
+        "The generated src/modules/index.ts exports PaymentProcessor, PaymentResult, NotificationService, and NotificationChannel",
+        "The generated barrel does NOT export LegacyAuthProvider or BetaDashboard",
+        "The causal chain is respected: config read → selective file reads → barrel generation"
+      ]
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["causal-chain", "config-driven", "selective-reads", "barrel-generation", "feature-flags"]
+}

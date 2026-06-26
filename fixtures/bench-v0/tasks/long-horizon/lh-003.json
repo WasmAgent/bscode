@@ -1,0 +1,30 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "lh-003",
+  "category": "long-horizon",
+  "difficulty": "hard",
+  "prompt": "Create a new 'logger' module for this project: (1) create 'src/logger/Logger.ts' with a Logger class that has info(), warn(), and error() methods, (2) create 'src/logger/index.ts' as a barrel export, (3) write a test file 'tests/logger.test.ts' that tests all three methods, and (4) update 'src/index.ts' to export the logger module.",
+  "context": {
+    "files": {
+      "src/index.ts": "export { UserService } from './services';\nexport { Calculator } from './calculator';\n"
+    },
+    "env": {
+      "SANDBOX_WRITE_ALLOWED": "true"
+    }
+  },
+  "verifier": {
+    "type": "llm-judge",
+    "expected": {
+      "min_tool_calls": 5,
+      "judge_criteria": [
+        "src/logger/Logger.ts is created with a class containing info(), warn(), and error() methods",
+        "src/logger/index.ts re-exports the Logger class",
+        "tests/logger.test.ts tests all three methods (info, warn, error)",
+        "src/index.ts is updated to include an export for the logger module",
+        "All created files are syntactically valid TypeScript"
+      ]
+    }
+  },
+  "aep_required_fields": ["tool_name", "tool_input", "tool_result"],
+  "tags": ["new-module", "create-files", "barrel-export", "write-tests", "multi-step"]
+}
