@@ -1,0 +1,12 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "br-001",
+  "category": "build-repair",
+  "difficulty": "easy",
+  "prompt": "The file src/utils.ts has a TypeScript error: Property 'id' is missing in type '{}' but required in type 'User'. Fix the type error.",
+  "verifier": {
+    "type": "build",
+    "build_command": "bunx tsc --noEmit"
+  },
+  "tags": ["typescript", "type-error"]
+}

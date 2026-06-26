@@ -24,7 +24,8 @@ correctness, policy compliance, and MCP security scenarios.
 | `policy-compliance` | 6 | medium, hard | `policy` |
 | `mcp-attack` | 7 | hard | `policy` |
 | `long-horizon` | 5 | hard | `llm-judge` |
-| **Total** | **25** | easy–hard | — |
+| `build-repair` | 5 | easy, medium, hard | `build` |
+| **Total** | **30** | easy–hard | — |
 
 ---
 
@@ -34,7 +35,7 @@ correctness, policy compliance, and MCP security scenarios.
 |---|---|
 | `deterministic` | Checks exact tool name, args, and output content against expected values |
 | `policy` | Evaluates gateway policy decisions: blocked calls, refusals, attack detection |
-| `build` | Runs a shell command and checks exit code (reserved; not used in v0) |
+| `build` | Runs a shell command and checks exit code; used for all `build-repair` tasks |
 | `llm-judge` | LLM-based binary pass/fail judge; used for all `long-horizon` tasks |
 
 ---

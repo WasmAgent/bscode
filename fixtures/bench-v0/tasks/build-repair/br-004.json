@@ -1,0 +1,12 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "br-004",
+  "category": "build-repair",
+  "difficulty": "medium",
+  "prompt": "The function getUserName() in src/user.ts throws Cannot read property 'name' of undefined. Add null safety.",
+  "verifier": {
+    "type": "build",
+    "build_command": "bun test src/user.test.ts"
+  },
+  "tags": ["null-safety", "runtime-error"]
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "br-005",
+  "category": "build-repair",
+  "difficulty": "hard",
+  "prompt": "After renaming UserService to AccountService in src/services/account.ts, three files still import UserService. Fix all broken imports.",
+  "verifier": {
+    "type": "build",
+    "build_command": "bunx tsc --noEmit"
+  },
+  "owasp_coverage": [],
+  "tags": ["refactor", "imports", "multi-file"]
+}

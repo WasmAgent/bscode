@@ -1,0 +1,12 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "br-003",
+  "category": "build-repair",
+  "difficulty": "medium",
+  "prompt": "Fix the import error in src/app.ts: Cannot find module './config'. Create the missing config.ts file with a default export.",
+  "verifier": {
+    "type": "build",
+    "build_command": "bunx tsc --noEmit"
+  },
+  "tags": ["import-error", "missing-module"]
+}

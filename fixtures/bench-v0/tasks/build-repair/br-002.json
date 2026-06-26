@@ -1,0 +1,12 @@
+{
+  "schema_version": "bench-task/v1",
+  "task_id": "br-002",
+  "category": "build-repair",
+  "difficulty": "easy",
+  "prompt": "The test in src/calculator.test.ts fails because add(2,3) returns 5 but the test expects 6. Fix the implementation in src/calculator.ts.",
+  "verifier": {
+    "type": "build",
+    "build_command": "bun test src/calculator.test.ts"
+  },
+  "tags": ["unit-test", "fix"]
+}
