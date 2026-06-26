@@ -37,6 +37,14 @@ interface AgentPanelProps {
   classifying?: boolean;
   /** Mode detected by classifier (shown as badge) */
   detectedMode?: { mode: string; framework: string | null } | null;
+  /** Evidence timeline data for the current run (gateway policy + verifier results) */
+  evidenceSummary?: {
+    policyDecisions?: Array<{ capability: string; decision: string; reason_code?: string }>;
+    taintedActions?: number;
+    verifierResults?: Array<{ verifier_id: string; passed: boolean }>;
+    toolManifestDigest?: string;
+    runId?: string;
+  };
 }
 
 const panelStyle: CSSProperties = {
@@ -165,6 +173,7 @@ export function AgentPanel({
   workerUrl = "http://localhost:8788",
   classifying = false,
   detectedMode = null,
+  evidenceSummary,
 }: AgentPanelProps) {
   const [dynamicModels, setDynamicModels] = useState(DEFAULT_MODELS);
   const [economyModelId, setEconomyModelId] = useState<string | undefined>(undefined);
@@ -535,6 +544,85 @@ export function AgentPanel({
           </button>
         )}
       </div>
+      {evidenceSummary && (
+        <div style={{ marginTop: 12, borderTop: "1px solid #30363d", paddingTop: 10 }}>
+          <div style={{ ...labelStyle, marginBottom: 6, color: "#58a6ff" }}>EVIDENCE TIMELINE</div>
+          {evidenceSummary.toolManifestDigest && (
+            <div style={{ fontSize: 10, color: theme.textMuted, marginBottom: 4 }}>
+              tool digest: {evidenceSummary.toolManifestDigest.slice(0, 12)}…
+            </div>
+          )}
+          {evidenceSummary.policyDecisions && evidenceSummary.policyDecisions.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ ...labelStyle, fontSize: 10 }}>POLICY</div>
+              {evidenceSummary.policyDecisions.slice(0, 5).map((d, i) => (
+                <div
+                  key={i}
+                  style={{
+                    fontSize: 11,
+                    display: "flex",
+                    gap: 6,
+                    alignItems: "center",
+                    marginBottom: 2,
+                  }}
+                >
+                  <span
+                    style={{
+                      color:
+                        d.decision === "allow"
+                          ? "#3fb950"
+                          : d.decision === "deny"
+                            ? "#f85149"
+                            : "#d29922",
+                    }}
+                  >
+                    {d.decision === "allow" ? "✓" : d.decision === "deny" ? "✗" : "?"}
+                  </span>
+                  <span
+                    style={{
+                      color: theme.textMuted,
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d.capability}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {evidenceSummary.verifierResults && evidenceSummary.verifierResults.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ ...labelStyle, fontSize: 10 }}>VERIFIERS</div>
+              {evidenceSummary.verifierResults.map((v, i) => (
+                <div key={i} style={{ fontSize: 11, color: v.passed ? "#3fb950" : "#f85149" }}>
+                  {v.passed ? "✓" : "✗"} {v.verifier_id}
+                </div>
+              ))}
+            </div>
+          )}
+          {(evidenceSummary.taintedActions ?? 0) > 0 && (
+            <div style={{ fontSize: 11, color: "#d29922", marginTop: 4 }}>
+              ⚠ {evidenceSummary.taintedActions} tainted action
+              {evidenceSummary.taintedActions !== 1 ? "s" : ""}
+            </div>
+          )}
+          {evidenceSummary.runId && (
+            <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 6 }}>
+              <a
+                href={`/evidence/${evidenceSummary.runId}/report`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "#58a6ff", textDecoration: "none" }}
+              >
+                View audit report →
+              </a>
+            </div>
+          )}
+        </div>
+      )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
