@@ -193,14 +193,17 @@ risk findings, rug-pull hash diff, and taint-boundary wrapping.
 
 ## bscode-bench
 
-`fixtures/bench/tasks/` contains 22 benchmark task manifests (`bench-task/v1` schema)
-covering 5 categories: build repair, API correctness, security/policy, Cloudflare-specific,
-and multi-step long-horizon. Each manifest specifies `user_query`, `verifiers`, and
-`admission` settings for the evidence gate.
+`fixtures/bench-v0/tasks/` — 30 benchmark task manifests (`bench-task/v1` schema) across 5 categories:
 
-```bash
-ls fixtures/bench/tasks/   # 22 tasks
-```
+| Category | Count | Verifier |
+|---|---|---|
+| tool-calling | 7 | deterministic |
+| policy-compliance | 6 | policy |
+| mcp-attack | 7 | deterministic (blocked/ask_user/flag) |
+| long-horizon | 5 | llm-judge |
+| build-repair | 5 | build |
+
+[Leaderboard →](/leaderboard) · Dataset card: [`fixtures/bench-v0/DATASET_CARD.md`](./fixtures/bench-v0/DATASET_CARD.md)
 
 ---
 
@@ -208,17 +211,10 @@ ls fixtures/bench/tasks/   # 22 tasks
 
 bscode is intentionally **not**:
 
-- **A Cursor / Claude Code competitor.** Real shell, real npm install, real
-  compilation chains are not what a WASM kernel is for. Use the framework's
-  [`@wasmagent/kernel-remote`](https://github.com/WasmAgent/wasmagent-js/tree/main/packages/kernel-remote) tier for that.
-- **An IDE.** No file watcher, no LSP, no plugin system. The Monaco surface
-  exists to demonstrate `useAgentRun()` + `TokenMeter` in a Next.js app.
-- **A long-term product roadmap.** New capabilities land in wasmagent-js
-  first; bscode pulls them in as a demo.
-
-We accept PRs that improve the demo (clearer flows, better screenshots,
-honest benchmarks) and PRs that remove things that have drifted from this
-positioning.
+- **A Cursor / Claude Code competitor.** No real shell, no LSP, no plugin system.
+- **An IDE.** Monaco exists to demo Evidence Timeline + tool call visualization.
+- **A standalone product.** All security/policy primitives come from `@wasmagent/*`.
+- **A benchmark with 1000+ tasks yet.** bench-v0 is 30 tasks, growing deliberately.
 
 ---
 
