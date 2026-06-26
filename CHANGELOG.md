@@ -4,15 +4,23 @@ All notable changes to bscode.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — 2026-06-25
+## [Unreleased] — 2026-06-26
 
 ### Added
 
-- **AEP evidence bundle** (`apps/worker/src/trajectoryExport.ts`). `AEPEvidenceBundle` and
-  `AEPCapabilityDecision` types added. `RolloutWireRecord` gains optional `aep_evidence?` field.
-  New `buildAEPEvidence()` function builds a `aep/v0.1` evidence bundle from a completed rollout,
-  classifying state-changing tool calls via `STATE_CHANGING_TOOLS` set. Consumed by trace-pipeline
-  `validate-aep` command before training export. — MCP Firewall attack demo. Five attack scenarios
+- **AEP evidence (full record, signed)** (`apps/worker/src/trajectoryExport.ts`).
+  `buildAEPEvidence()` now returns a complete `AEPRecord` (schema `aep/v0.2`)
+  populated with `actions[]`, `verifier_results[]`, `capability_decisions[]`,
+  `budget_ledger`, `input_refs[]`, `output_refs[]`, and a mandatory Ed25519
+  `signature` produced via `@wasmagent/aep@^1.2.0`'s `AEPEmitter` +
+  `LocalEd25519Signer` (`BSCODE_AEP_SEED` env in test/CI; KMS adapter slot
+  reserved for production). The earlier 'lightweight `AEPEvidenceBundle`'
+  shape (`aep/v0.1`, `capability_decisions: []`) has been replaced.
+  `RolloutWireRecord` retains its optional `aep_evidence?` field; the
+  payload type is now `AEPRecord`. Consumed by trace-pipeline `validate-aep`
+  before training export.
+
+- **MCP Firewall attack demo.** Five attack scenarios
   (`prompt-injection`, `exfiltration`, `rug-pull`, `taint-passthrough`, `sampling-abuse`).
   `GET /mcp-demo` lists scenarios; `POST /mcp-demo/:id` returns a JSON comparison of
   unprotected vs protected invocation, using `@wasmagent/mcp-server`'s snapshot/rug-pull primitives.

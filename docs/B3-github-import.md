@@ -115,6 +115,36 @@ Any OpenAI-API-shape embedder server drops in (TEI, Ollama with
 - **LFS pointers**: returned as small text files (the LFS pointer body)
   rather than the actual binary asset. Out of scope.
 
+## Security: secret-file deny-list
+
+As of 2026-06-26, both the worker importer and the browser importer
+share a single deny-list (`apps/worker/src/tools/importDenyList.ts`)
+applied before any file content is read into KV. Matching files are
+**dropped silently** (counted but not stored) — they never enter the
+workspace, are never returned by `read_file` / `list_files` /
+`search_code`, and never appear in `rollout export` payloads.
+
+Default deny patterns (any one match → drop):
+
+| Pattern | Why |
+|---|---|
+| `.env`, `.env.*` (incl. `.env.local`, `.env.production`) | App secrets |
+| `.dev.vars` | Cloudflare Wrangler local secrets |
+| `*.pem`, `*.key`, `id_rsa*`, `*.pfx`, `*.p12`, `*.jks` | Private keys / certificates |
+| `*.crt`, `*.cer` *(only with adjacent `.key`)* | TLS cert pairs |
+| `aws-credentials*`, `*.csv` *(when matching AWS access-key heuristic)* | AWS credentials |
+| `gcp-*credentials*.json`, `service-account*.json` | GCP service accounts |
+| `.npmrc` *(when containing `_authToken`)* | npm publish token |
+| `.netrc`, `.git-credentials` | HTTP auth caches |
+
+This list **cannot be overridden from request input** — the deny-list
+is compiled at build time and applied unconditionally. If you legitimately
+need to import an `.env.example` template, rename it to a non-deny-listed
+name (e.g. `env.example.txt`) before pushing to the source repository.
+
+Audit trail: each dropped file emits a `worker.import.deny_skip` log line
+with `{path, deny_reason}`. No file content is logged.
+
 ## Testing
 
 - 8 unit tests in `apps/worker/src/tools/githubImport.test.ts` cover

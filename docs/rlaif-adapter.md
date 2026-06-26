@@ -66,33 +66,50 @@ so KV write failures throw rather than being silently swallowed:
 await putBuildResult(sessionId, snapshot, kv, { strictKvMode: true });
 ```
 
-## AEP Evidence Bundle Integration
+## AEP Evidence Record Integration
 
-As of 2026-06-25, bscode trajectory export also produces an **AEP evidence bundle**
-alongside the `RolloutWireRecord`. This captures the evidence that each rollout
-actually executed correctly and is safe for training export.
+As of 2026-06-26, bscode trajectory export also produces a complete
+**AEP evidence record** (`aep/v0.2` schema with mandatory Ed25519
+signature) alongside the `RolloutWireRecord`. This captures the evidence
+that each rollout actually executed correctly and is safe for training
+export.
 
 ### `buildAEPEvidence(opts)`
+
+`buildAEPEvidence` is `async` (it signs the record via
+`@wasmagent/aep`'s `LocalEd25519Signer`) and returns `Promise<AEPRecord>`.
 
 ```ts
 import { buildAEPEvidence } from "./trajectoryExport.js";
 
-const evidence = buildAEPEvidence({
+const evidence = await buildAEPEvidence({
   run_id: job.sessionId,
   model_id: "claude-haiku-4-5-20251001",
   tool_calls: record.tool_call_sequence,
   objective_passed: record.objective_score === 1,
+  // Optional overrides — auto-derived if omitted:
+  //   actions, verifier_results, capability_decisions,
+  //   budget_ledger, input_refs, output_refs,
+  //   model_provider, created_at_ms
 });
 
 // Attach to the rollout record
 record.aep_evidence = evidence;
 ```
 
-The bundle (`AEPEvidenceBundle`, schema `aep/v0.1`) contains:
-- `tool_invocation_count` — total tool calls
-- `state_changing_actions` — tool names from `STATE_CHANGING_TOOLS` set
-- `verifier_passed` — maps to `objective_score`
-- `capability_decisions` — empty by default (populated by MCPGateway when integrated)
+The record (`AEPRecord`, schema `aep/v0.2`) populates:
+- `actions[]` — one `ActionEvidence` per `tool_call` event (auto-derived
+  from `tool_call_sequence` when not provided explicitly).
+- `verifier_results[]` — from `verifier_results` param or auto-derived
+  from `objective_passed` (single synthetic `objective_score` verifier).
+- `capability_decisions[]` — auto-derived from state-changing tool calls
+  via the `STATE_CHANGING_TOOLS` set (no longer empty by default).
+- `budget_ledger` — derived from tool-call count or accepted as explicit
+  param.
+- `input_refs[]` / `output_refs[]` — optional artifact references.
+- `signature: {alg: "ed25519", key_id, sig}` — Ed25519 over canonical
+  bytes. The test/CI signer reads its seed from `BSCODE_AEP_SEED`; a
+  KMS adapter slot is reserved for production.
 
 ### Consumption by trace-pipeline
 

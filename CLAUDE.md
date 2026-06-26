@@ -25,7 +25,7 @@ bun run test    # runs turbo which triggers bun test in each package
 
 **Worker test isolation**: `apps/worker/bunfig.toml` sets `isolate = true`, but Bun 1.3.14 only reads it when CWD matches. Running `bun test apps/worker/src/` from the repo root will produce ~44 false failures due to mock bleed between test files. Always use `bun --filter @bscode/worker test` or `cd apps/worker && bun test --isolate`.
 
-**CRITICAL: Never run any `bun test` as a background task** (`run_in_background`) — a hung test will silently burn CPU.
+**CRITICAL: Never run any `bun test` as a background task** (`run_in_background`) — a hung test will silently burn CPU at ~90% for hours, with no surface signal. The pre-push hook (`.githooks/pre-push`) runs tests in the foreground; install it once per clone via `bash .githooks/install.sh` and never override its `bun test` invocation to background mode.
 
 ## Lint
 
