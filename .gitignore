@@ -1,18 +1,66 @@
+# ── Dependencies & build artifacts ──────────────────────────────────
 node_modules/
 **/node_modules/
 .next/
 dist/
 **/dist/
 .wrangler/
-.dev.vars
-*.env.local
-*.env
 .turbo/
+apps/web/tsconfig.tsbuildinfo
+*.tsbuildinfo
+coverage/
+*.log
+*.tgz
+
+# ── bscode local-mode caches ────────────────────────────────────────
 apps/worker/.bscode-files/
 .bscode-files/
 .bscode-checkpoints/
 .bscode-build-results/
 
+# ── Local caches (agent scratch, etc.) ──────────────────────────────
+.tmp/
+tmp/
+.cache/
+.claude/
 
-# Build cache
-apps/web/tsconfig.tsbuildinfo
+# ── Secrets — never commit ──────────────────────────────────────────
+# Catch-all for env files, except the committed templates below.
+.env
+.env.*
+!.env.example
+!.env.template
+.dev.vars
+# Private keys / certificates with embedded keys
+*.pem
+*.key
+id_rsa
+id_rsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+*.p12
+*.pfx
+*.jks
+*.pkcs12
+# Generic credential dumps
+secrets.json
+secrets.yaml
+secrets.yml
+.netrc
+.git-credentials
+# Cloud-provider credential files
+gcp-*credentials*.json
+service-account*.json
+aws-credentials*
+.npmrc
+
+# ── OS / editor (per-developer, never per-repo) ─────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
