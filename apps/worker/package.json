@@ -18,7 +18,7 @@
     "@hono/node-server": "^2.0.4",
     "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "@modelcontextprotocol/sdk": ">=1.7.0",
-    "@wasmagent/aep": "../../../wasmagent-js/packages/aep",
+    "@wasmagent/aep": "^1.2.0",
     "@wasmagent/agent-prompts": "^1.0.0",
     "@wasmagent/core": "^1.0.1",
     "@wasmagent/kernel-pyodide": "^1.0.0",
