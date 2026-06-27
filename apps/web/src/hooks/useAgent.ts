@@ -1,5 +1,5 @@
 "use client";
-import { useAgentRun, type UseAgentRunOptions } from "@wasmagent/react";
+import { type UseAgentRunOptions, useAgentRun } from "@wasmagent/react";
 import { useCallback, useRef, useState } from "react";
 import { getOrCreateSessionId } from "@/lib/session";
 import { getWorkerUrl } from "@/lib/workerUrl";
