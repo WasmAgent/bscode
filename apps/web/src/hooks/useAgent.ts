@@ -1,8 +1,14 @@
 "use client";
-import { useAgentRun } from "@wasmagent/react";
+import { useAgentRun, type UseAgentRunOptions } from "@wasmagent/react";
 import { useCallback, useRef, useState } from "react";
 import { getOrCreateSessionId } from "@/lib/session";
 import { getWorkerUrl } from "@/lib/workerUrl";
+
+// Recover the precise AgentEvent discriminated union from @wasmagent/react's
+// own onEvent callback signature, without taking a direct dependency on
+// @wasmagent/core (the web bundle does not declare it). This stays a
+// type-only reference — zero runtime cost.
+type AgentEvent = Parameters<NonNullable<UseAgentRunOptions["onEvent"]>>[0];
 
 export interface TokenStats {
   inputTokens: number;
@@ -89,7 +95,17 @@ export interface ClarifyQuestion {
   options: string[];
 }
 
-// Minimal shape we need from AgentEvent — avoids importing @wasmagent/core in the browser bundle
+// AgentEvent is imported as a type-only symbol above — no runtime cost in
+// the browser bundle. The previous setup used a local AgentEventMinimal
+// shape and an `as any` cast at the useAgentRun call site (#013). Typing
+// onEvent against the real discriminated union lets TypeScript narrow
+// event.data inside each `if (ev.event === ...)` branch instead of forcing
+// a hand-rolled cast. The rawEvents state stays in the local minimal shape
+// so downstream components (Terminal, PreviewPane) keep their existing
+// permissive prop types unchanged — AgentEvent values are structurally
+// compatible with that shape (event: string is widened, data is a record).
+//
+// Minimal shape consumed by Terminal / PreviewPane via the `rawEvents` prop.
 interface AgentEventMinimal {
   event: string;
   data: Record<string, unknown>;
@@ -115,19 +131,14 @@ export function useAgent(
   const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarifyQuestion[] | null>(null);
   const statsRef = useRef(tokenStats);
 
-  const onEvent = useCallback((ev: AgentEventMinimal) => {
+  const onEvent = useCallback((ev: AgentEvent) => {
+    // AgentEvent satisfies AgentEventMinimal structurally — event is a
+    // string-literal union (assignable to `string`) and data is an object
+    // (assignable to `Record<string, unknown>`).
     setRawEvents((prev) => [...prev, ev]);
     if (ev.event === "model_done") {
-      const d = ev.data as {
-        modelId?: string;
-        inputTokens?: number;
-        outputTokens?: number;
-        cacheReadTokens?: number;
-        // New enriched fields from wasmagent TokenBudget
-        cacheHitRate?: number;
-        estimatedUsd?: number;
-        calls?: number;
-      };
+      // ev.data is now narrowed by the discriminated union — no manual cast.
+      const d = ev.data;
       setTokenStats((prev) => {
         const next: TokenStats = {
           // SEC-017 / UX bug 2026-06-17: previously rebuilt the whole object
@@ -154,8 +165,7 @@ export function useAgent(
 
   const { messages, status, isRunning, finalAnswer, run, abort, reset } = useAgentRun(
     `${workerUrl}/run`,
-    // biome-ignore lint/suspicious/noExplicitAny: useAgentRun onEvent callback type
-    { onEvent: onEvent as any, headers: () => ({ "X-Session-Id": getOrCreateSessionId() }) }
+    { onEvent, headers: () => ({ "X-Session-Id": getOrCreateSessionId() }) }
   );
 
   const submit = useCallback(
