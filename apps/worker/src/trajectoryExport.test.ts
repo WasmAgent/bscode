@@ -4,6 +4,7 @@ import {
   buildEvidenceManifest,
   buildRolloutRecord,
   redactPii,
+  resolveRunProvenance,
   toJsonl,
   validateRolloutRecord,
 } from "./trajectoryExport.js";
@@ -487,5 +488,59 @@ describe("buildAEPEvidence", () => {
     const r1 = await buildAEPEvidence({ ...base, run_id: "run-A" });
     const r2 = await buildAEPEvidence({ ...base, run_id: "run-B" });
     expect(r1.signature.sig).not.toBe(r2.signature.sig);
+  });
+
+  it("threads run-provenance fields from opts into the AEPRecord", async () => {
+    // Regression coverage for #12: buildAEPEvidence must populate the four
+    // AEP v0.2 run-provenance fields when the caller supplies them, so that
+    // downstream consumers see an anchor to the exact code, runtime, policy,
+    // and tool manifest in effect at run time.
+    const record = await buildAEPEvidence({
+      run_id: "run-provenance",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: true,
+      created_at_ms: 1_700_000_000_000,
+      repo_commit: "abcdef1234567890abcdef1234567890abcdef12",
+      runtime_version: "bscode-worker@9.9.9",
+      policy_bundle_digest: "a".repeat(64),
+      tool_manifest_digest: "b".repeat(64),
+    });
+    expect(record.repo_commit).toBe("abcdef1234567890abcdef1234567890abcdef12");
+    expect(record.runtime_version).toBe("bscode-worker@9.9.9");
+    expect(record.policy_bundle_digest).toBe("a".repeat(64));
+    expect(record.tool_manifest_digest).toBe("b".repeat(64));
+  });
+
+  it("falls back to env-resolved run-provenance when caller omits them", async () => {
+    // When neither opts nor env are set the record carries no anchor — that
+    // is the prior behaviour and remains valid against the v0.2 schema.
+    // When env vars ARE set, resolveRunProvenance() picks them up and the
+    // emitter threads them in. We test the env path directly so we don't
+    // leak env state into other tests.
+    const prevCommit = process.env.BSCODE_GIT_COMMIT;
+    const prevVersion = process.env.BSCODE_AGENT_VERSION;
+    process.env.BSCODE_GIT_COMMIT = "feedface" + "00".repeat(16);
+    process.env.BSCODE_AGENT_VERSION = "bscode-worker@1.0.0-env";
+    try {
+      const resolved = resolveRunProvenance();
+      expect(resolved.repo_commit).toBe("feedface" + "00".repeat(16));
+      expect(resolved.runtime_version).toBe("bscode-worker@1.0.0-env");
+
+      const record = await buildAEPEvidence({
+        run_id: "run-env-provenance",
+        model_id: "test-model",
+        tool_calls: toolCalls,
+        objective_passed: true,
+        created_at_ms: 1_700_000_000_000,
+      });
+      expect(record.repo_commit).toBe("feedface" + "00".repeat(16));
+      expect(record.runtime_version).toBe("bscode-worker@1.0.0-env");
+    } finally {
+      if (prevCommit === undefined) delete process.env.BSCODE_GIT_COMMIT;
+      else process.env.BSCODE_GIT_COMMIT = prevCommit;
+      if (prevVersion === undefined) delete process.env.BSCODE_AGENT_VERSION;
+      else process.env.BSCODE_AGENT_VERSION = prevVersion;
+    }
   });
 });

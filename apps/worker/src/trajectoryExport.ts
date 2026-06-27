@@ -349,6 +349,38 @@ function resolveSeedHex(): string {
 }
 
 /**
+ * Resolve run-provenance fields (AEP v0.2) from the process environment.
+ *
+ * Two of the four fields documented in @wasmagent/aep README §"Compliance
+ * fields for run-provenance traceability" can be resolved from env without
+ * additional input from the caller:
+ *
+ *   - `repo_commit`     ← BSCODE_GIT_COMMIT (CI bakes the deployed SHA)
+ *   - `runtime_version` ← BSCODE_AGENT_VERSION (package.json#version mirrored)
+ *
+ * The remaining two (`policy_bundle_digest`, `tool_manifest_digest`) require
+ * the digest to be computed at bundle/manifest load time and threaded in by
+ * the caller — we deliberately do NOT synthesise a fake digest here.
+ *
+ * In environments where neither env is set (local dev `bun run`) the function
+ * returns an object with both fields `undefined`, matching prior behaviour:
+ * the AEPRecord then carries no provenance anchor, which is still a valid
+ * schema-compliant record.
+ */
+export function resolveRunProvenance(): {
+  repo_commit?: string;
+  runtime_version?: string;
+} {
+  if (typeof process === "undefined") return {};
+  const repo_commit = process.env.BSCODE_GIT_COMMIT;
+  const runtime_version = process.env.BSCODE_AGENT_VERSION;
+  const out: { repo_commit?: string; runtime_version?: string } = {};
+  if (repo_commit && repo_commit.length > 0) out.repo_commit = repo_commit;
+  if (runtime_version && runtime_version.length > 0) out.runtime_version = runtime_version;
+  return out;
+}
+
+/**
  * Build a complete AEPRecord (aep/v0.2) from a completed rollout's tool-call trace.
  *
  * Populates:
@@ -383,6 +415,17 @@ export async function buildAEPEvidence(opts: {
   model_provider?: string;
   /** Optional: creation timestamp override (ms) — useful for deterministic tests. */
   created_at_ms?: number;
+  /**
+   * Run-provenance fields (AEP v0.2). Documented in @wasmagent/aep README
+   * §"Compliance fields for run-provenance traceability". Captured once at
+   * process boot / bundle load and threaded into every emitted record so
+   * each AEPRecord can be anchored back to the exact code, runtime, policy
+   * ruleset, and tool manifest in effect when it was produced.
+   */
+  repo_commit?: string;
+  runtime_version?: string;
+  policy_bundle_digest?: string;
+  tool_manifest_digest?: string;
 }): Promise<AEPRecord> {
   const seedHex = resolveSeedHex();
   const signer = createLocalSignerFromSeed(seedHex, "bscode-aep-key-v1");
@@ -391,6 +434,13 @@ export async function buildAEPEvidence(opts: {
     run_id: opts.run_id,
     model_id: opts.model_id,
     model_provider: opts.model_provider,
+    // Run-provenance fields — pass through whatever the caller resolved at
+    // boot. Each falls back to the process-level resolver (see
+    // resolveRunProvenance below) when the caller leaves them undefined.
+    repo_commit: opts.repo_commit ?? resolveRunProvenance().repo_commit,
+    runtime_version: opts.runtime_version ?? resolveRunProvenance().runtime_version,
+    policy_bundle_digest: opts.policy_bundle_digest,
+    tool_manifest_digest: opts.tool_manifest_digest,
     signer,
   });
 
