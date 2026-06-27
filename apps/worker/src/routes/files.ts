@@ -1,13 +1,14 @@
 import type { FileTreeManager } from "@wasmagent/core/beta";
 import type { Hono } from "hono";
 import type { AppConfig, KvStore } from "../platform.js";
+import type { SessionFileTreeStore } from "../sessionFileTreeStore.js";
 import { assertWorkspacePath, MAX_FILE_BYTES } from "../tools/index.js";
 
 const MAX_BULK_FILES = 100;
 const MAX_BULK_TOTAL_BYTES = 2 * 1024 * 1024;
 
 export interface FileRoutesDeps {
-  sessionFileTrees: Map<string, FileTreeManager>;
+  sessionFileTrees: SessionFileTreeStore<FileTreeManager>;
   resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvStore | undefined;
   sessionIdOf(
     c: { req: { header: (n: string) => string | undefined } },

@@ -18,6 +18,7 @@ import { mountMcpDemoRoutes } from "./routes/mcpDemo.js";
 import { mountModelRoutes } from "./routes/models.js";
 import { mountPromptRoutes } from "./routes/prompt.js";
 import { mountRunRoutes } from "./routes/run.js";
+import { SessionFileTreeStore } from "./sessionFileTreeStore.js";
 import { createSemanticIndexer, importGithubRepo, type SemanticIndexer } from "./tools/index.js";
 
 export type { AppConfig } from "./platform.js";
@@ -79,7 +80,21 @@ function checkpointerFor(config: AppConfig): InMemoryCheckpointer | KvCheckpoint
 // history. The header is required for all /files endpoints; requests
 // without it fall back to the legacy "default" bucket for backward
 // compatibility with existing CLI flows that pre-date the header.
-const sessionFileTrees = new Map<string, FileTreeManager>();
+//
+// #012: bounded with LRU eviction (default 100 sessions) so long-running
+// Node self-host / Bun dev server instances don't OOM. Each FileTreeManager
+// holds file contents + version history, so an unbounded Map was a slow leak.
+// Override via BSCODE_MAX_SESSION_FILE_TREES (default 100). Set to a large
+// number to retain the old unbounded-ish behaviour for benchmarks.
+const SESSION_FILE_TREES_CAP = (() => {
+  const raw = process.env.BSCODE_MAX_SESSION_FILE_TREES;
+  if (!raw) return 100;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 100;
+})();
+const sessionFileTrees = new SessionFileTreeStore<FileTreeManager>({
+  maxEntries: SESSION_FILE_TREES_CAP,
+});
 
 const SESSION_ID_RE = /^[a-zA-Z0-9._#-]{8,128}$/;
 

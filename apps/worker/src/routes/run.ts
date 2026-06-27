@@ -47,6 +47,7 @@ import {
   applyApprovalPolicy,
   PolicyPresets,
 } from "../policies/approvalPolicy.js";
+import type { SessionFileTreeStore } from "../sessionFileTreeStore.js";
 import {
   createDeleteFileTool,
   createGitHubPrTool,
@@ -207,7 +208,7 @@ export interface RunRoutesDeps {
     config?: AppConfig
   ): string;
   resolveFilesKv(sessionId: string | undefined, config: AppConfig): KvStore | undefined;
-  sessionFileTrees: Map<string, FileTreeManager>;
+  sessionFileTrees: SessionFileTreeStore<FileTreeManager>;
   indexerFor(c: { req: { header: (n: string) => string | undefined } }): SemanticIndexer;
   recordError(message: string, stack?: string, traceId?: string): void;
   fileTreeFor(
@@ -1265,7 +1266,7 @@ async function getRelevantFileContents(
   task: string,
   maxFiles = 5,
   sessionId: string | undefined = undefined,
-  sessionFileTrees: Map<string, FileTreeManager>
+  sessionFileTrees: SessionFileTreeStore<FileTreeManager>
 ): Promise<{ path: string; content: string }[]> {
   // Resolve a per-session FileTreeManager — falls back to "default"
   // for legacy callers that don't propagate the session id (e.g. CLI).
