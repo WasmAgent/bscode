@@ -144,4 +144,37 @@ describe("createRateLimiter", () => {
     const ctxB = makeCtx({ sessionId: "session-B" });
     expect((await runMiddleware(middleware, ctxB)).passed).toBe(true);
   });
+
+  it("serialises concurrent requests on the same key (regression for #011 TOCTOU)", async () => {
+    // KV that injects an artificial async gap between get() and put() so a
+    // naive read-then-write would let all 10 concurrent requests through.
+    class SlowKv extends MemKvStore {
+      override async get(key: string): Promise<string | null> {
+        const v = await super.get(key);
+        // Yield twice so other in-flight requests can interleave their reads
+        // before we get to put(). On the un-patched implementation this would
+        // cause every concurrent caller to read the same value.
+        await Promise.resolve();
+        await Promise.resolve();
+        return v;
+      }
+    }
+    const rateKv = new SlowKv();
+    // rpm=2, burst=1 → limit=3
+    const middleware = createRateLimiter({ rpm: 2, burst: 1, rateKv });
+    const sessionId = "session-concurrent";
+
+    // Fire 10 requests in parallel. At most `limit` (3) may pass.
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => {
+        const ctx = makeCtx({ sessionId });
+        return runMiddleware(middleware, ctx);
+      })
+    );
+
+    const passed = results.filter((r) => r.passed).length;
+    const blocked = results.filter((r) => !r.passed).length;
+    expect(passed).toBe(3);
+    expect(blocked).toBe(7);
+  });
 });

@@ -25,6 +25,19 @@ export interface RateLimiterOpts {
 // Warn at most once per process lifetime when KV is absent.
 let kvWarned = false;
 
+/**
+ * Per-key in-flight chain. Read-then-write against KvStore is not atomic, so
+ * two concurrent requests on the same session/bucket can both read the same
+ * counter and each write `count + 1`, undercounting by N-1. We serialise the
+ * read-then-write region per key by chaining on a shared Promise.
+ *
+ * Scope: same process only. On Cloudflare Workers each isolate carries its own
+ * chain; cross-isolate residual race ≤ N_isolates, which is acceptable because
+ * Workers KV is eventually consistent anyway. For Node self-host this fully
+ * eliminates the in-process race that was the actual issue (#011).
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
 function minuteBucket(): number {
   return Math.floor(Date.now() / 60_000);
 }
@@ -70,20 +83,38 @@ export function createRateLimiter(opts: RateLimiterOpts = {}) {
     const bucket = minuteBucket();
     const key = `rate:${sessionId}:${bucket}`;
 
-    // Read current counter.
-    const raw = await rateKv.get(key);
-    const count = raw ? Number(raw) : 0;
+    // Serialise the read-then-write region per key against concurrent requests
+    // in the same process. Without this, two requests can both read `count`
+    // and each write `count + 1`, allowing limit + N concurrent calls through.
+    const prev = inFlight.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    inFlight.set(key, gate);
+    try {
+      await prev;
 
-    if (count >= limit) {
-      const secondsUntilNextMinute = 60 - (Math.floor(Date.now() / 1000) % 60);
-      return c.json(
-        { error: "rate limit exceeded", retryAfterSeconds: secondsUntilNextMinute },
-        429
-      );
+      // Read current counter.
+      const raw = await rateKv.get(key);
+      const count = raw ? Number(raw) : 0;
+
+      if (count >= limit) {
+        const secondsUntilNextMinute = 60 - (Math.floor(Date.now() / 1000) % 60);
+        return c.json(
+          { error: "rate limit exceeded", retryAfterSeconds: secondsUntilNextMinute },
+          429
+        );
+      }
+
+      // Increment with 120s TTL so the key auto-expires two buckets later.
+      await rateKv.put(key, String(count + 1), { expirationTtl: 120 });
+    } finally {
+      release();
+      // Drop the entry only if no later request has chained on top of ours,
+      // so the Map does not grow unboundedly under churn.
+      if (inFlight.get(key) === gate) inFlight.delete(key);
     }
-
-    // Increment with 120s TTL so the key auto-expires two buckets later.
-    await rateKv.put(key, String(count + 1), { expirationTtl: 120 });
 
     return next();
   };
