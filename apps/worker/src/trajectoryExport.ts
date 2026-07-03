@@ -53,6 +53,8 @@ export interface RolloutProvenance {
   schema_version: "rollout-wire/v1";
   evidence_source: "client_reported";
   redaction_version: "bscode/pii-redact/v1";
+  /** SHA-256 of the full redacted JSONL batch (from EvidenceManifest.content_hash). */
+  batch_manifest_hash?: string;
 }
 
 // ── AEP re-exports (for consumers that import from trajectoryExport) ──────────
@@ -107,6 +109,7 @@ export function buildRolloutRecord(opts: {
   buildResult: BuildResultSnapshot | null;
   toolCallSequence?: ToolCallEvent[];
   finalAnswer?: string;
+  batchManifestHash?: string;
 }): RolloutWireRecord {
   const {
     jobId,
@@ -116,6 +119,7 @@ export function buildRolloutRecord(opts: {
     buildResult,
     toolCallSequence = [],
     finalAnswer = "",
+    batchManifestHash,
   } = opts;
 
   // Strict binary encoding: 'success' → 1, any failure → 0, no-build → 0 with status=unknown.
@@ -146,6 +150,7 @@ export function buildRolloutRecord(opts: {
       schema_version: "rollout-wire/v1",
       evidence_source: "client_reported",
       redaction_version: "bscode/pii-redact/v1",
+      ...(batchManifestHash ? { batch_manifest_hash: batchManifestHash } : {}),
     },
   };
   validateRolloutRecord(record);
