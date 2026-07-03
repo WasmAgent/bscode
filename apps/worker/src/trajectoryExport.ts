@@ -413,6 +413,8 @@ export async function buildAEPEvidence(opts: {
   output_refs?: OutputRef[];
   /** Optional: model provider string (e.g. "anthropic", "openai"). */
   model_provider?: string;
+  /** Optional: tools denied by policy/firewall — emitted as deny capability decisions. */
+  denied_tools?: string[];
   /** Optional: creation timestamp override (ms) — useful for deterministic tests. */
   created_at_ms?: number;
   /**
@@ -456,12 +458,14 @@ export async function buildAEPEvidence(opts: {
       const ev = toolCallEvents[i];
       const toolName = (ev.data as Record<string, unknown>).name as string | undefined;
       const isStateChanging = Boolean(toolName && STATE_CHANGING_TOOLS.has(toolName));
+      const isUntrusted = Boolean((ev.data as Record<string, unknown>).isUntrusted);
       emitter.addAction({
         action_id: `action-${i}`,
         tool_name: toolName ?? "unknown",
         state_changing: isStateChanging,
         evidence_refs: [],
         timestamp_ms: ev.timestamp_ms ?? Date.now() + i,
+        ...(isUntrusted ? { output_taint_labels: ["external", "user-supplied"] } : {}),
       });
     }
   }
@@ -503,6 +507,18 @@ export async function buildAEPEvidence(opts: {
         decision: "allow",
         reason_code: "auto_derived",
       });
+    }
+    // Emit deny decisions for tools blocked by policy/firewall.
+    if (opts.denied_tools) {
+      for (const name of opts.denied_tools) {
+        emitter.addCapabilityDecision({
+          capability: name,
+          subject: "bscode-agent",
+          resource: "bscode-workspace",
+          decision: "deny",
+          reason_code: "policy_denied",
+        });
+      }
     }
   }
 
