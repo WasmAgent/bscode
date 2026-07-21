@@ -7,6 +7,13 @@
 [![wasmagent-js](https://img.shields.io/badge/built%20on-wasmagent--js-646cff.svg)](https://github.com/WasmAgent/wasmagent-js)
 [![trace-pipeline](https://img.shields.io/badge/trains-trace--pipeline-orange.svg)](https://github.com/WasmAgent/trace-pipeline)
 
+| | |
+|---|---|
+| Status | Reference Workload |
+| Contract stability | Stable (evidence export API); Evolving (bench-v0 task set) |
+| Recommended for | Golden Path integration testing; AEP evidence generation |
+| Not recommended for | General-purpose coding IDE; Cursor/Claude Code replacement |
+
 bscode is **not** competing with Cursor, Claude Code, or Codex. It is:
 - The **reference deployment** for [wasmagent-js](https://github.com/WasmAgent/wasmagent-js)
 - A **real workload source**: WASM sandbox, durable checkpoints, multi-agent fan-out, visual verifier

@@ -10,6 +10,33 @@
 - A standalone product without wasmagent-js — all security/policy primitives come from `@wasmagent/*`
 - A public benchmark with 1000+ tasks yet — bscode-bench-v0 is 30 tasks, growing deliberately
 
+## Repository Boundaries
+
+**This repository owns:**
+- Reference deployment of `wasmagent-js` on Cloudflare Workers
+- Real coding-agent workloads (bscode-bench-v0: 30 tasks across tool-calling, policy, mcp-attack, long-horizon, build-repair)
+- AEP evidence bundle export (`GET /evidence/:runId`)
+- Rollout trace export (`GET /jobs/export`)
+- Visual verifier, Evidence Timeline UI
+- MCP attack demo (8 OWASP scenarios)
+- Golden Path reference fixtures: `fixtures/bench-v0/` (safe and malicious call examples)
+
+**Other repositories own — do not duplicate here:**
+
+| Capability | Owner |
+|---|---|
+| Runtime policy, MCP firewall, AEP signing | `wasmagent-js` — consume via `@wasmagent/*` |
+| AgentBOM / MCP Posture / Trust Passport specifications | `agent-trust-infra` |
+| Audit report generation, regulatory mapping | `open-agent-audit` |
+| Training-data admission, contamination audit | `trace-pipeline` |
+| Dynamic evaluation protocol, solver leaderboard | `fresharena` |
+
+**Allowed cross-repo patterns:**
+- All security and policy primitives come from `@wasmagent/*` — never reimplement MCP firewall logic locally.
+- AEP evidence bundles produced here are consumed by `open-agent-audit` via `@openagentaudit/adapters` (bscode adapter) — keep that adapter contract stable.
+- Rollout wire records (`rollout-wire/v1`) and `ComplianceEvalRecord` are exported to `trace-pipeline` — pin schema version against `wasmagent-js` releases.
+- bench-v0 fixtures serve as Golden Path reference inputs; maintain at least one stable safe-call and one malicious-call fixture per bench release.
+
 ## Test Commands
 
 **IMPORTANT: This project uses `bun test` (via turbo). Do NOT use `npx vitest`, `npm test`, or bare `bun test` from root.**
