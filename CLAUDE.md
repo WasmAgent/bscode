@@ -34,7 +34,7 @@
 **Allowed cross-repo patterns:**
 - All security and policy primitives come from `@wasmagent/*` — never reimplement MCP firewall logic locally.
 - AEP evidence bundles produced here are consumed by `open-agent-audit` via `@openagentaudit/adapters` (bscode adapter) — keep that adapter contract stable.
-- Rollout wire records (`rollout-wire/v1`) and `ComplianceEvalRecord` are exported to `trace-pipeline` — pin schema version against `wasmagent-js` releases.
+- Rollout wire records (`rollout-wire/v1`) and `ComplianceEvalRecord` are exported to `trace-pipeline` — pin schema version against `@wasmagent/protocol` releases (the canonical schema source).
 - bench-v0 fixtures serve as Golden Path reference inputs; maintain at least one stable safe-call and one malicious-call fixture per bench release.
 
 ## Test Commands
