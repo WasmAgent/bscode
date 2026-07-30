@@ -331,7 +331,7 @@ describe("buildAEPEvidence", () => {
     { event: "tool_result" as const, data: { exit_code: 0 }, timestamp_ms: 1003 },
   ];
 
-  it("returns a signed AEPRecord with schema_version aep/v0.2", async () => {
+  it("returns a signed AEPRecord with schema_version aep/v0.3", async () => {
     const record = await buildAEPEvidence({
       run_id: "run-aep-test-01",
       model_id: "test-model",
@@ -339,7 +339,7 @@ describe("buildAEPEvidence", () => {
       objective_passed: true,
       created_at_ms: 1_700_000_000_000,
     });
-    expect(record.schema_version).toBe("aep/v0.2");
+    expect(record.schema_version).toBe("aep/v0.3");
     expect(record.run_id).toBe("run-aep-test-01");
     expect(record.model_id).toBe("test-model");
   });
@@ -424,6 +424,42 @@ describe("buildAEPEvidence", () => {
     expect(record.capability_decisions[0].capability).toBe("bash");
     expect(record.capability_decisions[0].decision).toBe("allow");
     expect(record.capability_decisions[0].reason_code).toBe("auto_derived");
+    // AEP v0.3: an executed tool is an allow backed by a policy receipt.
+    expect(record.capability_decisions[0].approval_mode).toBe("policy-allow-with-receipt");
+  });
+
+  it("classifies side_effect_class and recording_mode per AEP v0.3", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-side-effect-test",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: null,
+      created_at_ms: 1_700_000_000_000,
+    });
+    // Fixture has one read_file (read-only) and one bash (shells out) call.
+    const readAction = record.actions.find((a) => a.tool_name === "read_file");
+    const bashAction = record.actions.find((a) => a.tool_name === "bash");
+    expect(readAction?.side_effect_class).toBe("read");
+    expect(readAction?.recording_mode).toBe("validation");
+    expect(bashAction?.side_effect_class).toBe("mutate-external");
+    expect(bashAction?.recording_mode).toBe("full");
+    // Run-level max severity is computed by the emitter across all actions.
+    expect(record.run_side_effect_class_max).toBe("mutate-external");
+  });
+
+  it("emits deny decisions with policy-deny-with-evidence approval_mode", async () => {
+    const record = await buildAEPEvidence({
+      run_id: "run-deny-test",
+      model_id: "test-model",
+      tool_calls: toolCalls,
+      objective_passed: null,
+      denied_tools: ["curl_exfiltrate"],
+      created_at_ms: 1_700_000_000_000,
+    });
+    const deny = record.capability_decisions.find((d) => d.decision === "deny");
+    expect(deny?.capability).toBe("curl_exfiltrate");
+    expect(deny?.approval_mode).toBe("policy-deny-with-evidence");
+    expect(deny?.deny_reason_class).toBe("policy-rule");
   });
 
   it("records budget_ledger with auto-derived tool_budget", async () => {
@@ -445,7 +481,13 @@ describe("buildAEPEvidence", () => {
       tool_calls: toolCalls,
       objective_passed: null,
       capability_decisions: [
-        { capability: "write_file", subject: "agent", resource: "main.ts", decision: "allow" },
+        {
+          capability: "write_file",
+          subject: "agent",
+          resource: "main.ts",
+          decision: "allow",
+          approval_mode: "policy-allow-with-receipt",
+        },
       ],
       verifier_results: [
         { verifier_id: "custom-verifier", passed: true, score: 0.9, claim_ids: ["c1"] },
