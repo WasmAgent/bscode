@@ -53,8 +53,8 @@ async function main() {
   });
 
   // ── Step 2: Validate structure ────────────────────────────────────────────────
-  if (record.schema_version !== "aep/v0.2") {
-    console.error("[test-aep-roundtrip] FAIL: schema_version is not aep/v0.2");
+  if (record.schema_version !== "aep/v0.3") {
+    console.error("[test-aep-roundtrip] FAIL: schema_version is not aep/v0.3");
     process.exit(1);
   }
   if (!record.signature || record.signature.sig === "UNSIGNED_PLACEHOLDER") {
@@ -91,7 +91,7 @@ async function main() {
       const fixtureLine = (fixtureContent as { default: string }).default.trim().split("\n")[0];
       const fixtureRecord = JSON.parse(fixtureLine);
       if (
-        fixtureRecord.schema_version !== "aep/v0.2" ||
+        fixtureRecord.schema_version !== "aep/v0.3" ||
         !fixtureRecord.signature ||
         fixtureRecord.signature.sig === "UNSIGNED_PLACEHOLDER"
       ) {

@@ -335,6 +335,49 @@ const STATE_CHANGING_TOOLS = new Set([
   "npm_publish",
 ]);
 
+// AEP v0.3 side-effect classification (README §"Side-Effect Classification").
+// Tools that cross the process/network boundary — their effects escape the
+// sandbox and are therefore the highest-severity, evidence-worthy actions.
+const NETWORK_EGRESS_TOOLS = new Set(["git_push", "npm_publish"]);
+// Tools that shell out — they can mutate anything reachable from the sandbox,
+// so we conservatively class them as external mutation.
+const MUTATE_EXTERNAL_TOOLS = new Set(["bash", "run_bash", "execute_bash"]);
+// Tools that mutate only local workspace state (file edits, local commit).
+const MUTATE_LOCAL_TOOLS = new Set(["write_file", "create_file", "delete_file", "git_commit"]);
+
+type SideEffectClass = "read" | "mutate-local" | "mutate-external" | "network-egress" | "unknown";
+
+/**
+ * Classify a tool's side-effect severity for AEP v0.3 `side_effect_class`.
+ * Unknown tool names fall back to "read" only when they are not in the
+ * state-changing set; anything state-changing but unclassified is "unknown"
+ * so the emitter's `run_side_effect_class_max` never under-reports risk.
+ */
+function classifySideEffect(toolName: string | undefined): SideEffectClass {
+  if (!toolName) return "unknown";
+  if (NETWORK_EGRESS_TOOLS.has(toolName)) return "network-egress";
+  if (MUTATE_EXTERNAL_TOOLS.has(toolName)) return "mutate-external";
+  if (MUTATE_LOCAL_TOOLS.has(toolName)) return "mutate-local";
+  if (STATE_CHANGING_TOOLS.has(toolName)) return "unknown";
+  return "read";
+}
+
+/**
+ * Choose an AEP v0.3 `recording_mode` for an action (README §"Recording
+ * Modes"): capture full content for high-risk actions (external mutation,
+ * network egress, or tainted input), a delta for local mutations, and
+ * digests-only ("validation") for read-only actions.
+ */
+function recordingModeFor(
+  sideEffect: SideEffectClass,
+  isUntrusted: boolean
+): "validation" | "delta" | "full" {
+  if (isUntrusted) return "full";
+  if (sideEffect === "mutate-external" || sideEffect === "network-egress") return "full";
+  if (sideEffect === "mutate-local") return "delta";
+  return "validation";
+}
+
 /** Default AEP seed used in development / CI. Override with BSCODE_AEP_SEED env var. */
 const DEV_AEP_SEED = "0".repeat(64);
 
@@ -464,13 +507,24 @@ export async function buildAEPEvidence(opts: {
       const toolName = (ev.data as Record<string, unknown>).name as string | undefined;
       const isStateChanging = Boolean(toolName && STATE_CHANGING_TOOLS.has(toolName));
       const isUntrusted = Boolean((ev.data as Record<string, unknown>).isUntrusted);
+      // AEP v0.3: classify the action's blast radius and pick a recording mode
+      // proportional to its risk (README §"Side-Effect Classification" /
+      // §"Recording Modes"). Tainted inputs force full capture.
+      const sideEffect = classifySideEffect(toolName);
       emitter.addAction({
         action_id: `action-${i}`,
         tool_name: toolName ?? "unknown",
         state_changing: isStateChanging,
+        side_effect_class: sideEffect,
+        recording_mode: recordingModeFor(sideEffect, isUntrusted),
         evidence_refs: [],
         timestamp_ms: ev.timestamp_ms ?? Date.now() + i,
-        ...(isUntrusted ? { output_taint_labels: ["external", "user-supplied"] } : {}),
+        ...(isUntrusted
+          ? {
+              input_taint_labels: ["external", "user-supplied"],
+              output_taint_labels: ["external", "user-supplied"],
+            }
+          : {}),
       });
     }
   }
@@ -510,6 +564,9 @@ export async function buildAEPEvidence(opts: {
         subject: "bscode-agent",
         resource: "bscode-workspace",
         decision: "allow",
+        // AEP v0.3: the tool actually executed, so the allow is backed by a
+        // policy receipt rather than an interactive one-shot approval.
+        approval_mode: "policy-allow-with-receipt",
         reason_code: "auto_derived",
       });
     }
@@ -521,6 +578,10 @@ export async function buildAEPEvidence(opts: {
           subject: "bscode-agent",
           resource: "bscode-workspace",
           decision: "deny",
+          // AEP v0.3: the firewall denied on a policy rule and the record
+          // itself is the evidence of that denial.
+          approval_mode: "policy-deny-with-evidence",
+          deny_reason_class: "policy-rule",
           reason_code: "policy_denied",
         });
       }
