@@ -1,0 +1,8 @@
+version: 1
+checks:
+  - name: typecheck
+    run: bun run typecheck
+  - name: build
+    run: bun run build
+  - name: test
+    run: bun run test
