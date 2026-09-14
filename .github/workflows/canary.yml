@@ -32,7 +32,11 @@ jobs:
         env:
           PAYLOAD: ${{ toJson(github.event.client_payload) }}
         run: |
-          echo "::notice::repository_dispatch payload: producer=${{ github.event.client_payload.producer_repo }} sha=${{ github.event.client_payload.producer_sha }} package=${{ github.event.client_payload.package }} version=${{ github.event.client_payload.package_version }}"
+          # BS-5: producer repo + SHA + package + version identify the exact
+          # upstream artifact that triggered this canary. `version` is the
+          # canonical key; `package_version` is accepted for older producers.
+          PKG_VERSION="${{ github.event.client_payload.version || github.event.client_payload.package_version }}"
+          echo "::notice::repository_dispatch payload: producer=${{ github.event.client_payload.producer_repo }} sha=${{ github.event.client_payload.producer_sha }} package=${{ github.event.client_payload.package }} version=${PKG_VERSION}"
           echo "$PAYLOAD" > dispatch-provenance.json
 
       - name: Resolve latest published @wasmagent packages

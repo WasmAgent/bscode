@@ -26,6 +26,9 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # O4: deploy from the exact source SHA of this run, never a moving ref.
+          ref: ${{ github.sha }}
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
@@ -45,6 +48,25 @@ jobs:
             echo "state=not-configured" >> "$GITHUB_OUTPUT"
             echo "::notice::Deployment not configured (BSCODE_DEPLOY_ENABLED != true) — explicit SKIPPED, not DEPLOYED."
           fi
+
+      - name: Record deployment provenance (O4)
+        if: steps.intent.outputs.state == 'expected'
+        run: |
+          set -euo pipefail
+          {
+            echo "source_sha=${GITHUB_SHA}"
+            echo "toolchain_bun=$(bun --version)"
+            echo "bun_lock_sha256=$(sha256sum bun.lock | cut -d' ' -f1)"
+            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } | tee deployment-provenance.txt
+
+      - name: Upload deployment provenance (O4)
+        if: steps.intent.outputs.state == 'expected'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: deployment-provenance-${{ github.sha }}
+          path: deployment-provenance.txt
+          retention-days: 90
 
       - name: Verify production configuration (BS-4)
         if: steps.intent.outputs.state == 'expected'

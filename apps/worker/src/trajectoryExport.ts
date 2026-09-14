@@ -484,6 +484,9 @@ export async function buildAEPEvidence(opts: {
     run_id: opts.run_id,
     model_id: opts.model_id,
     model_provider: opts.model_provider,
+    // BS-2: emit the current certified AEP schema family (aep/v0.5). The
+    // emitter otherwise defaults to the legacy v0.4 stamp.
+    schemaVersion: "aep/v0.5",
     // Run-provenance fields — pass through whatever the caller resolved at
     // boot. Each falls back to the process-level resolver (see
     // resolveRunProvenance below) when the caller leaves them undefined.

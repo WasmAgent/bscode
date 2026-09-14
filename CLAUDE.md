@@ -26,7 +26,7 @@
 | Capability | Owner |
 |---|---|
 | Runtime policy, MCP firewall, AEP signing | `wasmagent-js` — consume via `@wasmagent/*` |
-| AgentBOM / MCP Posture / Trust Passport specifications | `agent-trust-infra` |
+| AgentBOM / MCP Posture / Trust Passport specifications | `wasmagent-protocol` (schemas); `agentbom` (AgentBOM/MCP Posture); `open-agent-audit` (Trust Passport product) — `agent-trust-infra` is archived |
 | Audit report generation, regulatory mapping | `open-agent-audit` |
 | Training-data admission, contamination audit | `trace-pipeline` |
 | Dynamic evaluation protocol, solver leaderboard | `fresharena` |

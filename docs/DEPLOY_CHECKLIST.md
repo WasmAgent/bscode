@@ -33,27 +33,33 @@ Optional but recommended:
 - `BSCODE_CLIENT_TOKEN` — any random string (e.g. `openssl rand -hex 32`); gates POST /run in production
 - `ANTHROPIC_API_KEY` — enables Claude models
 
-### Step 3 — Set repository variable (< 1 min)
+### Step 3 — Set repository variables (< 1 min)
 
 In **Settings → Secrets and variables → Actions → Variables**:
 
 | Variable | Value |
 |---|---|
-| `BSCODE_WORKER_URL` | Leave blank for first deploy; update after step 4 with your worker URL |
+| `BSCODE_DEPLOY_ENABLED` | `true` to declare a deployment is expected |
+| `BSCODE_WORKER_URL` | Your real worker URL, e.g. `https://bscode-worker.<account>.workers.dev` |
 
-### Step 4 — Push to main → CI deploys automatically (< 5 min)
+`deploy.yml` requires `BSCODE_WORKER_URL` and rejects any `*.example.com`
+value. If `BSCODE_DEPLOY_ENABLED` is unset, deployment reports
+**NOT-CONFIGURED / SKIPPED** (not DEPLOYED). If it is `true` and config is
+missing, the deploy **fails**.
+
+### Step 4 — Push to main → deploy.yml deploys (< 5 min)
 
 ```bash
 git commit --allow-empty -m "chore: trigger initial deploy"
 git push
 ```
 
-CI runs: typecheck → branding check → tests → build → deploy worker → deploy web.
+`ci.yml` runs typecheck → branding check → tests → build (it never deploys).
+`deploy.yml` then runs its own build and deploys worker + web, reporting
+DEPLOYED only when the deploy steps actually executed.
 
-After the deploy step completes:
-1. Go to Cloudflare dashboard → Workers & Pages → `bscode-worker` → copy the `*.workers.dev` URL
-2. Update the `BSCODE_WORKER_URL` repository variable to that URL
-3. Re-run the CI deploy job (or push another commit)
+If you don't know your worker URL yet, deploy the worker first, copy its
+`*.workers.dev` URL, set `BSCODE_WORKER_URL`, then re-run `deploy.yml`.
 
 ### Verification checklist
 
