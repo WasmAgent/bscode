@@ -48,7 +48,7 @@ jobs:
     name: Org compat (bscode, internal)
     needs: changes
     if: needs.changes.outputs.relevant == 'true'
-    uses: WasmAgent/.github/.github/workflows/reusable-compat-check.yml@13bcca67098052c9591353127fac39800cd9876c
+    uses: WasmAgent/.github/.github/workflows/reusable-compat-check.yml@baad7dbdbc7296b6fe3113a84693b867bacfeab3
     with:
       repo: bscode
       candidate_sha: ${{ github.event.pull_request.head.sha || github.sha }}
