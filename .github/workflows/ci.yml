@@ -32,6 +32,21 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # BS-2 / BS-5: a semver range is not evidence of what was tested. Record
+      # the exact frozen lock hash and the resolved @wasmagent versions that
+      # this job actually ran against.
+      - name: Record locked dependency resolution (BS-2/BS-5)
+        run: |
+          set -euo pipefail
+          {
+            echo "### Locked dependency resolution (BS-2/BS-5)"
+            echo ""
+            echo '```'
+            echo "bun.lock sha256: $(sha256sum bun.lock | cut -d' ' -f1)"
+            (cd apps/worker && bun pm ls) | grep -E "@wasmagent/[a-z-]+@" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Branding check
         run: node scripts/check-branding.mjs
 
@@ -86,10 +101,11 @@ jobs:
   # CI green is NOT deploy green. Deployment lives in deploy.yml with
   # environment: production and explicit configured/not-configured semantics.
 
-  # Nightly: verify bscode installs cleanly from published npm packages
-  # and that no workspace:* leaked into the published tarballs.
-  nightly-npm-install:
-    name: Nightly (npm published packages)
+  # BS-5 locked lane: verify bscode installs cleanly from published npm
+  # packages (frozen lock) and that the worker tests pass against that exact
+  # resolved set. This is the certified/locked counterpart to canary.yml.
+  locked-published:
+    name: Locked published packages
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
 
@@ -108,3 +124,11 @@ jobs:
       - name: Typecheck (worker)
         working-directory: apps/worker
         run: bunx tsc --noEmit
+
+      - name: Test (worker)
+        working-directory: apps/worker
+        run: bun run test
+
+      - name: Test (web)
+        working-directory: apps/web
+        run: bun run test

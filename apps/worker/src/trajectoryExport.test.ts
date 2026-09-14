@@ -331,7 +331,7 @@ describe("buildAEPEvidence", () => {
     { event: "tool_result" as const, data: { exit_code: 0 }, timestamp_ms: 1003 },
   ];
 
-  it("returns a signed AEPRecord with schema_version aep/v0.3", async () => {
+  it("returns a signed AEPRecord with schema_version aep/v0.5", async () => {
     const record = await buildAEPEvidence({
       run_id: "run-aep-test-01",
       model_id: "test-model",
@@ -339,7 +339,7 @@ describe("buildAEPEvidence", () => {
       objective_passed: true,
       created_at_ms: 1_700_000_000_000,
     });
-    expect(record.schema_version).toBe("aep/v0.3");
+    expect(record.schema_version).toBe("aep/v0.5");
     expect(record.run_id).toBe("run-aep-test-01");
     expect(record.model_id).toBe("test-model");
   });
@@ -352,10 +352,10 @@ describe("buildAEPEvidence", () => {
       objective_passed: true,
       created_at_ms: 1_700_000_000_000,
     });
-    expect(record.signature.alg).toBe("ed25519");
-    expect(record.signature.key_id).toBe("bscode-aep-key-v1");
-    expect(record.signature.sig).not.toBe("UNSIGNED_PLACEHOLDER");
-    expect(record.signature.sig.length).toBeGreaterThan(10);
+    expect(record.signature!.alg).toBe("ed25519");
+    expect(record.signature!.key_id).toBe("bscode-aep-key-v1");
+    expect(record.signature!.sig).not.toBe("UNSIGNED_PLACEHOLDER");
+    expect(record.signature!.sig.length).toBeGreaterThan(10);
   });
 
   it("auto-derives actions from tool_call events", async () => {
@@ -517,7 +517,7 @@ describe("buildAEPEvidence", () => {
     const r1 = await buildAEPEvidence(opts);
     const r2 = await buildAEPEvidence(opts);
     // Same seed + same input → same canonical bytes → same signature
-    expect(r1.signature.sig).toBe(r2.signature.sig);
+    expect(r1.signature!.sig).toBe(r2.signature!.sig);
   });
 
   it("signature differs when run_id changes", async () => {
@@ -529,7 +529,7 @@ describe("buildAEPEvidence", () => {
     };
     const r1 = await buildAEPEvidence({ ...base, run_id: "run-A" });
     const r2 = await buildAEPEvidence({ ...base, run_id: "run-B" });
-    expect(r1.signature.sig).not.toBe(r2.signature.sig);
+    expect(r1.signature!.sig).not.toBe(r2.signature!.sig);
   });
 
   it("threads run-provenance fields from opts into the AEPRecord", async () => {
