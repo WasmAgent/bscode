@@ -12,14 +12,13 @@ on:
     branches: [main]
   # N2-P1-09: deployment workflow/config changes must pass a PR-safe dry-run
   # validation. The real deploy job below is gated to non-PR events.
+  #
+  # Required-check architecture (N3-P1-03): the pull_request trigger has no
+  # `paths:` filter (which would leave a required check Expected/Pending
+  # forever). Relevance is detected in `changes`, `deploy-dry-run` runs only
+  # when relevant, and `deploy-dry-run-summary` always emits the stable required
+  # check "Deploy dry-run".
   pull_request:
-    paths:
-      - ".github/workflows/deploy.yml"
-      - "apps/worker/wrangler*"
-      - "apps/worker/package.json"
-      - "apps/web/wrangler*"
-      - "apps/web/package.json"
-      - "bun.lock"
   workflow_dispatch:
 
 permissions:
@@ -30,6 +29,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  changes:
+    name: Detect deploy-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.detect.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - id: detect
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$base"...HEAD | grep -qE '(^\.github/workflows/deploy\.yml$|^apps/worker/wrangler|^apps/worker/package\.json$|^apps/web/wrangler|^apps/web/package\.json$|^bun\.lock$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
     name: Deploy to production
     if: github.event_name != 'pull_request'
@@ -131,8 +153,9 @@ jobs:
   # worker bundle is built with `wrangler deploy --dry-run` (no credentials, no
   # network deploy) so a broken deploy config fails before merge.
   deploy-dry-run:
-    name: Deploy dry-run
-    if: github.event_name == 'pull_request'
+    name: Deploy dry-run (internal)
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -146,3 +169,20 @@ jobs:
 
       - name: Worker bundle dry-run (no deploy)
         run: bun --filter @bscode/worker build
+
+  deploy-dry-run-summary:
+    name: Deploy dry-run
+    needs: [changes, deploy-dry-run]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate dry-run result
+        run: |
+          set -euo pipefail
+          result="${{ needs.deploy-dry-run.result }}"
+          echo "Detected relevance: ${{ needs.changes.outputs.relevant }}"
+          echo "Deploy dry-run result: ${result}"
+          if [ "${result}" = "failure" ] || [ "${result}" = "cancelled" ]; then
+            echo "::error::deploy dry-run did not pass (${result})"
+            exit 1
+          fi
