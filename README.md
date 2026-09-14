@@ -256,3 +256,5 @@ bscode is intentionally **not**:
 ## License
 
 [Apache-2.0](./LICENSE) — © bscode contributors.
+
+<!-- n4 verify irrelevant-path required-summary behavior -->
