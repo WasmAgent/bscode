@@ -10,10 +10,10 @@
  * or Cloudflare KV (production). API keys encrypted with AES-256-GCM before storage.
  */
 import type { Model } from "@wasmagent/core";
-import { OpenAIModel } from "@wasmagent/core";
 import { AnthropicModel } from "@wasmagent/model-anthropic";
 import { DeepSeekModel } from "@wasmagent/model-deepseek";
 import { DoubaoModel } from "@wasmagent/model-doubao";
+import { OpenAIModel } from "@wasmagent/model-openai";
 import { ZhipuModel } from "@wasmagent/model-zhipu";
 import type { AppConfig, KvStore } from "../platform.js";
 

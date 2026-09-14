@@ -4,7 +4,9 @@
  * Verifies the contract from approvalPolicy.ts:
  *   - default verdict applies when no rules match
  *   - first matching rule decides; later rules don't get a vote
- *   - path matching is prefix-based (eg "src" matches "src/foo.ts")
+ *   - path matching is segment-aware: a rule path matches itself or a
+ *     directory beneath it ("src" matches "src/foo.ts"; ".env" matches ".env"
+ *     and ".env/…" but NOT the sibling ".env.local")
  *   - op filtering and minSizeChars filtering compose with paths
  *   - applyApprovalPolicy wraps write/patch/delete/rename tools and
  *     leaves unrelated tools alone
@@ -57,15 +59,26 @@ describe("ApprovalPolicy", () => {
     expect(policy.needsApproval({ op: "write", path: "src/foo.ts", sizeChars: 0 })).toBe(true);
   });
 
-  it("path matching is prefix-based", () => {
+  it("path matching is segment-aware", () => {
     const policy = new ApprovalPolicy({
       defaultVerdict: "allow",
       rules: [{ id: ".env-block", match: { paths: [".env"] }, verdict: "require" }],
     });
     expect(policy.needsApproval({ op: "write", path: ".env", sizeChars: 0 })).toBe(true);
-    // Both ".env.local" (same-prefix sibling, single string) and "src/foo.ts" handled correctly.
-    expect(policy.needsApproval({ op: "write", path: ".env.local", sizeChars: 0 })).toBe(true);
+    // Segment-aware (core v3): ".env" matches itself and ".env/…", but not the
+    // sibling ".env.local"; list siblings explicitly (see PolicyPresets.balanced).
+    expect(policy.needsApproval({ op: "write", path: ".env.local", sizeChars: 0 })).toBe(false);
     expect(policy.needsApproval({ op: "write", path: "src/foo.ts", sizeChars: 0 })).toBe(false);
+
+    const dirPolicy = new ApprovalPolicy({
+      defaultVerdict: "allow",
+      rules: [{ id: "src-dir", match: { paths: ["src"] }, verdict: "require" }],
+    });
+    expect(dirPolicy.needsApproval({ op: "write", path: "src/foo.ts", sizeChars: 0 })).toBe(true);
+    expect(dirPolicy.needsApproval({ op: "write", path: "src", sizeChars: 0 })).toBe(true);
+    expect(dirPolicy.needsApproval({ op: "write", path: "srclib/foo.ts", sizeChars: 0 })).toBe(
+      false
+    );
   });
 
   it("op filter narrows a rule to specific operations", () => {

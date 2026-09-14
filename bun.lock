@@ -6,7 +6,7 @@
       "name": "bscode",
       "dependencies": {
         "@wasmagent/aep": "^2.9.0",
-        "@wasmagent/mcp-server": "1.1.0",
+        "@wasmagent/mcp-server": "^1.1.16",
         "@xterm/addon-fit": "^0.11.0",
         "@xterm/xterm": "^6.0.0",
         "diff": "^9.0.0",
@@ -55,19 +55,20 @@
         "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
         "@modelcontextprotocol/sdk": ">=1.7.0",
         "@wasmagent/aep": "^2.9.0",
-        "@wasmagent/agent-prompts": "^1.0.0",
-        "@wasmagent/core": "^1.0.0",
-        "@wasmagent/kernel-pyodide": "^1.0.0",
-        "@wasmagent/kernel-quickjs": "^1.0.0",
-        "@wasmagent/kernel-remote": "^1.0.0",
-        "@wasmagent/mcp-server": "1.1.0",
-        "@wasmagent/model-anthropic": "^1.0.0",
-        "@wasmagent/model-deepseek": "^1.0.0",
-        "@wasmagent/model-doubao": "^1.0.0",
-        "@wasmagent/model-openai": "^1.0.0",
-        "@wasmagent/model-zhipu": "^1.0.0",
-        "@wasmagent/tools-browser": "^1.0.0",
-        "@wasmagent/tools-rag": "^1.0.0",
+        "@wasmagent/agent-prompts": "^1.0.3",
+        "@wasmagent/core": "^3.8.0",
+        "@wasmagent/kernel-pyodide": "^1.0.17",
+        "@wasmagent/kernel-quickjs": "^1.2.14",
+        "@wasmagent/kernel-remote": "^1.3.18",
+        "@wasmagent/mcp-server": "^1.1.16",
+        "@wasmagent/model-anthropic": "^2.0.10",
+        "@wasmagent/model-deepseek": "^2.0.10",
+        "@wasmagent/model-doubao": "^2.0.10",
+        "@wasmagent/model-openai": "^2.0.10",
+        "@wasmagent/model-zhipu": "^2.0.10",
+        "@wasmagent/models": "^2.0.10",
+        "@wasmagent/tools-browser": "^1.0.17",
+        "@wasmagent/tools-rag": "^1.0.17",
         "diff": "^9.0.0",
         "hono": "^4.6.0",
         "pyodide": "0.29.4",
@@ -590,7 +591,7 @@
 
     "@wasmagent/agent-prompts": ["@wasmagent/agent-prompts@1.0.3", "", {}, "sha512-2AZSdY2yx06lUBsBAk5uHho5DWUdPkaZy07fOcFn/0Q/m/4lmWqNm4kA9xN44MJ34ztbAGIJ9ygMe89e/Bplkg=="],
 
-    "@wasmagent/core": ["@wasmagent/core@1.0.3", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-QpzYh815S9W07yYEnuEtGlmTvpuSLg7wht+rhpyXmhwOHOMkmyawJrwGomDFaUCem5cWuHjrgz1YTv/XM6PVvw=="],
+    "@wasmagent/core": ["@wasmagent/core@3.8.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "@wasmagent/protocol": "^0.1.7", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-8txLroHZ3QT+as6Q63JDPN7HIqLx+Vnfn2hANe3JnuG+QtpGVmye6mUnOIO6mTRD2agXBBzewbTz6wt/TMsMQw=="],
 
     "@wasmagent/kernel-pyodide": ["@wasmagent/kernel-pyodide@1.0.17", "", { "dependencies": { "@wasmagent/core": "^3.8.0" }, "peerDependencies": { "pyodide": ">=0.26.0" } }, "sha512-schcnuzh2Iqhs+GLI2mgqvQFem5wzAXtFo6ex70VJ8ZOnYK+1lqkNlpeita0ZDx1T8vnPr36HD+5bfRCPeMb/Q=="],
 
@@ -598,17 +599,19 @@
 
     "@wasmagent/kernel-remote": ["@wasmagent/kernel-remote@1.3.18", "", { "dependencies": { "@wasmagent/core": "^3.8.0" }, "peerDependencies": { "e2b": ">=1.0.0" }, "optionalPeers": ["e2b"] }, "sha512-YWfRN7N5vXAmAEmYuguy9jkYiTUCAI4IPXDZQyt460J2xah4UybZvuRjAmASE43bIPmukAh4s6mlTg/Oa+MoOw=="],
 
-    "@wasmagent/mcp-server": ["@wasmagent/mcp-server@1.1.0", "", { "dependencies": { "@wasmagent/core": "^1.0.3" }, "bin": { "wasmagent-mcp-server": "dist/stdio.js" } }, "sha512-h2f8wbeD9+4XGgRvwzO68n4H7EPDHC+XUs0DczMEabfUV1G1YNE8BEYGCmRaK4ptdEFaeEzYZYjNKKvyoR2sww=="],
+    "@wasmagent/mcp-server": ["@wasmagent/mcp-server@1.1.16", "", { "dependencies": { "@wasmagent/core": "^3.8.0" }, "bin": { "wasmagent-mcp-server": "dist/stdio.js" } }, "sha512-jvNHqR4K2380Rs5AD9/USHEyf3Twm9bjG9ufT2+aOWnAKC+O4kcexf1G27aXM3QHntD1Bv1Bn+gyuCIK3Dl0MQ=="],
 
-    "@wasmagent/model-anthropic": ["@wasmagent/model-anthropic@1.0.3", "", { "dependencies": { "@wasmagent/core": "^1.0.3" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.55.0" } }, "sha512-iCu2V/nzXL00gVVKsUZ9Yckf7WwSLKqVt/nQGF2JywDzQ66k8snniK0pn0LELRNjJ0ErdEOYky9Tt7P9Yleg3g=="],
+    "@wasmagent/model-anthropic": ["@wasmagent/model-anthropic@2.0.10", "", { "dependencies": { "@wasmagent/models": "^2.0.10" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.55.0" } }, "sha512-WdFPfA8/21nJf2oLJo8+6XmmzEuStW4WzZRSjAyxiiOlF4LauU94tBf2JIk6TnV0n2vMoay0tNbImVGZwmF7RA=="],
 
-    "@wasmagent/model-deepseek": ["@wasmagent/model-deepseek@1.0.3", "", { "dependencies": { "@wasmagent/core": "^1.0.3" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-V0nTtMnejnF8/Lycv/JcruUwufrhUIbfOuXKGcIZoacP1ps8Asca7OyKCyB6TLMqItZtfIseExH/YTgUctQHlQ=="],
+    "@wasmagent/model-deepseek": ["@wasmagent/model-deepseek@2.0.10", "", { "dependencies": { "@wasmagent/models": "^2.0.10" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-enlaC0mfUqhiZBnd+YHB1HlmU7ITI3zCKn40/Sl3LVCvyPcwO1KqhlowFSCrFT5RCRDWvC1uby1TIDCPO0fkBg=="],
 
-    "@wasmagent/model-doubao": ["@wasmagent/model-doubao@1.0.3", "", { "dependencies": { "@wasmagent/core": "^1.0.3" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-k1KU7GDtvL4DY8nyzVGkJflm82ua4kW5j8p6X+QFuvqYRd9/B4RwOrw+J6jyhKe9P6l8Rqk5v3zdXuZKRhVRKQ=="],
+    "@wasmagent/model-doubao": ["@wasmagent/model-doubao@2.0.10", "", { "dependencies": { "@wasmagent/models": "^2.0.10" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-snU1BWksrjCqK9FHo5S3lBQ9t4spExB9hKaHP/HdKBgeS/60HTD5zF8mUyv0xOpW98GuA2D5B1G2n1z2I7z/Sg=="],
 
-    "@wasmagent/model-openai": ["@wasmagent/model-openai@1.0.3", "", { "dependencies": { "@wasmagent/core": "^1.0.3" }, "peerDependencies": { "openai": ">=4.90.0" } }, "sha512-+OjcsPicZoqw7Zfec9M3JkearUxd2YL/Fgb6TodSqjps6YYWHGcERd11xGh1PmPYIkzv54vcKtkwFqQN1CRknQ=="],
+    "@wasmagent/model-openai": ["@wasmagent/model-openai@2.0.10", "", { "dependencies": { "@wasmagent/models": "^2.0.10" }, "peerDependencies": { "openai": ">=4.90.0" } }, "sha512-vhaQrsVaRw/MXrGBdQ15ky721zXURVe5JMGQIu5pH7S45VMcupEn7sSjIlAoKPpN6dm6gTEooOJ6Zbe0hjA3FQ=="],
 
-    "@wasmagent/model-zhipu": ["@wasmagent/model-zhipu@1.0.3", "", { "dependencies": { "@wasmagent/core": "^1.0.3" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-1gbTscij8aeFUwZkvWy1wivvmkGMLxTOCqrxUxLOT2sQab7ia89NDrxWwAI/7Zrg9LaNIbX/6rtkZZSTijW0xQ=="],
+    "@wasmagent/model-zhipu": ["@wasmagent/model-zhipu@2.0.10", "", { "dependencies": { "@wasmagent/models": "^2.0.10" }, "peerDependencies": { "openai": ">=4.80.0" } }, "sha512-8wG9ZVPaUEc/n7h3Eh97rgXBtW1keWh0xwleO3KqlEolVxGv18gr7DiudiuMvErGPQzV6VEl1EOQrFxaQvddXg=="],
+
+    "@wasmagent/models": ["@wasmagent/models@2.0.10", "", { "dependencies": { "@wasmagent/core": "^3.8.0" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.55.0", "openai": ">=4.80.0" }, "optionalPeers": ["@anthropic-ai/sdk", "openai"] }, "sha512-SrCZvRb2SZ1Pl4lPYHxnUi/SW3bxlMEY//Rm17tteIR/3EKpi/wfF6zoiAU5vN5bBrny9Pq+0GAWjM8F8//i1g=="],
 
     "@wasmagent/protocol": ["@wasmagent/protocol@0.1.10", "", { "bin": { "wasmagent-protocol": "bin/cli.js" } }, "sha512-mnJVyK7KvbrXxJ+H0eaDDMBxzqCE6cd4RIoZWm8citfHROA1/KRb3Qr88jUQrYtPv+BbqJtniT2+cuZ3TzuwvA=="],
 
@@ -1373,18 +1376,6 @@
     "@testing-library/dom/dom-accessibility-api": ["dom-accessibility-api@0.5.16", "", {}, "sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg=="],
 
     "@types/node-fetch/@types/node": ["@types/node@25.9.4", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-dszCsrKb5U7ZsVZBWiHFklTloVl0mSEnWH/iZXfZUlI4rzCUnsvGmgqfuVRHL54ugE7/wRuxEIXRa2iMZ+BG6g=="],
-
-    "@wasmagent/kernel-pyodide/@wasmagent/core": ["@wasmagent/core@3.8.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "@wasmagent/protocol": "^0.1.7", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-8txLroHZ3QT+as6Q63JDPN7HIqLx+Vnfn2hANe3JnuG+QtpGVmye6mUnOIO6mTRD2agXBBzewbTz6wt/TMsMQw=="],
-
-    "@wasmagent/kernel-quickjs/@wasmagent/core": ["@wasmagent/core@3.8.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "@wasmagent/protocol": "^0.1.7", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-8txLroHZ3QT+as6Q63JDPN7HIqLx+Vnfn2hANe3JnuG+QtpGVmye6mUnOIO6mTRD2agXBBzewbTz6wt/TMsMQw=="],
-
-    "@wasmagent/kernel-remote/@wasmagent/core": ["@wasmagent/core@3.8.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "@wasmagent/protocol": "^0.1.7", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-8txLroHZ3QT+as6Q63JDPN7HIqLx+Vnfn2hANe3JnuG+QtpGVmye6mUnOIO6mTRD2agXBBzewbTz6wt/TMsMQw=="],
-
-    "@wasmagent/react/@wasmagent/core": ["@wasmagent/core@3.8.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "@wasmagent/protocol": "^0.1.7", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-8txLroHZ3QT+as6Q63JDPN7HIqLx+Vnfn2hANe3JnuG+QtpGVmye6mUnOIO6mTRD2agXBBzewbTz6wt/TMsMQw=="],
-
-    "@wasmagent/tools-browser/@wasmagent/core": ["@wasmagent/core@3.8.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "@wasmagent/protocol": "^0.1.7", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-8txLroHZ3QT+as6Q63JDPN7HIqLx+Vnfn2hANe3JnuG+QtpGVmye6mUnOIO6mTRD2agXBBzewbTz6wt/TMsMQw=="],
-
-    "@wasmagent/tools-rag/@wasmagent/core": ["@wasmagent/core@3.8.0", "", { "dependencies": { "@wasmagent/agent-prompts": "^1.0.3", "@wasmagent/protocol": "^0.1.7", "zod": "^3.23.0", "zod-to-json-schema": "^3.25.2" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.7.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-8txLroHZ3QT+as6Q63JDPN7HIqLx+Vnfn2hANe3JnuG+QtpGVmye6mUnOIO6mTRD2agXBBzewbTz6wt/TMsMQw=="],
 
     "body-parser/content-type": ["content-type@2.0.0", "", {}, "sha512-j/O/d7GcZCyNl7/hwZAb606rzqkyvaDctLmckbxLzHvFBzTJHuGEdodATcP3yIRoDrLHkIATJuvzbFlp/ki2cQ=="],
 

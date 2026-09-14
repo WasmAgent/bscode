@@ -3,7 +3,6 @@ import {
   CheckpointableRun,
   createMemoryTool,
   EventLog,
-  FallbackModel,
   forbiddenPhrases,
   formatSseFrame,
   type InMemoryCheckpointer,
@@ -29,6 +28,7 @@ import {
   trajectoryValidity,
 } from "@wasmagent/core/beta";
 import { InMemorySpanExporter, OtelBridge, withOtel } from "@wasmagent/core/experimental";
+import { FallbackModel } from "@wasmagent/models";
 import type { Hono } from "hono";
 import { createCodeAgent } from "../agents/code-agent.js";
 import {
