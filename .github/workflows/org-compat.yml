@@ -1,0 +1,30 @@
+name: Org Compatibility
+
+# Pre-merge cross-repo compatibility gate (N2-P1-06). Calls the org-owned
+# reusable workflow, pinned by immutable SHA, so that contract/release-sensitive
+# changes cannot merge on local CI alone.
+#
+# Follow-up: make the "Org compatibility (bscode)" check required in branch
+# protection once this workflow is on main.
+
+on:
+  pull_request:
+    paths:
+      - "apps/**"
+      - "fixtures/**"
+      - "scripts/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  org-compat:
+    name: Org compatibility (bscode)
+    uses: WasmAgent/.github/.github/workflows/reusable-compat-check.yml@13bcca67098052c9591353127fac39800cd9876c
+    with:
+      repo: bscode
+      candidate_sha: ${{ github.event.pull_request.head.sha || github.sha }}
