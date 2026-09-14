@@ -176,13 +176,19 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Evaluate dry-run result
+      # The evaluator is loaded from the immutable org-gate revision, never
+      # from the candidate tree, so a candidate cannot weaken the decision.
+      - name: Checkout org gate evaluator
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: WasmAgent/.github
+          ref: ca2067cda59a58dc67a824ff6e4a0c58c5addf95
+          path: .org
+      - name: Evaluate result (strict allowlist)
         run: |
           set -euo pipefail
-          result="${{ needs.deploy-dry-run.result }}"
-          echo "Detected relevance: ${{ needs.changes.outputs.relevant }}"
-          echo "Deploy dry-run result: ${result}"
-          if [ "${result}" = "failure" ] || [ "${result}" = "cancelled" ]; then
-            echo "::error::deploy dry-run did not pass (${result})"
-            exit 1
-          fi
+          node .org/scripts/org-contract/required-result.mjs \
+            --changes-result "${{ needs.changes.result }}" \
+            --relevant "${{ needs.changes.outputs.relevant }}" \
+            --inner-name "deploy-dry-run" \
+            --inner-result "${{ needs.deploy-dry-run.result }}"
