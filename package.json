@@ -37,7 +37,7 @@
     "turbo": "^2.0.0"
   },
   "dependencies": {
-    "@wasmagent/aep": "^2.4.2",
+    "@wasmagent/aep": "^2.9.0",
     "@wasmagent/mcp-server": "^1.1.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
